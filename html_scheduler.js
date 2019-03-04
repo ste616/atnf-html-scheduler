@@ -3,14 +3,30 @@
  * Jamie Stevens 2019
  */
 
+// Function to calculate the DOY.
+const doy = function(d) {
+  var foy = new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0);
+  var td = Math.floor((d.getTime() - foy.getTime()) / (86400 * 1000));
+  return (td + 1);
+};
+
 // Function to take a JS Date and output the string that would
 // go in the left date box.
 const printDate = function(d) {
   var m = [ "Jan", "Feb", "Mar", "Apr", "May", "Jun",
 	    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" ];
   var w = [ "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" ];
+  var yd = doy(d);
+  var yds = "" + yd;
+  if (yd < 100) {
+    if (yd >= 10) {
+      yds = "0" + yd;
+    } else {
+      yds = "00" + yd;
+    }
+  }
   var r = w[d.getDay()] + " " + m[d.getMonth()] + " " + d.getDate() +
-      " (" + Math.floor(date2mjd(d)) + ")";
+      " (" + yds + ")";
   return r;
 };
 
@@ -43,11 +59,16 @@ meas.height = nDays * meas.dayHeight + 2 * meas.margin;
 // Takes the day number n, the Date d and the group g to draw to.
 const drawDay = function(n, d, g) {
   // The date is shown in the day label box.
-  var dayLabelBox = new Konva.Rect({
+  var dayLabelOpts = {
     x: meas.margin, y: (meas.margin + n * meas.dayHeight),
     width: meas.dayLabelWidth, height: meas.dayHeight,
-    stroke: "black", strokeWidth: 2
-  });
+    stroke: "black", strokeWidth: 2, fill: '#ffffff'
+  };
+  // Colour the weekends differently.
+  if ((d.getDay() == 0) || (d.getDay() == 6)) {
+    dayLabelOpts.fill = "#fa8072";
+  }
+  var dayLabelBox = new Konva.Rect(dayLabelOpts);
   // Make the string to go into this box.
   var dateString = new Konva.Text({
     x: meas.margin + 5, y: (meas.margin + n * meas.dayHeight + 5),
@@ -154,7 +175,7 @@ var date2mjd = function(d) {
 };
 
 // Given any number n, put it between 0 and some other number b.
-var numberBounds = function(n, b) {
+const numberBounds = function(n, b) {
   while (n > b) {
     n -= b;
   }
@@ -165,12 +186,20 @@ var numberBounds = function(n, b) {
 };
 
 // Given any number, put it between 0 and 1.
-var turnFraction = function(f) {
+const turnFraction = function(f) {
   return numberBounds(f, 1);
 };
 
+const degreesBounds = function(d) {
+  return numberBounds(d, 360);
+};
+
+const hourBounds = function(h) {
+  return numberBounds(h, 24);
+};
+
 // Calculate the sidereal time at Greenwich, given an MJD.
-var gst = function(mjd, dUT1) {
+const gst = function(mjd, dUT1) {
   var a = 101.0 + 24110.54581 / 86400.0;
   var b = 8640184.812886 / 86400.0;
   var e = 0.093104 / 86400.0;
@@ -182,14 +211,14 @@ var gst = function(mjd, dUT1) {
 };
 
 // Calculate the sidereal time at some longitude on the Earth.
-var mjd2lst = function(mjd, longitude, dUT1) {
+const mjd2lst = function(mjd, longitude, dUT1) {
   var lst = turnFraction(gst(mjd, dUT1) + longitude);
   return lst;
 };
 
 // Given some sidereal time at time 0, work out how many real hours
 // until some nominated sidereal time.
-var hoursUntilLst = function(zlst, dlst) {
+const hoursUntilLst = function(zlst, dlst) {
   if (dlst < zlst) {
     dlst += 24;
   }
@@ -198,11 +227,10 @@ var hoursUntilLst = function(zlst, dlst) {
 };
 
 // Draw an LST line on a particular day.
-var lstDraw = function(n, d, l, p, g) {
+const lstDraw = function(n, d, l, p, g) {
   // Calculate the LST at midnight this day.
   var zlst = 24 * mjd2lst(date2mjd(d), (149.5501388 / 360.0), 0);
   var midHours = hoursUntilLst(zlst, l);
-  console.log(midHours);
   var topHours = midHours + (2 / 60);
   var bottomHours = midHours - (2 / 60);
   var topX = meas.margin + meas.dayLabelWidth + (topHours * (2 * meas.halfHourWidth));
@@ -213,6 +241,63 @@ var lstDraw = function(n, d, l, p, g) {
   lobj.strokeWidth = 4;
   var line = new Konva.Line(lobj);
   g.add(line);
+};
+
+// Work out where the Sun is on a particular date.
+const sunPosition = function(mjd) {
+  // Calculate the number of days since 0 UTC Jan 1 2000.
+  var jd = mjd + 2400000.5;
+  var n = jd - 2451545.0;
+  // The longitude of the Sun, in degrees.
+  var L = 280.46 + 0.9856474 * n;
+  // Mean anomaly of the Sun, in degrees.
+  var g = 357.528 + 0.9856003 * n;
+  // Ensure bound limits for these numbers.
+  L = degreesBounds(L);
+  g = degreesBounds(g);
+  // Ecliptic longitude of the Sun, in degrees.
+  var lambda = L + 1.915 * Math.sin(deg2rad(g)) + 0.020 * Math.sin(2 * deg2rad(g));
+  // Sun distance from Earth.
+  var R = 1.00014 - 0.01671 * Math.cos(deg2rad(g)) - 0.00014 * Math.cos(2 * deg2rad(g));
+  // The obliquity, in degrees.
+  // We need the number of centuries since J2000.0.
+  var T = (n / (100.0 * 365.2525));
+  var epsilon = 23.4392911 - (46.636769 / 3600.0) * T - (0.0001831 / 3600.0) * T * T +
+      (0.00200340 / 3600.0) * T * T * T;
+  // Get the right ascension in radians.
+  var alpha = Math.atan2(Math.cos(deg2rad(epsilon)) * Math.sin(deg2rad(lambda)),
+			 Math.cos(deg2rad(lambda)));
+  // And declination, in radians.
+  var delta = Math.asin(Math.sin(deg2rad(epsilon)) * Math.sin(deg2rad(lambda)));
+  return [ alpha, delta ];
+};
+
+// Draw a polygon to show when it's night times.
+const drawNightTimes = function(t, g) {
+  var morningPos = [ meas.margin + meas.dayLabelWidth, meas.margin ];
+  var eveningPos = [ meas.margin + meas.dayLabelWidth + 48 * meas.halfHourWidth, meas.margin ];
+  for (i = 0; i < (t.length - 2); i++) {
+    //console.log(t[i]);
+    var y = meas.margin + i * meas.dayHeight;
+    morningPos.push(meas.margin + meas.dayLabelWidth + t[i][0] * (2 * meas.halfHourWidth));
+    morningPos.push(y);
+    eveningPos.push(meas.margin + meas.dayLabelWidth + t[i][1] * (2 * meas.halfHourWidth));
+    eveningPos.push(y);
+  }
+  morningPos.push(meas.margin + meas.dayLabelWidth);
+  morningPos.push(meas.margin + (nDays - 1) * meas.dayHeight);
+  eveningPos.push(meas.margin + meas.dayLabelWidth + 48 * meas.halfHourWidth);
+  eveningPos.push(meas.margin + (nDays - 1) * meas.dayHeight);
+  var morningPoly = new Konva.Line({
+    points: morningPos, fill: "#888888", stroke: "#888888", strokeWidth: 0,
+    closed: true, opacity: 0.7
+  });
+  var eveningPoly = new Konva.Line({
+    points: eveningPos, fill: "#888888", stroke: "#888888", strokeWidth: 0,
+    closed: true, opacity: 0.7
+  });
+  g.add(morningPoly);
+  g.add(eveningPoly);
 };
 
 // Set up the schedule.
@@ -232,12 +317,13 @@ semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);
 var scheduleFirst = new Date();
 scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
 // Make all the dates.
-var allDates = [];
-for (var i = 0; i < nDays; i++) {
+var allSunDates = [];
+for (var i = -1; i <= nDays; i++) {
   var pdate = new Date();
   pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
-  allDates.push(pdate);
+  allSunDates.push(pdate);
 }
+var allDates = allSunDates.slice(1, nDays);
 
 // Set up the canvas.
 var stage = new Konva.Stage({
@@ -274,11 +360,32 @@ var lstLines = [ 0, 6, 12, 18 ];
 var lstProps = [ { stroke: 'red' },
 		 { stroke: 'blue', dash: [ 33, 10 ] },
 		 { stroke: 'orange', dash: [ 33, 10 ] },
-		 { stroke: 'grey', dash: [ 24, 11 ] } ];
+		 { stroke: '#ee82ee', dash: [ 24, 11 ] } ];
 for (var i = 0; i < lstLines.length; i++) {
   allDates.forEach(function(d, j) {
     lstDraw(j, allDates[j], lstLines[i], lstProps[i], timeGroup);
   });
 }
+
+var nightGroup = new Konva.Group({
+  draggable: false
+});
+// Calculate the sunrise/sunset time for each day.
+var sunTimes = allSunDates.map(function(d) {
+  var mjd = date2mjd(d);
+  var sp = sunPosition(mjd);
+  var decd = rad2deg(sp[1]);
+  var haset = haset_azel(decd, 149.5501388, 0);
+  var hour = degreesBounds(rad2deg(sp[0]));
+  var riseHour = hourBounds((hour - haset) / 15);
+  var setHour = hourBounds((hour + haset) / 15);
+  var zlst = 24 * mjd2lst(mjd, (149.5501388 / 360.0), 0);
+  var riseDayHour = hoursUntilLst(zlst, riseHour);
+  var setDayHour = hoursUntilLst(zlst, setHour);
+  return [ riseDayHour, setDayHour ];
+});
+drawNightTimes(sunTimes, nightGroup);
+
+topLayer.add(nightGroup);
 topLayer.add(timeGroup);
 stage.add(topLayer);
