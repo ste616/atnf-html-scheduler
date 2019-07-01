@@ -37,7 +37,7 @@ var meas = {
   // The margin around the schedule box.
   margin: 60,
   // The width of the right-side area where we see the individual elements.
-  elementWidth: 300,
+  elementWidth: 0,
   // The height of a single day.
   dayHeight: 40,
   // The width of the label which holds the date string.
@@ -358,8 +358,8 @@ var timeGroup = new Konva.Group({
 // For each day draw the LST.
 var lstLines = [ 0, 6, 12, 18 ];
 var lstProps = [ { stroke: 'red' },
-		 { stroke: 'blue', dash: [ 33, 10 ] },
-		 { stroke: 'orange', dash: [ 33, 10 ] },
+		 { stroke: 'blue', dash: [ 24, 11 ] },
+		 { stroke: 'orange', dash: [ 24, 11 ] },
 		 { stroke: '#ee82ee', dash: [ 24, 11 ] } ];
 for (var i = 0; i < lstLines.length; i++) {
   allDates.forEach(function(d, j) {
