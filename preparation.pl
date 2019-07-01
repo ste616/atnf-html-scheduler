@@ -1,5 +1,7 @@
 #!/usr/bin/perl
 
+use JSON::Simple;
+use Getopt::Long;
 use XML::Simple;
 use String::ShellQuote;
 use Astro::Coord;
@@ -29,6 +31,9 @@ my $mapfile = &downloadProposalMapping($sem);
 
 # Step 5. rename each proposal as required.
 &renameProposals($sem);
+
+# Step 6. prepare the summary file.
+
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -163,5 +168,483 @@ sub renameProposals($) {
 	my $rename_directory = "mv $dirs[$i] $semdir/$telescope/".uc($project_code);
 	system $rename_directory;
     }
+    
+}
+
+sub nicePrint($$) {
+    # The block will have this title - basically the left indent amount.
+    my $title = shift;
+    # The string to print nicely.
+    my $s = shift;
+    # Any optional parts (a hash ref).
+    my $opts = shift;
+
+    # Check the options.
+    # The delimiter to break lines on - normally, and by default, space.
+    my $d = " ";
+    if (defined $opts && defined $opts->{'delimiter'}) {
+	$d = $opts->{'delimiter'};
+    }
+    # Replacing strings.
+    my ($ra, $rb);
+    if (defined $opts && defined $opts->{'replace'}) {
+	$ra = $opts->{'replace'}->[0];
+	$rb = $opts->{'replace'}->[1];
+    }
+    # Don't break this line.
+    my $nobreaks = 0;
+    if (defined $opts && defined $opts->{'nobreaks'} &&
+	$opts->{'nobreaks'} == 1) {
+	$nobreaks = 1;
+    }
+    # Print under the title.
+    my $undertitle = 0;
+    if (defined $opts && defined $opts->{'undertitle'} &&
+	$opts->{'undertitle'} == 1) {
+	$undertitle = 1;
+    }
+    # Don't include slashes at the end of continuing lines.
+    my $eol_slashes = 1;
+    if (defined $opts && defined $opts->{'eol_slashes'} &&
+	$opts->{'eol_slashes'} == 0) {
+	$eol_slashes = 0;
+    }
+
+    # Get rid of ctrl-m line breaks.
+    $s =~ s/[\r\n]+/ /g;
+    # And remove double spaces.
+    $s =~ s/\s+/ /g;
+
+    # Print out the string $s making sure the lines don't go over the
+    # maximum number of characters long.
+    my @e = split($d, $s);
+    $title .= " ";
+    my $tlen = length($title);
+    if ($undertitle == 1) {
+	$tlen = 0;
+    }
+    my $pformat = "%".$tlen."s%s %s\n";
+    my $o = "";
+    my $lo = length($o);
+    my $title_printed = 0;
+    if ($undertitle == 1) {
+	printf $title."\n";
+	$title = "";
+	$title_printed = 1;
+    }
+    my $maxlength = 70;
+    if ($nobreaks == 1) {
+	$maxlength = 1e9;
+    }
+    for (my $i = 0; $i <= $#e; $i++) {
+	if (defined $a && defined $b) {
+	    $e[$i] =~ s/$a/$b/g;
+	}
+	my $le = length($e[$i]);
+	if (($tlen + $lo + $le + 1) > $maxlength) {
+	    if ($i <= $#e && $eol_slashes == 1) {
+		printf $pformat, $title, $o, "\\";
+	    } else {
+		printf $pformat, $title, $o;
+	    }
+	    if ($title_printed == 0) {
+		$title = "";
+		$title_printed = 1;
+	    }
+	    $o = "";
+	}
+	$o .= $e[$i].$d;
+	$lo = length($o);
+    }
+    # Get rid of the delimiter at the end.
+    if ($o =~ /\Q$d\E$/) {
+	$o =~ s/\Q$d\E$//;
+    }
+    if ($o ne "" || $title_printed == 0) {
+	printf $pformat, $title, $o;
+    }
+}
+
+sub stripSpacing {
+    my $a = shift;
+
+    $a =~ s/^\s*(.*?)\s*$/$1/;
+
+    return $a;
+}
+
+sub getPI($) {
+    my $cover_ref = shift;
+
+    # Get the name of the PI from the XML hash of the cover sheet,
+    # and their email address.
+    return ( &stripSpacing($cover_ref->{'principalInvestigator'}->{'lastName'}->{'content'}),
+	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'email'}->{'content'}) );
+}
+
+sub getTitle($) {
+    my $cover_ref = shift;
+    
+    # Get the title from the XML hash of the cover sheet.
+    my $title = $cover_ref->{'title'}->{'content'};
+    # Alter the title if it's a NAPA proposal.
+    my $proptype = $cover_ref->{'type'}->{'content'};
+    if ($proptype eq "NAPA" && $title !~ m{^NAPA}) {
+	$title = "NAPA: ".$title;
+    }
+    
+    return &stripSpacing($title);
+}
+
+sub zapper($) {
+    my $val = shift;
+
+    # Remove trailing full stop.
+    $val =~ s/\.$//;
+
+    # Check for essentially blank values.
+    if ($val =~ m{^no preference$}i ||
+	$val =~ m{^none$}i ||
+	$val =~ m{^no$}i) {
+	$val = "";
+    }
+
+    return &stripSpacing($val);
+}
+
+sub getObs($) {
+    my $obsref = shift;
+    my $coverref = shift;
+
+    # Go through the observation XML hash and get useful information.
+
+    my @requested_times;
+    my @repeats;
+    my @arrays;
+    my @bands;
+    my @bandwidths;
+    my @sources;
+    my @radecs;
+
+    my $obsarr;
+    if ($obs eq "atca") {
+	$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.AtcaObservation'};
+    } elsif ($obs eq "parkes") {
+	$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.ParkesContinuumObservation'};
+    }	
+    if (ref($obsarr) eq "HASH") {
+	# Turn it into an array.
+	my $h = $obsarr;
+	$obsarr = [ $h ];
+    }
+    for (my $i = 0; $i <= $#{$obsarr}; $i++) {
+	# Get the position of this source.
+	my ($ra, $dec) = ("", "");
+	if ($obsarr->[$i]->{'position'}) {
+	    my $p1 = $obsarr->[$i]->{'position'}->{'xAngle'}->{'itsValue'};
+	    my $x1 = $obsarr->[$i]->{'position'}->{'xAngle'}->{'precision'};
+	    my $p2 = $obsarr->[$i]->{'position'}->{'yAngle'}->{'itsValue'};
+	    my $x2 = $obsarr->[$i]->{'position'}->{'yAngle'}->{'precision'};
+	    my $coordsys = $obsarr->[$i]->{'position'}->{'system'};
+	    ($ra, $dec) = &translateCoord($p1, $p2, $x1, $x2, $coordsys);
+	} else {
+	    # When we can't find a position.
+	    $ra = "00:00:00";
+	    $dec = "-90:00:00";
+	}
+	my $tdec = str2turn($dec, "D");
+	my $b;
+	if ($obs eq "atca") {
+	    $b = lc $obsarr->[$i]->{'band'};
+	    if ($b =~ /\s+$/) {
+		$b =~ s/\s+$//;
+	    }
+	} else {
+	    $b = "";
+	}
+	my ($xtra_reps, $reptime) = &roundRequestedTimes($obsarr->[$i]->{'integrationTime'},
+							 $tdec, $b);
+	push @radecs, &stripSpacing($ra.",".$dec);
+	push @requested_times, $reptime;
+	push @repeats, $obsarr->[$i]->{'repeats'} * $xtra_reps;
+	if ($obs eq "atca") {
+	    my $a = lc $obsarr->[$i]->{'arrayConfiguration'};
+	    if ($a =~ /km$/) {
+		$a =~ s/km$//;
+	    } elsif ($a =~ /m$/) {
+		$a =~ s/m$//;
+	    }
+	    push @arrays, &stripSpacing($a);
+	    my $b = lc $obsarr->[$i]->{'band'};
+	    if ($b =~ /\s+$/) {
+		$b =~ s/\s+$//;
+	    }
+	    push @bands, &stripSpacing($b);
+	    if ((ref($obsarr->[$i]->{'bandwidths'}) ne "HASH") &&
+		($obsarr->[$i]->{'bandwidths'} ne "Select")) {
+		push @bandwidths, $obsarr->[$i]->{'bandwidths'};
+	    } else {
+		push @bandwidths, "ReplaceMe";
+	    }
+	    # Check for bad values.
+	    my $replacer = "";
+	    for (my $j = 0; $j <= $#bandwidths; $j++) {
+		if ($bandwidths[$j] eq "ReplaceMe") {
+		    if ($j < $#bandwidths && $bandwidths[$j + 1] ne "ReplaceMe") {
+			$bandwidths[$j] = $bandwidths[$j + 1];
+			$replacer = $bandwidths[$j + 1];
+		    } elsif ($j > 0 && $bandwidths[$j - 1] ne "ReplaceMe") {
+			$bandwidths[$j] = $bandwidths[$j - 1];
+			$replacer = $bandwidths[$j - 1];
+		    }
+		}
+	    }
+	    if ($replacer eq "") {
+		$replacer = "CFB 1M (no zooms)";
+	    }
+	    for (my $j = 0; $j <= $#bandwidths; $j++) {
+		if ($bandwidths[$j] eq "ReplaceMe") {
+		    $bandwidths[$j] = $replacer;
+		}
+	    }
+	} elsif ($obs eq "parkes") {
+	    push @arrays, "any";
+	    my $fs = $obsarr->[$i]->{'frequencies'};
+	    if (ref($fs) eq "HASH") {
+		push @bands, $fs->{'string'};
+	    } elsif (ref($fs) eq "ARRAY") {
+		for (my $j = 0; $j <= $#{$fs}; $j++) {
+		    push @bands, &stripSpacing($fs->[$j]->{'string'});
+		}
+	    }
+	    my $insentry = $coverref->{'instrumentSetups'}->{'m'}->{'entry'};
+	    if (ref($insentry) eq "HASH") {
+		my $h = $insentry;
+		$insentry = [ $h ];
+	    }
+	    for (my $j = 0; $j <= $#{$insentry}; $j++) {
+		if (defined $insentry->[$j]->{'au.csiro.atnf.opal.domain.ParkesDetails'}) {
+		    $insentry = $insentry->[$j]->{'au.csiro.atnf.opal.domain.ParkesDetails'};
+		    last;
+		}
+	    }
+	    my $backends = $insentry->{'backEndSystem'}->{'org.apache.commons.collections.set.ListOrderedSet'}->{'default'}->{'setOrder'}->{'string'};
+	    if (ref($backends) ne "ARRAY") {
+		my $h = $backends;
+		$backends = [ $h ];
+	    }
+	    my @bends;
+	    for (my $j = 0; $j <= $#{$backends}; $j++) {
+		push @bends, &stripSpacing($backends->[$j]->{'content'});
+	    }
+	    push @bandwidths, join("/", @bends);
+	}
+	push @sources, &stripSpacing($obsarr->[$i]->{'name'});
+
+    }
+	
+    
+    # Summarise the information in the output.
+    my $times_string = &concatArray(\@requested_times, \@repeats, 4);
+    &nicePrint("Requested time:", $times_string, { 'delimiter' => "; " });
+
+    my $arrays_string = &concatArray(\@arrays, \@repeats, 3);
+    &nicePrint("Array:", $arrays_string, { 'delimiter' => "; " });
+
+    my $bands_string = &concatArray(\@bands, \@repeats, 3);
+    &nicePrint("Band:", $bands_string, {
+	'delimiter' => "; ",
+	'replace' => [ "/", " " ]
+	       });
+    
+    my $bandwidths_string = &concatArray(\@bandwidths, \@repeats, 3);
+    &nicePrint("BW:", $bandwidths_string, { 'delimiter' => "; " });
+
+    my $sources_string = &concatArray(\@sources, \@repeats, 3);
+    &nicePrint("Source:", $sources_string, { 'delimiter' => "; " });
+
+    my $pos_string = &concatArray(\@radecs, \@repeats, 3);
+    &nicePrint("RADEC:", $pos_string, { 'delimiter' => "; " });
+
+}
+
+sub concatArray($$;$) {
+    # The reference to the array of values.
+    my $aref = shift;
+    # The reference to the array of counts. Must be the same length as
+    # the aref array.
+    my $rref = shift;
+    # showCount = 0 for "do not ever show the number of repeats"
+    # showCount = 1 for "only show repeats if there is more than 1 unique value"
+    # showCount = 2 for "always show repeats"
+    # showCount = 3 for "only show repeats if there is more than 1 in consecutive rows"
+    # showCount = 4 for "same as 3 but if only one output, same as 1 as well"
+    my $showCount = shift;
+    
+    if (!defined $showCount) {
+	$showCount = 1;
+    }
+
+    # Take an array, and output a string representing repeats.
+
+    my @s = @{$aref};
+    my @r = @{$rref};
+    my @o;
+    my @c;
+    my $p = $s[0];
+    my $n = $r[0];
+    for (my $i = 1; $i <= $#s; $i++) {
+	if ($s[$i] eq $p) {
+	    $n += $r[$i];
+	} else {
+	    # Do a check.
+	    my $f = -1;
+	    if ($showCount != 3 && $showCount != 4) {
+		for (my $j = 0; $j <= $#o; $j++) {
+		    if ($o[$j] eq $p) {
+			$f = $j;
+			last;
+		    }
+		}
+	    }
+	    if ($f < 0) {
+		push @o, $p;
+		push @c, $n;
+	    } else {
+		$c[$f] += $n;
+	    }
+	    $p = $s[$i];
+	    $n = $r[$i];
+	}
+    }
+    my $f = -1;
+    if ($showCount != 3 && $showCount != 4) {
+	for (my $j = 0; $j <= $#o; $j++) {
+	    if ($o[$j] eq $p) {
+		$f = $j;
+		last;
+	    }
+	}
+    }
+    if ($f < 0) {
+	push @o, $p;
+	push @c, $n;
+    } else {
+	$c[$f] += $n;
+    }
+
+    if ($#o == 0 && $showCount != 2 && $showCount != 4) {
+	$showCount = 0;
+    }
+    my $out = "";
+    for (my $i = 0; $i <= $#o; $i++) {
+	if ($i > 0) {
+	    $out .= "; ";
+	}
+	if ($c[$i] > 1 && $showCount) {
+	    $out .= $c[$i]."x";
+	}
+	$out .= $o[$i];
+    }
+
+    return $out;
+}
+
+sub translateCoord($$$$$) {
+    my ($p1, $p2, $x1, $x2, $c) = @_;
+    # Turn the XML-format coordinates into something more friendly.
+
+    my $coordtype = ($c eq "Galactic") ? 3 : 1;
+
+    my ($ra_string, $dec_string);
+    my $pi = 3.141592654;
+    
+    if ($coordtype == 1) {
+	# We have p1 = RA, p2 = Dec
+	$p1 *= 24.0 / (2 * $pi);
+	$p2 *= 180 / $pi;
+	my $rah = floor($p1);
+	$p1 -= $rah;
+	$p1 *= 60.0;
+	my $ram = floor($p1);
+	$p1 -= $ram;
+	$p1 *= 60.0;
+	my $ras = $p1;
+	my $raf = "%02d:%02d:%0";
+	if ($x1 > 0) {
+	    $raf .= (3 + $x1).".".$x1."f";
+	} else {
+	    $raf .= "2.0f";
+	}
+	$ra_string = sprintf $raf, $rah, $ram, $ras;
+
+	my $decs = ($p2 < 0) ? -1 : 1;
+	$p2 *= $decs;
+	my $decd = floor($p2);
+	$p2 -= $decd;
+	$p2 *= 60.0;
+	my $decm = floor($p2);
+	$p2 -= $decm;
+	$p2 *= 60.0;
+	my $decsec = $p2;
+	my $decf = "%+03d:%02d:%0";
+	if ($x2 > 0) {
+	    $decf .= (3 + $x2).".".$x2."f";
+	} else {
+	    $decf .= "2.0f";
+	}
+	$decd *= $decs;
+	$dec_string = sprintf $decf, $decd, $decm, $decsec;
+    } elsif ($coordtype == 3) {
+	# We have p1 = Lon, p2 = Lat
+	$p1 *= 180 / $pi;
+	$p2 *= 180 / $pi;
+	my ($ra, $dec) = (`cotra radec=$p1,$p2 type=galactic` =~ m{J2000:\s+(\S+)\s+(\S+)});
+	$ra =~ s/\.\d+$//;
+	$dec =~ s/\.\d+$//;
+	$ra_string = $ra;
+	$dec_string = $dec;
+    }
+    return ($ra_string, $dec_string);
+}
+
+sub roundRequestedTimes($$$) {
+    my $rqt = shift;
+    my $tdec = shift;
+    my $band = shift;
+
+    # Determine how long the source is up.
+    # The frequency determines the elevation limit.
+    my $ellim = $ellim{$obs};
+    if ($band =~ /mm/ && $obs eq "atca") {
+	$ellim = 30;
+    }
+    $ellim /= 360.0; # in turns.
+
+    my $tlat = $lat{$obs} / 360.0;
+    my %elhash = ( 'ELLOW' => $ellim );
+    
+    my $haset = haset_azel($tdec, $tlat, %elhash) * 24.0;
+    my $time_up = 2 * $haset;
+    if ($time_up <= 0) {
+	$elhash{ 'ELLOW' } = $ellim{$obs};
+	$haset = haset_azel($tdec, $tlat, %elhash) * 24.0;
+	$time_up = 2 * $haset;
+    }
+
+    my $nrep = 1;
+    if ($rqt > $time_up) {
+	# The source isn't up for the entire time.
+	while (($rqt / $nrep) > $time_up) {
+	    $nrep += 1;
+	}
+    }
+    # Round the requested time to the nearest half hour (always up).
+    my $arqt = ceil($rqt / (0.5 * $nrep)) * 0.5;
+    
+    return ( $nrep, $arqt );
+}
+
+sub getPublicHolidays() {
     
 }
