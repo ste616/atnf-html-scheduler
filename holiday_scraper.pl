@@ -3,6 +3,8 @@
 use URI;
 use Web::Scraper;
 use Encode;
+use DateTime;
+use strict;
 
 # Set up the web scraper.
 my $dates = scraper {
@@ -23,22 +25,28 @@ printf "there must be %d columns\n", $ncols;
 
 # Form the dates.
 for (my $i = 1; $i < $ncols; $i++) {
-    my $year = $res->{dates}->[$i];
+    my $year = $res->{dates}->[$i] * 1;
     for (my $j = 1; $j < $nrows; $j++) {
 	my $n = $j * $ncols + $i;
-	my $d = Encode::encode("utf8", $res->{dates}->[$n]);
+	my $d = Encode::encode("ascii", $res->{dates}->[$n]);
+	$d =~ s/\?//g;
+	printf "d is \"%s\"\n", $d;
 	$d =~ s/^.*\,\s*(.*)$/$1/;
 	my @de = split(/\s+/, $d);
 	my $day = $de[0];
 	my $month = &month2number($de[1]);
 	if ($d ne "") {
 	    printf "%4d - %02d - %02d\n", $year, $month, $day;
+	    my $dt = DateTime->new(
+		year => $year, month => $month, day => $day,
+		hour => 8, time_zone => 'Australia/Sydney' );
+	    printf "this is weekday %d\n", $dt->day_of_week;
+	#   if ($dt->is_dst()) {
+	#	printf "day has DST\n";
+	#    }
 	}
     }
 }
-#for my $date (@{$res->{dates}}) {
-#    print Encode::encode("utf8", "$date\n");
-#}
 
 sub month2number($) {
     my $m = shift;

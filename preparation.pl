@@ -1,6 +1,10 @@
 #!/usr/bin/perl
 
-use JSON::Simple;
+use URI;
+use Web::Scraper;
+use Encode;
+use DateTime;
+#use JSON::Simple;
 use Getopt::Long;
 use XML::Simple;
 use String::ShellQuote;
@@ -33,6 +37,15 @@ my $mapfile = &downloadProposalMapping($sem);
 &renameProposals($sem);
 
 # Step 6. prepare the summary file.
+# Get the public holidays.
+my %publicHolidays = &getPublicHolidays();
+# Get the semester start and end dates.
+my $semesterDetails = &semesterDateRange($sem);
+printf "II Semester runs from %s to %s (%d days)\n", 
+    $semesterDetails->{"startString"},
+    $semesterDetails->{"endString"},
+    $semesterDetails->{"nDays"};
+# Work out which holidays are in the semester.
 
 
 ### SUBROUTINES FOLLOW
@@ -312,7 +325,8 @@ sub zapper($) {
     return &stripSpacing($val);
 }
 
-sub getObs($) {
+sub getObs($$$) {
+    my $obs = shift;
     my $obsref = shift;
     my $coverref = shift;
 
@@ -608,26 +622,29 @@ sub translateCoord($$$$$) {
     return ($ra_string, $dec_string);
 }
 
-sub roundRequestedTimes($$$) {
+sub roundRequestedTimes($$$$$$) {
     my $rqt = shift;
     my $tdec = shift;
     my $band = shift;
-
+    my $obs = shift;
+    my $ellimr = shift;
+    my $latr = shift;
+    
     # Determine how long the source is up.
     # The frequency determines the elevation limit.
-    my $ellim = $ellim{$obs};
+    my $ellim = $ellimr->{$obs};
     if ($band =~ /mm/ && $obs eq "atca") {
 	$ellim = 30;
     }
     $ellim /= 360.0; # in turns.
 
-    my $tlat = $lat{$obs} / 360.0;
+    my $tlat = $latr->{$obs} / 360.0;
     my %elhash = ( 'ELLOW' => $ellim );
     
     my $haset = haset_azel($tdec, $tlat, %elhash) * 24.0;
     my $time_up = 2 * $haset;
     if ($time_up <= 0) {
-	$elhash{ 'ELLOW' } = $ellim{$obs};
+	$elhash{ 'ELLOW' } = $ellimr->{$obs};
 	$haset = haset_azel($tdec, $tlat, %elhash) * 24.0;
 	$time_up = 2 * $haset;
     }
@@ -646,5 +663,100 @@ sub roundRequestedTimes($$$) {
 }
 
 sub getPublicHolidays() {
+    # Set up the web scraper.
+    my $dates = scraper {
+	process 'table td', "dates[]" => 'TEXT';
+	process 'table tr', "rows[]" => 'TEXT';
+    };
     
+    # Get the information from the web site.
+    my $res = $dates->scrape(
+	URI->new("https://www.industrialrelations.nsw.gov.au/public-holidays/public-holidays-nsw")
+	);
+    
+    # Work out the shape of the table.
+    my $nrows = $#{$res->{rows}} + 1;
+    #printf "found %d rows\n", $nrows;
+    my $ncols = ($#{$res->{dates}} + 1) / $nrows;
+    #printf "there must be %d columns\n", $ncols;
+    
+    # Form the dates.
+    my %phdates;
+    for (my $i = 1; $i < $ncols; $i++) {
+	my $year = $res->{dates}->[$i] * 1;
+	for (my $j = 1; $j < $nrows; $j++) {
+	    my $n = $j * $ncols + $i;
+	    my $d = Encode::encode("ascii", $res->{dates}->[$n]);
+	    $d =~ s/\?//g;
+	    #printf "d is \"%s\"\n", $d;
+	    $d =~ s/^.*\,\s*(.*)$/$1/;
+	    my @de = split(/\s+/, $d);
+	    my $day = $de[0];
+	    my $month = &month2number($de[1]);
+	    if ($d ne "") {
+		#printf "%4d - %02d - %02d\n", $year, $month, $day;
+		my $dt = DateTime->new(
+		    year => $year, month => $month, day => $day,
+		    hour => 8, time_zone => 'Australia/Sydney' );
+		my $k = sprintf "%4d-%02d-%02d", $year, $month, $day;
+		$phdates{$k} = { 'datetime' => $dt,
+				 'string' => sprintf "%02d/%02d", $day, $month };
+	    }
+	}
+    }
+    return %phdates;
+}
+
+sub month2number($) {
+    my $m = shift;
+    $m = lc($m);
+    my @months = ( "january", "february", "march", "april", "may", "june",
+		   "july", "august", "september", "october", "november", "december" );
+    for (my $i = 0; $i <= $#months; $i++) {
+	if ($m eq $months[$i]) {
+	    return ($i + 1);
+	}
+	if ($months[$i] =~ /^$m/) {
+	    return ($i + 1);
+	}
+    }
+    return 0;
+}
+
+sub semesterDateRange($) {
+    my $semname = shift;
+    # Work out the date ranges for this semester.
+    my ($semyear, $semmonth) = $semname =~ m/^(\d+)(\D+)$/;
+    $semyear *= 1;
+    $semmonth = &month2number($semmonth);
+    my $semStartDate = DateTime->new(
+	year => $semyear, month => $semmonth, day => 1,
+	hour => 0, time_zone => "Australia/Sydney" );
+    my $semendyear = $semyear;
+    my $semendmonth = 10;
+    if ($semmonth == 10) {
+	$semendyear += 1;
+	$semendmonth = 4;
+    }
+    my $semEndDate = DateTime->new(
+	year => $semendyear, month => $semendmonth, day => 1,
+	hour => 0, time_zone => "Australia/Sydney" );
+
+    return { "start" => $semStartDate, "end" => $semEndDate,
+	     "startString" => $semStartDate->strftime("%Y-%m-%d"),
+	     "endString" => $semEndDate->strftime("%Y-%m-%d"),
+	     "nDays" => ($semEndDate->mjd() - $semStartDate->mjd() + 1)
+    };
+
+}
+
+sub restrictDates($$) {
+    my $sem = shift;
+    my $dates = shift;
+
+    # Restrict the dates present in $dates to those within
+    # the semester.
+    foreach my $d (keys %{$dates}) {
+
+    }
 }
