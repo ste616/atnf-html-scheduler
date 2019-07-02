@@ -20,11 +20,13 @@ my $sem = "";
 my $proposal_zip = "";
 my $map_file = "";
 my $clean = "";
+my $obs = "atca";
 GetOptions(
     "semester=s" => \$sem,
     "zip=s" => \$proposal_zip,
     "map=s" => \$map_file,
-    "clean" => \$clean
+    "clean" => \$clean,
+    "obs" => \$obs
     ) or die "Error in command line arguments.\n";
 
 $sem = lc($sem); # Should look like 2019OCT
@@ -66,6 +68,8 @@ printf "II %d holidays found in semester:\n", ($#hkeys + 1);
 for (my $i = 0; $i <= $#hkeys; $i++) {
     printf "II holiday %d: %s\n", ($i + 1), $hkeys[$i];
 }
+# Parse the XML for each project.
+my @projects = &xmlParse($sem, $obs);
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -840,4 +844,68 @@ sub restrictDates($$) {
     }
 
     return $gdates;
+}
+
+sub xmlParse($$) {
+    my $semdir = shift;
+    my $obs = shift;
+
+    # Get a list of the project directories.
+    my @list = sort {
+	(my $aproj) = $a =~ m{^\S+?/\w(\d+)$};
+	(my $bproj) = $b =~ m{^\S+?/\w(\d+)$};
+	return $aproj <=> $bproj; } <$sem/$obs/*>;
+
+    my @outproj;
+    # Cycle through the projects.
+    foreach my $dir (@list) {
+	(my $proj) = $dir =~ m{^$sem/$obs/(\S+)$};
+	# Read in the cover sheet and the observation tables. We pass it through
+	# iconv so we don't get problems with invalid characters not in UTF-8.
+	my $coverstring = `iconv -f utf-8 -t utf-8 -c $dir/coversheet.xml`;
+	$coverstring =~ s/\&\#x.*?\;//g;
+	my $cover = XMLin($coverstring, ForceContent => 1);
+	my $obstablestring = `iconv -f utf-8 -t utf-8 -c $dir/observations.xml`;
+	$obstablestring =~ s/\&\#x.*?\;//g;
+	my $obstable = XMLin(
+	    $obstablestring, keyattr => [],
+	    forcearray => [ 'au.csiro.atnf.opal.domain.AtcaObservation' ] );
+	my $a = { "project" => $proj, "title" => &getTitle($cover),
+		      "preferred" => &zapper($cover->{'preferredDates'}->{'content'}),
+		      "impossible" => &zapper($cover->{'impossibleDates'}->{'content'}),
+		      "service" => &zapper($cover->{'serviceObserving'}->{'content'}),
+		      "comments" => &zapper($cover->{'specialRequirements'}->{'content'}),
+		      "other" => &zapper($cover->{'otherInformation'}->{'content'})
+	};
+
+
+    print "Project id: ".$proj."\n";
+
+    my $title = &getTitle($cover);
+    &nicePrint("Title:", $title, { 'nobreaks' => 1 });
+
+    my ($principal, $pi_email) = &getPI($cover);
+    print "PI: ".$principal."\n";
+    print "Email: ".$pi_email."\n";
+
+    &getObs($obstable, $cover);
+
+    my $pref = &zapper($cover->{'preferredDates'}->{'content'});
+    &nicePrint("Good dates:", $pref);
+
+    my $imposs = &zapper($cover->{'impossibleDates'}->{'content'});
+    &nicePrint("Bad dates:", $imposs);
+
+    my $service = &zapper($cover->{'serviceObserving'}->{'content'});
+    &nicePrint("Service obs:", $service);
+
+    my $comments = &zapper($cover->{'specialRequirements'}->{'content'});
+    my $other = &zapper($cover->{'otherInformation'}->{'content'});
+    if ($other ne "") {
+	$comments .= " ".$other;
+    }
+
+    }
+    
+    return @outproj;
 }
