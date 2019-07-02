@@ -13,24 +13,37 @@ use Astro::Time;
 use POSIX;
 use strict;
 
-# This script does all the necessary preparatory work for the semester
-# specified as the first argument.
-my $sem = lc($ARGV[0]); # Should look like 2019OCT
+# This script does all the necessary preparatory work for the semester.
+
+# Get the arguments.
+my $sem = "";
+my $proposal_zip = "";
+my $map_file = "";
+my $clean = "";
+GetOptions(
+    "semester=s" => \$sem,
+    "zip=s" => \$proposal_zip,
+    "map=s" => \$map_file,
+    "clean" => \$clean
+    ) or die "Error in command line arguments.\n";
+
+$sem = lc($sem); # Should look like 2019OCT
 my $semname = uc($sem);
 print "== Preparing for semester $semname\n";
 
 # Step 1: make the directories.
-&makeMasterDirectory($sem);
+&makeMasterDirectory($sem, $clean);
 
 # Step 2: download the OPAL files.
 printf "== Downloading proposals from OPAL...\n";
+&getProposalArchive($sem, $proposal_zip);
 ## TODO
 
 # Step 3: extract the proposals.
 &extractProposalArchive($sem);
 
 # Step 4. download the proposal mapping file.
-my $mapfile = &downloadProposalMapping($sem);
+my $mapfile = &downloadProposalMapping($sem, $map_file);
 ## TODO
 
 # Step 5. rename each proposal as required.
@@ -46,27 +59,73 @@ printf "II Semester runs from %s to %s (%d days)\n",
     $semesterDetails->{"endString"},
     $semesterDetails->{"nDays"};
 # Work out which holidays are in the semester.
-
+my $semesterHolidays = &restrictDates($semesterDetails,
+				      \%publicHolidays);
+my @hkeys = keys %{$semesterHolidays};
+printf "II %d holidays found in semester:\n", ($#hkeys + 1);
+for (my $i = 0; $i <= $#hkeys; $i++) {
+    printf "II holiday %d: %s\n", ($i + 1), $hkeys[$i];
+}
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
 
-sub makeMasterDirectory($) {
+sub makeMasterDirectory($$) {
     my $semdir = shift;
+    my $clean = shift;
 
     printf "== Checking for directory %s... ", $semdir;
+    my $makeit = 1;
     if (-d $semdir) {
 	print "already exists.\n";
-    } else {
+	$makeit = 0;
+	if ($clean == 1) {
+	    printf "== Directory cleaning required.\n";
+	    system "rm -rf $semdir";
+	    $makeit = 2;
+	}
+    }
+    if ($makeit >= 1) {
 	system "mkdir ".$semdir;
 	if (-d $semdir) {
-	    print "directory made.\n";
+	    if ($makeit == 2) {
+		print "II Directory made successfully.\n";
+	    } else {
+		print "directory made.\n";
+	    }
 	} else {
-	    print "failed!\n";
+	    if ($makeit == 2) {
+		print "!! Could not make directory.\n";
+	    } else {
+		print "failed!\n";
+	    }
 	    exit;
 	}
     }
     return;
+}
+
+sub getProposalArchive($$) {
+    my $semdir = shift;
+    my $propfile = shift;
+
+    my $outfile = sprintf "%s/%sS-proposals.zip", $semdir, uc($semdir);
+    
+    # If we've been given the name of a file, we copy it in.
+    if (($propfile ne "") && (-e $propfile)) {
+	printf "== Copying proposal zip file %s to %s ...", $propfile, $outfile;
+	system "cp \"".$propfile."\" ".$outfile;
+	if (-e $outfile) {
+	    print " success.\n";
+	} else {
+	    print " failed.\n";
+	    exit;
+	}
+    } else {
+	# We don't support this yet.
+	printf "!! Unable to get proposals from OPAL, development required.\n";
+	exit;
+    }
 }
 
 sub extractProposalArchive($) {
@@ -76,20 +135,36 @@ sub extractProposalArchive($) {
     printf "== Extracting proposals...\n";
     my $exp_file = $semdir."/".$semdname."S-proposals.zip";
     if (-e $exp_file) {
-	printf "   found file %s\n", $exp_file;
+	printf "II found file %s\n", $exp_file;
 	system "unzip -qq $exp_file";
     } else {
-	printf "   unable to find file %s!\n", $exp_file;
+	printf "!! unable to find file %s!\n", $exp_file;
 	exit;
     }
     return;
 }
 
-sub downloadProposalMapping($) {
+sub downloadProposalMapping($$) {
     my $semester = shift;
+    my $omapfile = shift;
 
     printf "== Downloading proposal information from OPAL...\n";
     my $mapfile = $semester."/Download Proposals.html";
+
+    if (($omapfile ne "") && (-e $omapfile)) {
+	printf "== Copying proposal map file %s to %s ...", $omapfile, $mapfile;
+	system "cp \"".$omapfile."\" \"".$mapfile."\"";
+	if (-e $mapfile) {
+	    print " success.\n";
+	} else {
+	    print " failed.\n";
+	    exit;
+	}
+    } else {
+	# We don't support this yet.
+	printf "!! Unable to get proposal map from OPAL, development required.\n";
+	exit;
+    }
 
     return $mapfile;
 }
@@ -756,7 +831,13 @@ sub restrictDates($$) {
 
     # Restrict the dates present in $dates to those within
     # the semester.
+    my $gdates = {};
     foreach my $d (keys %{$dates}) {
-
+	if (($dates->{$d}->{'datetime'} >= $sem->{'start'}) &&
+	    ($dates->{$d}->{'datetime'} < $sem->{'end'})) {
+	    $gdates->{$d} = $dates->{$d};
+	}
     }
+
+    return $gdates;
 }
