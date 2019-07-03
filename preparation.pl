@@ -11,6 +11,7 @@ use String::ShellQuote;
 use Astro::Coord;
 use Astro::Time;
 use POSIX;
+use Data::Dumper;
 use strict;
 
 # This script does all the necessary preparatory work for the semester.
@@ -21,14 +22,17 @@ my $proposal_zip = "";
 my $map_file = "";
 my $clean = "";
 my $obs = "atca";
+my @legacy;
 GetOptions(
     "semester=s" => \$sem,
     "zip=s" => \$proposal_zip,
     "map=s" => \$map_file,
     "clean" => \$clean,
-    "obs" => \$obs
+    "obs=s" => \$obs,
+    "legacy=s" => \@legacy
     ) or die "Error in command line arguments.\n";
 
+print Dumper @legacy;
 $sem = lc($sem); # Should look like 2019OCT
 my $semname = uc($sem);
 print "== Preparing for semester $semname\n";
@@ -70,6 +74,11 @@ for (my $i = 0; $i <= $#hkeys; $i++) {
 }
 # Parse the XML for each project.
 my @projects = &xmlParse($sem, $obs);
+printf "II Found %d projects.\n", ($#projects + 1);
+#for (my $i = 0; $i <= $#projects; $i++) {
+#    printf "II Project %d: Code %s\n", ($i + 1), $projects[$i]->{'project'};
+#}
+&semesterTimeSummary(\@projects, \@legacy);
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -409,6 +418,10 @@ sub getObs($$$) {
     my $obsref = shift;
     my $coverref = shift;
 
+    # Need some information about the observatory.
+    my %ellim = ( 'atca' => 12, 'parkes' => 30 );
+    my %lat = ( 'atca' => -30.31288, 'parkes' => -32.99841 );
+    
     # Go through the observation XML hash and get useful information.
 
     my @requested_times;
@@ -455,8 +468,9 @@ sub getObs($$$) {
 	} else {
 	    $b = "";
 	}
-	my ($xtra_reps, $reptime) = &roundRequestedTimes($obsarr->[$i]->{'integrationTime'},
-							 $tdec, $b);
+	my ($xtra_reps, $reptime) = 
+	    &roundRequestedTimes($obsarr->[$i]->{'integrationTime'},
+				 $tdec, $b, $obs, \%ellim, \%lat);
 	push @radecs, &stripSpacing($ra.",".$dec);
 	push @requested_times, $reptime;
 	push @repeats, $obsarr->[$i]->{'repeats'} * $xtra_reps;
@@ -469,6 +483,9 @@ sub getObs($$$) {
 	    }
 	    push @arrays, &stripSpacing($a);
 	    my $b = lc $obsarr->[$i]->{'band'};
+	    if ($b =~ /7\/3mm/) {
+		$b =~ s/7\/3mm/7mm 3mm/g;
+	    }
 	    if ($b =~ /\s+$/) {
 		$b =~ s/\s+$//;
 	    }
@@ -535,30 +552,43 @@ sub getObs($$$) {
 	push @sources, &stripSpacing($obsarr->[$i]->{'name'});
 
     }
+
+    # Map the names correctly.
+    for (my $j = 0; $j <= $#bandwidths; $j++) {
+	if ($bandwidths[$j] =~ /CFB 1M \(no zooms\)/) {
+	    $bandwidths[$j] = "CFB1M";
+	} elsif ($bandwidths[$j] =~ /CFB 1M-0.5k \(with zooms\)/) {
+	    $bandwidths[$j] = "CFB1M-0.5k";
+	} elsif ($bandwidths[$j] =~ /CFB 64M-32k/) {
+	    $bandwidths[$j] = "CFB64M-32k";
+	} elsif ($bandwidths[$j] =~ /CFB 1M \(pulsar binning\)/) {
+	    $bandwidths[$j] = "CFB1M-pulsar";
+	}
+    }
 	
-    
-    # Summarise the information in the output.
+    # Send back our summary information.
     my $times_string = &concatArray(\@requested_times, \@repeats, 4);
-    &nicePrint("Requested time:", $times_string, { 'delimiter' => "; " });
-
     my $arrays_string = &concatArray(\@arrays, \@repeats, 3);
-    &nicePrint("Array:", $arrays_string, { 'delimiter' => "; " });
-
     my $bands_string = &concatArray(\@bands, \@repeats, 3);
-    &nicePrint("Band:", $bands_string, {
-	'delimiter' => "; ",
-	'replace' => [ "/", " " ]
-	       });
-    
     my $bandwidths_string = &concatArray(\@bandwidths, \@repeats, 3);
-    &nicePrint("BW:", $bandwidths_string, { 'delimiter' => "; " });
-
     my $sources_string = &concatArray(\@sources, \@repeats, 3);
-    &nicePrint("Source:", $sources_string, { 'delimiter' => "; " });
-
     my $pos_string = &concatArray(\@radecs, \@repeats, 3);
-    &nicePrint("RADEC:", $pos_string, { 'delimiter' => "; " });
-
+    return {
+	'requested_times' => \@requested_times,
+	'summary_requested_times' => $times_string,
+	'requested_arrays' => \@arrays,
+	'summary_requested_arrays' => $arrays_string,
+	'requested_bands' => \@bands,
+	'summary_requested_bands' => $bands_string,
+	'requested_bandwidths' => \@bandwidths,
+	'summary_requested_bandwidths' => $bandwidths_string,
+	'requested_sources' => \@sources,
+	'summary_requested_sources' => $sources_string,
+	'requested_positions' => \@radecs,
+	'summary_requested_positions' => $pos_string,
+	'nrepeats' => \@repeats
+    };
+    
 }
 
 sub concatArray($$;$) {
@@ -668,6 +698,7 @@ sub translateCoord($$$$$) {
 	    $raf .= (3 + $x1).".".$x1."f";
 	} else {
 	    $raf .= "2.0f";
+	    $ras = floor($ras);
 	}
 	$ra_string = sprintf $raf, $rah, $ram, $ras;
 
@@ -685,6 +716,7 @@ sub translateCoord($$$$$) {
 	    $decf .= (3 + $x2).".".$x2."f";
 	} else {
 	    $decf .= "2.0f";
+	    $decsec = floor($decsec);
 	}
 	$decd *= $decs;
 	$dec_string = sprintf $decf, $decd, $decm, $decsec;
@@ -851,15 +883,17 @@ sub xmlParse($$) {
     my $obs = shift;
 
     # Get a list of the project directories.
+    printf "== Getting list of project directories in %s/%s.\n", $semdir, $obs;
+    my @olist = <$semdir/$obs/*>;
     my @list = sort {
-	(my $aproj) = $a =~ m{^\S+?/\w(\d+)$};
-	(my $bproj) = $b =~ m{^\S+?/\w(\d+)$};
-	return $aproj <=> $bproj; } <$sem/$obs/*>;
-
+	(my $aproj) = $a =~ m{^\S+/\w(\d+)$};
+	(my $bproj) = $b =~ m{^\S+/\w(\d+)$};
+	return $aproj <=> $bproj; } <$semdir/$obs/*>;
+    
     my @outproj;
     # Cycle through the projects.
     foreach my $dir (@list) {
-	(my $proj) = $dir =~ m{^$sem/$obs/(\S+)$};
+	(my $proj) = $dir =~ m{^$semdir/$obs/(\S+)$};
 	# Read in the cover sheet and the observation tables. We pass it through
 	# iconv so we don't get problems with invalid characters not in UTF-8.
 	my $coverstring = `iconv -f utf-8 -t utf-8 -c $dir/coversheet.xml`;
@@ -877,35 +911,103 @@ sub xmlParse($$) {
 		      "comments" => &zapper($cover->{'specialRequirements'}->{'content'}),
 		      "other" => &zapper($cover->{'otherInformation'}->{'content'})
 	};
+	my ($principal, $pi_email) = &getPI($cover);
+	$a->{"principal"} = $principal;
+	$a->{"pi_email"} = $pi_email;
 
+	$a->{"observations"} = &getObs($obs, $obstable, $cover);
 
-    print "Project id: ".$proj."\n";
-
-    my $title = &getTitle($cover);
-    &nicePrint("Title:", $title, { 'nobreaks' => 1 });
-
-    my ($principal, $pi_email) = &getPI($cover);
-    print "PI: ".$principal."\n";
-    print "Email: ".$pi_email."\n";
-
-    &getObs($obstable, $cover);
-
-    my $pref = &zapper($cover->{'preferredDates'}->{'content'});
-    &nicePrint("Good dates:", $pref);
-
-    my $imposs = &zapper($cover->{'impossibleDates'}->{'content'});
-    &nicePrint("Bad dates:", $imposs);
-
-    my $service = &zapper($cover->{'serviceObserving'}->{'content'});
-    &nicePrint("Service obs:", $service);
-
-    my $comments = &zapper($cover->{'specialRequirements'}->{'content'});
-    my $other = &zapper($cover->{'otherInformation'}->{'content'});
-    if ($other ne "") {
-	$comments .= " ".$other;
-    }
-
+	push @outproj, $a;
+	
+	#&getObs($obstable, $cover);
+	
     }
     
     return @outproj;
+}
+
+sub semesterTimeSummary($$) {
+    my $projects = shift;
+    my $exprojects = shift;
+
+    # Make a summary of amount of time requested as a function of array,
+    # band, and type.
+    my %array_requests;
+    my %otype = ( "normal" => 0, "napa" => 0, "legacy" => 0,
+		  "continuum" => 0, "1zoom" => 0, "64zoom" => 0,
+		  "pulsar" => 0, "vlbi" => 0 );
+    my %omap = ( "CFB1M" => "continuum", "CFB1M-0.5k" => "1zoom",
+		 "CFB64M-32k" => "64zoom", "CFB1M-pulsar" => "pulsar" );
+    my %amap = ( "6a" => "6km", "6b" => "6km", "6c" => "6km", "6d" => "6km",
+		 "any6" => "6km", "1.5a" => "1.5km", "1.5b" => "1.5km",
+		 "1.5c" => "1.5km", "1.5d" => "1.5km", "any1.5" => "1.5km",
+		 "750a" => "750m", "750b" => "750m", "750c" => "750m",
+		 "750d" => "750m", "any750" => "750m", "ew367" => "compact",
+		 "anycompact" => "compact", "ew352" => "compact" );
+    
+    printf "== Summarising time requests.\n";
+    for (my $i = 0; $i <= $#{$projects}; $i++) {
+	my $exclude = 0;
+	for (my $j = 0; $j <= $#{$exprojects}; $j++) {
+	    if (lc($projects->[$i]->{'project'}) eq lc($exprojects->[$j])) {
+		$exclude = 1;
+		last;
+	    }
+	}
+	if ($exclude == 1) {
+	    next;
+	}
+	my $p = $projects->[$i];
+	printf "DD project %s:\n", $p->{'project'};
+	
+	#printf "DD requests arrays:\n";
+	my $o = $p->{'observations'};
+	my $rw = {};
+	for (my $j = 0; $j <= $#{$o->{'requested_arrays'}}; $j++) {
+	    #printf "DD  %s\n", $o->{'requested_arrays'}->[$j];
+	    my $a = $o->{'requested_arrays'}->[$j];
+	    if (defined $amap{$a}) {
+		$a = $amap{$a};
+	    }
+	    if (!defined $array_requests{$a}) {
+		$array_requests{$a} = {
+		    '16cm' => 0, '4cm' => 0, '15mm' => 0, '7mm' => 0, '3mm' => 0
+		};
+	    }
+	    my @bands = split(/\s+/, $o->{'requested_bands'}->[$j]);
+	    my $dt = $o->{'requested_times'}->[$j] / ($#bands + 1);
+	    $dt *= $o->{'nrepeats'}->[$j];
+	    for (my $k = 0; $k <= $#bands; $k++) {
+		if (defined $array_requests{$a}->{$bands[$k]}) {
+		    #printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
+		    $array_requests{$a}->{$bands[$k]} += $dt;
+		} else {
+		    printf "WW Didn't find matching band %s.\n", $bands[$k];
+		}
+	    }
+	    #printf "DD bands in array: %s\n", $o->{'requested_bands'}->[$j];
+	    #printf "DD time in array: %d\n", $o->{'requested_times'}->[$j];
+	    #printf "DD number of repeats: %d\n", $o->{'nrepeats'}->[$j];
+	    my $w = $o->{'requested_bandwidths'}->[$j];
+	    if (!defined $rw->{$w}) {
+		$rw->{$w} = 1;
+	    }
+	}
+	foreach my $t (keys %{$rw}) {
+	    printf "II Identified %s request.\n", $omap{$t};
+	    $otype{$omap{$t}} += 1;
+	}
+    }
+
+    printf "II %10s %10s %10s %10s %10s %10s %10s\n", "Array", "16cm", "4cm",
+    "15mm", "7mm", "3mm", "Total";
+    
+    my @arrs = keys %array_requests;
+    for (my $i = 0; $i <= $#arrs; $i++) {
+	my $t = $array_requests{$arrs[$i]};
+	printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n",
+	$arrs[$i], $t->{'16cm'}, $t->{'4cm'}, $t->{'15mm'}, $t->{'7mm'}, $t->{'3mm'},
+	($t->{'16cm'} + $t->{'4cm'} + $t->{'15mm'} + $t->{'7mm'} + $t->{'3mm'});
+    }
+    
 }
