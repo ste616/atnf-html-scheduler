@@ -32,7 +32,6 @@ GetOptions(
     "legacy=s" => \@legacy
     ) or die "Error in command line arguments.\n";
 
-print Dumper @legacy;
 $sem = lc($sem); # Should look like 2019OCT
 my $semname = uc($sem);
 print "== Preparing for semester $semname\n";
@@ -919,11 +918,15 @@ sub xmlParse($$) {
 
 	push @outproj, $a;
 	
-	#&getObs($obstable, $cover);
-	
     }
     
     return @outproj;
+}
+
+sub initBandRef {
+    return {
+	'16cm' => 0, '4cm' => 0, '15mm' => 0, '7mm' => 0, '3mm' => 0
+    };
 }
 
 sub semesterTimeSummary($$) {
@@ -943,7 +946,11 @@ sub semesterTimeSummary($$) {
 		 "1.5c" => "1.5km", "1.5d" => "1.5km", "any1.5" => "1.5km",
 		 "750a" => "750m", "750b" => "750m", "750c" => "750m",
 		 "750d" => "750m", "any750" => "750m", "ew367" => "compact",
-		 "anycompact" => "compact", "ew352" => "compact" );
+		 "anycompact" => "compact", "ew352" => "compact",
+		 "h75/168" => [ "h75", "h168" ],
+		 "any 750 or greater" => [ "750m", "1.5km", "6km" ]);
+    my $band_totals = &initBandRef();
+
     
     printf "== Summarising time requests.\n";
     for (my $i = 0; $i <= $#{$projects}; $i++) {
@@ -969,28 +976,35 @@ sub semesterTimeSummary($$) {
 	    if (defined $amap{$a}) {
 		$a = $amap{$a};
 	    }
-	    if (!defined $array_requests{$a}) {
-		$array_requests{$a} = {
-		    '16cm' => 0, '4cm' => 0, '15mm' => 0, '7mm' => 0, '3mm' => 0
-		};
+	    if (ref $a ne 'ARRAY') {
+		# Turn it into an array ref.
+		$a = [ $a ];
 	    }
-	    my @bands = split(/\s+/, $o->{'requested_bands'}->[$j]);
-	    my $dt = $o->{'requested_times'}->[$j] / ($#bands + 1);
-	    $dt *= $o->{'nrepeats'}->[$j];
-	    for (my $k = 0; $k <= $#bands; $k++) {
-		if (defined $array_requests{$a}->{$bands[$k]}) {
-		    #printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
-		    $array_requests{$a}->{$bands[$k]} += $dt;
-		} else {
-		    printf "WW Didn't find matching band %s.\n", $bands[$k];
+	    for (my $k = 0; $k <= $#{$a}; $k++) {
+		my $ta = $a->[$k];
+		
+		if (!defined $array_requests{$ta}) {
+		    $array_requests{$ta} = &initBandRef();
 		}
-	    }
-	    #printf "DD bands in array: %s\n", $o->{'requested_bands'}->[$j];
-	    #printf "DD time in array: %d\n", $o->{'requested_times'}->[$j];
-	    #printf "DD number of repeats: %d\n", $o->{'nrepeats'}->[$j];
-	    my $w = $o->{'requested_bandwidths'}->[$j];
-	    if (!defined $rw->{$w}) {
-		$rw->{$w} = 1;
+		my @bands = split(/\s+/, $o->{'requested_bands'}->[$j]);
+		my $dt = $o->{'requested_times'}->[$j] / (($#bands + 1) * ($#{$a} + 1));
+		$dt *= $o->{'nrepeats'}->[$j];
+		for (my $k = 0; $k <= $#bands; $k++) {
+		    if (defined $array_requests{$ta}->{$bands[$k]}) {
+			#printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
+			$array_requests{$ta}->{$bands[$k]} += $dt;
+			$band_totals->{$bands[$k]} += $dt;
+		    } else {
+			printf "WW Didn't find matching band %s.\n", $bands[$k];
+		    }
+		}
+		#printf "DD bands in array: %s\n", $o->{'requested_bands'}->[$j];
+		#printf "DD time in array: %d\n", $o->{'requested_times'}->[$j];
+		#printf "DD number of repeats: %d\n", $o->{'nrepeats'}->[$j];
+		my $w = $o->{'requested_bandwidths'}->[$j];
+		if (!defined $rw->{$w}) {
+		    $rw->{$w} = 1;
+		}
 	    }
 	}
 	foreach my $t (keys %{$rw}) {
@@ -1002,12 +1016,33 @@ sub semesterTimeSummary($$) {
     printf "II %10s %10s %10s %10s %10s %10s %10s\n", "Array", "16cm", "4cm",
     "15mm", "7mm", "3mm", "Total";
     
+    my @array_order = ( "h75", "h168", "h214", "compact", "750m", "1.5km", 
+			"6km", "any" );
     my @arrs = keys %array_requests;
-    for (my $i = 0; $i <= $#arrs; $i++) {
-	my $t = $array_requests{$arrs[$i]};
-	printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n",
-	$arrs[$i], $t->{'16cm'}, $t->{'4cm'}, $t->{'15mm'}, $t->{'7mm'}, $t->{'3mm'},
-	($t->{'16cm'} + $t->{'4cm'} + $t->{'15mm'} + $t->{'7mm'} + $t->{'3mm'});
+    my $j = 0;
+    while (1) {
+	for (my $i = 0; $i <= $#arrs; $i++) {
+	    my $t = $array_requests{$arrs[$i]};
+	    if ((($j <= $#array_order) && ($arrs[$i] eq $array_order[$j])) ||
+		($j > $#array_order)) {
+		printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n",
+		$arrs[$i], $t->{'16cm'}, $t->{'4cm'}, $t->{'15mm'}, $t->{'7mm'}, 
+		$t->{'3mm'},
+		($t->{'16cm'} + $t->{'4cm'} + $t->{'15mm'} + $t->{'7mm'} + 
+		 $t->{'3mm'});
+		$j++;
+		last;
+	    }
+	}
+	if ($j > $#arrs) {
+	    last;
+	}
     }
+    my $gtotal = $band_totals->{'16cm'} + $band_totals->{'4cm'} +
+	$band_totals->{'15mm'} + $band_totals->{'7mm'} + $band_totals->{'3mm'};
+    printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n", "Total",
+    $band_totals->{'16cm'}, $band_totals->{'4cm'}, $band_totals->{'15mm'},
+    $band_totals->{'7mm'}, $band_totals->{'3mm'}, $gtotal;
+    
     
 }
