@@ -22,6 +22,13 @@ my $proposal_zip = "";
 my $map_file = "";
 my $clean = "";
 my $obs = "atca";
+my $maint_time = 600; # hours.
+my $vlbi_time = 288; # hours.
+my $legacy_time = 1200; # hours.
+my $calibration_time = 144; # hours.
+my $first_array = "";
+my $arrays = "";
+my $last_project = "C007";
 my @legacy;
 GetOptions(
     "semester=s" => \$sem,
@@ -29,7 +36,14 @@ GetOptions(
     "map=s" => \$map_file,
     "clean" => \$clean,
     "obs=s" => \$obs,
-    "legacy=s" => \@legacy
+    "legacy=s" => \@legacy,
+    "maintenance=i" => \$maint_time,
+    "vlbi=i" => \$vlbi_time,
+    "calibration=i" => \$calibration_time,
+    "tlegacy=i", \$legacy_time,
+    "first=s" => \$first_array,
+    "arrays=s" => \$arrays,
+    "last=s" => \$last_project
     ) or die "Error in command line arguments.\n";
 
 $sem = lc($sem); # Should look like 2019OCT
@@ -77,7 +91,8 @@ printf "II Found %d projects.\n", ($#projects + 1);
 #for (my $i = 0; $i <= $#projects; $i++) {
 #    printf "II Project %d: Code %s\n", ($i + 1), $projects[$i]->{'project'};
 #}
-&semesterTimeSummary(\@projects, \@legacy);
+my $summary = &semesterTimeSummary(\@projects, \@legacy, $last_project);
+&printSummary($summary);
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -904,11 +919,12 @@ sub xmlParse($$) {
 	    $obstablestring, keyattr => [],
 	    forcearray => [ 'au.csiro.atnf.opal.domain.AtcaObservation' ] );
 	my $a = { "project" => $proj, "title" => &getTitle($cover),
-		      "preferred" => &zapper($cover->{'preferredDates'}->{'content'}),
-		      "impossible" => &zapper($cover->{'impossibleDates'}->{'content'}),
-		      "service" => &zapper($cover->{'serviceObserving'}->{'content'}),
-		      "comments" => &zapper($cover->{'specialRequirements'}->{'content'}),
-		      "other" => &zapper($cover->{'otherInformation'}->{'content'})
+		  "preferred" => &zapper($cover->{'preferredDates'}->{'content'}),
+		  "impossible" => &zapper($cover->{'impossibleDates'}->{'content'}),
+		  "service" => &zapper($cover->{'serviceObserving'}->{'content'}),
+		  "comments" => &zapper($cover->{'specialRequirements'}->{'content'}),
+		  "other" => &zapper($cover->{'otherInformation'}->{'content'}),
+		  "proptype" => &zapper($cover->{'type'}->{'content'})
 	};
 	my ($principal, $pi_email) = &getPI($cover);
 	$a->{"principal"} = $principal;
@@ -923,22 +939,38 @@ sub xmlParse($$) {
     return @outproj;
 }
 
-sub initBandRef {
-    return {
-	'16cm' => 0, '4cm' => 0, '15mm' => 0, '7mm' => 0, '3mm' => 0
-    };
+sub allBands {
+    return ( '16cm', '4cm', '15mm', '7mm', '3mm' );
 }
 
-sub semesterTimeSummary($$) {
+sub initBandRef {
+    my @bands = &allBands();
+    my $t = {};
+    for (my $i = 0; $i <= $#bands; $i++) {
+	$t->{$bands[$i]} = 0;
+    }
+    return $t;
+}
+
+sub codeToNumber($) {
+    my $pcode = shift;
+
+    my ($t, $code) = ($pcode =~ m/^(\D+)(\d+)$/);
+    return ($code * 1);
+}
+
+sub semesterTimeSummary($$$) {
     my $projects = shift;
     my $exprojects = shift;
-
+    my $lp = shift;
+        
     # Make a summary of amount of time requested as a function of array,
     # band, and type.
     my %array_requests;
-    my %otype = ( "normal" => 0, "napa" => 0, "legacy" => 0,
+    my %otype = ( "total" => 0, "normal" => 0, "napa" => 0, "large" => 0,
+		  "weird" => 0, "excluded" => 0,
 		  "continuum" => 0, "1zoom" => 0, "64zoom" => 0,
-		  "pulsar" => 0, "vlbi" => 0 );
+		  "pulsar" => 0, "vlbi" => 0, "new" => 0 );
     my %omap = ( "CFB1M" => "continuum", "CFB1M-0.5k" => "1zoom",
 		 "CFB64M-32k" => "64zoom", "CFB1M-pulsar" => "pulsar" );
     my %amap = ( "6a" => "6km", "6b" => "6km", "6c" => "6km", "6d" => "6km",
@@ -950,10 +982,15 @@ sub semesterTimeSummary($$) {
 		 "h75/168" => [ "h75", "h168" ],
 		 "any 750 or greater" => [ "750m", "1.5km", "6km" ]);
     my $band_totals = &initBandRef();
-
+    my %ttotal = ( "normal" => 0, "large" => 0, "napa" => 0, "continuum" => 0,
+		   "1zoom" => , "64zoom" => 0, "pulsar" => 0, "vlbi" => 0,
+		   "new" => 0);
+    
+    my $newcut = &codeToNumber($lp);
     
     printf "== Summarising time requests.\n";
     for (my $i = 0; $i <= $#{$projects}; $i++) {
+	$otype{'total'} += 1;
 	my $exclude = 0;
 	for (my $j = 0; $j <= $#{$exprojects}; $j++) {
 	    if (lc($projects->[$i]->{'project'}) eq lc($exprojects->[$j])) {
@@ -962,10 +999,28 @@ sub semesterTimeSummary($$) {
 	    }
 	}
 	if ($exclude == 1) {
+	    $otype{'excluded'} += 1;
 	    next;
 	}
 	my $p = $projects->[$i];
 	printf "DD project %s:\n", $p->{'project'};
+	my $pn = &codeToNumber($p->{'project'});
+	my $np = 0;
+	if ($pn > $newcut) {
+	    # New project.
+	    $otype{'new'} += 1;
+	    $np = 1;
+	}
+	# Check for a NAPA.
+	my $et = "weird";
+	if ($p->{'proptype'} eq "NAPA") {
+	    $et = "napa";
+	} elsif ($p->{'proptype'} eq "Standard") {
+	    $et = "normal";
+	} elsif ($p->{'proptype'} eq "Large Project") {
+	    $et = "large";
+	}
+	$otype{$et} += 1;
 	
 	#printf "DD requests arrays:\n";
 	my $o = $p->{'observations'};
@@ -989,11 +1044,15 @@ sub semesterTimeSummary($$) {
 		my @bands = split(/\s+/, $o->{'requested_bands'}->[$j]);
 		my $dt = $o->{'requested_times'}->[$j] / (($#bands + 1) * ($#{$a} + 1));
 		$dt *= $o->{'nrepeats'}->[$j];
-		for (my $k = 0; $k <= $#bands; $k++) {
-		    if (defined $array_requests{$ta}->{$bands[$k]}) {
+		for (my $l = 0; $l <= $#bands; $l++) {
+		    if (defined $array_requests{$ta}->{$bands[$l]}) {
 			#printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
-			$array_requests{$ta}->{$bands[$k]} += $dt;
-			$band_totals->{$bands[$k]} += $dt;
+			$array_requests{$ta}->{$bands[$l]} += $dt;
+			$band_totals->{$bands[$l]} += $dt;
+			$ttotal{$et} += $dt;
+			if ($np == 1) {
+			    $ttotal{'new'} += $dt;
+			}
 		    } else {
 			printf "WW Didn't find matching band %s.\n", $bands[$k];
 		    }
@@ -1003,33 +1062,61 @@ sub semesterTimeSummary($$) {
 		#printf "DD number of repeats: %d\n", $o->{'nrepeats'}->[$j];
 		my $w = $o->{'requested_bandwidths'}->[$j];
 		if (!defined $rw->{$w}) {
-		    $rw->{$w} = 1;
+		    $rw->{$w} = 0;
 		}
+		$rw->{$w} += $dt * ($#bands + 1);
 	    }
 	}
 	foreach my $t (keys %{$rw}) {
-	    printf "II Identified %s request.\n", $omap{$t};
+	    #printf "II Identified %s request.\n", $omap{$t};
 	    $otype{$omap{$t}} += 1;
+	    $ttotal{$omap{$t}} += $rw->{$t};
 	}
     }
 
+    my @arrs = keys %array_requests;
+    my $array_totals = {};
+    my $gtotal = 0;
+    for (my $i = 0; $i <= $#arrs; $i++) {
+	my $t = $array_requests{$arrs[$i]};
+	$array_totals->{$arrs[$i]} = ($t->{'16cm'} + $t->{'4cm'} +
+				      $t->{'15mm'} + $t->{'7mm'} + $t->{'3mm'});
+	$gtotal += $array_totals->{$arrs[$i]};
+    }
+    
+    return {
+	'requested' => \%array_requests,
+	'arrays' => \@arrs,
+	'array_totals' => $array_totals,
+	'band_totals' => $band_totals,
+	'total' => $gtotal,
+	'types' => \%otype,
+	'total_times' => \%ttotal
+    };
+    
+}
+
+sub printSummary($) {
+    # Take the object coming from semesterTimeSummary and print out
+    # some information.
+    my $s = shift;
+
+    # Print out the time totals.
     printf "II %10s %10s %10s %10s %10s %10s %10s\n", "Array", "16cm", "4cm",
     "15mm", "7mm", "3mm", "Total";
     
     my @array_order = ( "h75", "h168", "h214", "compact", "750m", "1.5km", 
 			"6km", "any" );
-    my @arrs = keys %array_requests;
+    my @arrs = @{$s->{'arrays'}};
     my $j = 0;
     while (1) {
 	for (my $i = 0; $i <= $#arrs; $i++) {
-	    my $t = $array_requests{$arrs[$i]};
+	    my $t = $s->{'requested'}->{$arrs[$i]};
 	    if ((($j <= $#array_order) && ($arrs[$i] eq $array_order[$j])) ||
 		($j > $#array_order)) {
 		printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n",
 		$arrs[$i], $t->{'16cm'}, $t->{'4cm'}, $t->{'15mm'}, $t->{'7mm'}, 
-		$t->{'3mm'},
-		($t->{'16cm'} + $t->{'4cm'} + $t->{'15mm'} + $t->{'7mm'} + 
-		 $t->{'3mm'});
+		$t->{'3mm'}, $s->{'array_totals'}->{$arrs[$i]};
 		$j++;
 		last;
 	    }
@@ -1038,11 +1125,29 @@ sub semesterTimeSummary($$) {
 	    last;
 	}
     }
-    my $gtotal = $band_totals->{'16cm'} + $band_totals->{'4cm'} +
-	$band_totals->{'15mm'} + $band_totals->{'7mm'} + $band_totals->{'3mm'};
+    my $b = $s->{'band_totals'};
     printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n", "Total",
-    $band_totals->{'16cm'}, $band_totals->{'4cm'}, $band_totals->{'15mm'},
-    $band_totals->{'7mm'}, $band_totals->{'3mm'}, $gtotal;
+    $b->{'16cm'}, $b->{'4cm'}, $b->{'15mm'},
+    $b->{'7mm'}, $b->{'3mm'}, $s->{'total'};
+
+    my @reqtypes = ( "total", "new", "normal", "napa", "large", "excluded", "weird",
+		     "continuum", "1zoom", "64zoom", "pulsar", "vlbi" );
+    my @reqtitles = ( "All", "New", "Normal", "NAPA", "Large Projects", 
+		      "Legacy Projects", "Weird Projects", "Continuum",
+		      "1 MHz zooms", "64 MHz zooms", "Pulsar Binning",
+		      "VLBI" );
     
-    
+    printf "II Request types:\n";
+    printf "II %30s %4s %7s %10s\n", "Experiment Type", "#", "(%)", "Time (h)";
+    for (my $i = 0; $i <= $#reqtypes; $i++) {
+	my $tdisp = "";
+	if ($reqtypes[$i] eq "total") {
+	    $tdisp = sprintf "%10.1f", $s->{'total'};
+	} elsif (defined $s->{'total_times'}->{$reqtypes[$i]}) {
+	    $tdisp = sprintf "%10.1f", $s->{'total_times'}->{$reqtypes[$i]};
+	}
+	printf "II %30s %4d (%5.1f) %10s\n", $reqtitles[$i],
+	$s->{'types'}->{$reqtypes[$i]}, (100 * $s->{'types'}->{$reqtypes[$i]} /
+					 $s->{'types'}->{'total'}), $tdisp;
+    }
 }
