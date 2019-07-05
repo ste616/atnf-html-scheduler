@@ -92,7 +92,11 @@ printf "II Found %d projects.\n", ($#projects + 1);
 #    printf "II Project %d: Code %s\n", ($i + 1), $projects[$i]->{'project'};
 #}
 my $summary = &semesterTimeSummary(\@projects, \@legacy, $last_project);
-&printSummary($summary);
+&printSummary($summary, {
+    'name' => $semname, 'length' => $semesterDetails->{'nDays'},
+    'maintenance' => $maint_time, 'calibration' => $calibration_time,
+    'legacy' => $legacy_time, 'vlbi' => $vlbi_time
+});
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -1003,7 +1007,7 @@ sub semesterTimeSummary($$$) {
 	    next;
 	}
 	my $p = $projects->[$i];
-	printf "DD project %s:\n", $p->{'project'};
+	#printf "DD project %s:\n", $p->{'project'};
 	my $pn = &codeToNumber($p->{'project'});
 	my $np = 0;
 	if ($pn > $newcut) {
@@ -1045,6 +1049,8 @@ sub semesterTimeSummary($$$) {
 		my $dt = $o->{'requested_times'}->[$j] / (($#bands + 1) * ($#{$a} + 1));
 		$dt *= $o->{'nrepeats'}->[$j];
 		for (my $l = 0; $l <= $#bands; $l++) {
+		    # Get rid of punctuation.
+		    $bands[$l] =~ s/[\.\,]//g;
 		    if (defined $array_requests{$ta}->{$bands[$l]}) {
 			#printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
 			$array_requests{$ta}->{$bands[$l]} += $dt;
@@ -1096,10 +1102,11 @@ sub semesterTimeSummary($$$) {
     
 }
 
-sub printSummary($) {
+sub printSummary($$) {
     # Take the object coming from semesterTimeSummary and print out
     # some information.
     my $s = shift;
+    my $p = shift;
 
     # Print out the time totals.
     printf "II %10s %10s %10s %10s %10s %10s %10s\n", "Array", "16cm", "4cm",
@@ -1150,4 +1157,21 @@ sub printSummary($) {
 	$s->{'types'}->{$reqtypes[$i]}, (100 * $s->{'types'}->{$reqtypes[$i]} /
 					 $s->{'types'}->{'total'}), $tdisp;
     }
+
+    # Print out the semester statistics.
+    printf "II Semester %s summary:\n", $p->{'name'};
+    my $thours = $p->{'length'} * 24;
+    printf "II %30s %10d h\n", "Total term length", $thours;
+    my $ahours = $thours - ($p->{'maintenance'} + $p->{'vlbi'} +
+			    $p->{'calibration'} + $p->{'legacy'});
+    printf "II %30s %10d h\n", "Maintenance time", $p->{'maintenance'};
+    printf "II %30s %10d h\n", "VLBI", $p->{'vlbi'};
+    printf "II %30s %10d h\n", "Calibration time", $p->{'calibration'};
+    printf "II %30s %10d h\n", "Legacy Projects", $p->{'legacy'};
+    printf "II %30s %10d h\n", "Available time", $ahours;
+    my $shours = $ahours * 0.9;
+    printf "II %30s %10d h\n", "Schedulable time", $shours;
+    printf "II %30s %10d h\n", "Requested", $s->{'total'};
+    my $osub = $s->{'total'} / $shours;
+    printf "II %30s %10.1f\n", "Oversubscription rate", $osub;
 }
