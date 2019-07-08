@@ -29,6 +29,13 @@ my $calibration_time = 144; # hours.
 my $first_array = "";
 my $arrays = "";
 my $last_project = "C007";
+# The maintenance_days is a list of how many
+# 4-day, 3-day, 2-day and 1-day maintenance blocks to include.
+my $maintenance_days = "4,5,4,37";
+# The VLBI days is a list of how many
+# 168h, 96h, 72h, 48h, 24h, 8h VLBI blocks to include.
+my $vlbi_days = "2,3,1,3,3,7";
+my $vlbi_length = "168,96,72,48,24,8";
 my @legacy;
 GetOptions(
     "semester=s" => \$sem,
@@ -97,6 +104,27 @@ my $summary = &semesterTimeSummary(\@projects, \@legacy, $last_project);
     'maintenance' => $maint_time, 'calibration' => $calibration_time,
     'legacy' => $legacy_time, 'vlbi' => $vlbi_time
 });
+
+# Prepare to output all our files.
+# Arrange the arrays.
+my @available_arrays = split(/\,/, $arrays);
+for (my $i = 0; $i <= $#available_arrays; $i++) {
+    if (($available_arrays[$i] eq $first_array) &&
+	($i != 0)) {
+	splice @available_arrays, $i, 1;
+	unshift @available_arrays, $first_array;
+    }
+}
+# Split up the maintenance frequency string.
+my @n_maint = split(/\,/, $maintenance_days);
+# Split up the VLBI frequency string.
+my @n_vlbi = split(/\,/, $vlbi_days);
+my @l_vlbi = split(/\,/, $vlbi_length);
+# Output the text schedule summary.
+my $summary_file = sprintf "ca-prep-%s.txt", $semname;
+printFileTextSummary($summary_file, $obs, $semname, \@available_arrays, 
+		     \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
+		     \@projects);
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -298,6 +326,10 @@ sub nicePrint($$) {
     # Any optional parts (a hash ref).
     my $opts = shift;
 
+    # Begin by stripping non-ASCII characters out.
+    $s =~ s/[^[:ascii:]]+//g;
+    
+    my @rstrings;
     # Check the options.
     # The delimiter to break lines on - normally, and by default, space.
     my $d = " ";
@@ -347,7 +379,7 @@ sub nicePrint($$) {
     my $lo = length($o);
     my $title_printed = 0;
     if ($undertitle == 1) {
-	printf $title."\n";
+	push @rstrings, sprintf $title."\n";
 	$title = "";
 	$title_printed = 1;
     }
@@ -362,9 +394,9 @@ sub nicePrint($$) {
 	my $le = length($e[$i]);
 	if (($tlen + $lo + $le + 1) > $maxlength) {
 	    if ($i <= $#e && $eol_slashes == 1) {
-		printf $pformat, $title, $o, "\\";
+		push @rstrings, sprintf $pformat, $title, $o, "\\";
 	    } else {
-		printf $pformat, $title, $o;
+		push @rstrings, sprintf $pformat, $title, $o;
 	    }
 	    if ($title_printed == 0) {
 		$title = "";
@@ -380,8 +412,9 @@ sub nicePrint($$) {
 	$o =~ s/\Q$d\E$//;
     }
     if ($o ne "" || $title_printed == 0) {
-	printf $pformat, $title, $o;
+	push @rstrings, sprintf $pformat, $title, $o;
     }
+    return @rstrings;
 }
 
 sub stripSpacing {
@@ -581,6 +614,8 @@ sub getObs($$$) {
 	    $bandwidths[$j] = "CFB64M-32k";
 	} elsif ($bandwidths[$j] =~ /CFB 1M \(pulsar binning\)/) {
 	    $bandwidths[$j] = "CFB1M-pulsar";
+	} elsif ($bandwidths[$j] =~ /CFB 1M\/64M/) {
+	    $bandwidths[$j] = "CFB1-64M";
 	}
     }
 	
@@ -874,7 +909,7 @@ sub semesterDateRange($) {
     return { "start" => $semStartDate, "end" => $semEndDate,
 	     "startString" => $semStartDate->strftime("%Y-%m-%d"),
 	     "endString" => $semEndDate->strftime("%Y-%m-%d"),
-	     "nDays" => ($semEndDate->mjd() - $semStartDate->mjd() + 1)
+	     "nDays" => ($semEndDate->mjd() - $semStartDate->mjd())
     };
 
 }
@@ -967,7 +1002,7 @@ sub semesterTimeSummary($$$) {
     my $projects = shift;
     my $exprojects = shift;
     my $lp = shift;
-        
+
     # Make a summary of amount of time requested as a function of array,
     # band, and type.
     my %array_requests;
@@ -976,7 +1011,8 @@ sub semesterTimeSummary($$$) {
 		  "continuum" => 0, "1zoom" => 0, "64zoom" => 0,
 		  "pulsar" => 0, "vlbi" => 0, "new" => 0 );
     my %omap = ( "CFB1M" => "continuum", "CFB1M-0.5k" => "1zoom",
-		 "CFB64M-32k" => "64zoom", "CFB1M-pulsar" => "pulsar" );
+		 "CFB64M-32k" => "64zoom", "CFB1M-pulsar" => "pulsar",
+		 "CFB1-64M" => "hybrid" );
     my %amap = ( "6a" => "6km", "6b" => "6km", "6c" => "6km", "6d" => "6km",
 		 "any6" => "6km", "1.5a" => "1.5km", "1.5b" => "1.5km",
 		 "1.5c" => "1.5km", "1.5d" => "1.5km", "any1.5" => "1.5km",
@@ -987,8 +1023,8 @@ sub semesterTimeSummary($$$) {
 		 "any 750 or greater" => [ "750m", "1.5km", "6km" ]);
     my $band_totals = &initBandRef();
     my %ttotal = ( "normal" => 0, "large" => 0, "napa" => 0, "continuum" => 0,
-		   "1zoom" => , "64zoom" => 0, "pulsar" => 0, "vlbi" => 0,
-		   "new" => 0);
+		   "1zoom" => 0, "64zoom" => 0, "pulsar" => 0, "vlbi" => 0,
+		   "new" => 0, "hybrid" => 0 );
     
     my $newcut = &codeToNumber($lp);
     
@@ -1045,12 +1081,15 @@ sub semesterTimeSummary($$$) {
 		if (!defined $array_requests{$ta}) {
 		    $array_requests{$ta} = &initBandRef();
 		}
-		my @bands = split(/\s+/, $o->{'requested_bands'}->[$j]);
+		my $bstring = $o->{'requested_bands'}->[$j];
+		$bstring =~ s/and//g;
+		$bstring =~ s/\,/ /g;
+		my @bands = split(/\s+/, $bstring);
 		my $dt = $o->{'requested_times'}->[$j] / (($#bands + 1) * ($#{$a} + 1));
 		$dt *= $o->{'nrepeats'}->[$j];
 		for (my $l = 0; $l <= $#bands; $l++) {
 		    # Get rid of punctuation.
-		    $bands[$l] =~ s/[\.\,]//g;
+		    $bands[$l] =~ s/[\.\,\s]//g;
 		    if (defined $array_requests{$ta}->{$bands[$l]}) {
 			#printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
 			$array_requests{$ta}->{$bands[$l]} += $dt;
@@ -1060,13 +1099,14 @@ sub semesterTimeSummary($$$) {
 			    $ttotal{'new'} += $dt;
 			}
 		    } else {
-			printf "WW Didn't find matching band %s.\n", $bands[$k];
+			printf "WW Didn't find matching band %s (%s).\n", $bands[$k], $p->{'project'};
 		    }
 		}
 		#printf "DD bands in array: %s\n", $o->{'requested_bands'}->[$j];
 		#printf "DD time in array: %d\n", $o->{'requested_times'}->[$j];
 		#printf "DD number of repeats: %d\n", $o->{'nrepeats'}->[$j];
 		my $w = $o->{'requested_bandwidths'}->[$j];
+		#printf "project %s requests bandwidth %s\n", $p->{'project'}, $o->{'requested_bandwidths'}->[$j];
 		if (!defined $rw->{$w}) {
 		    $rw->{$w} = 0;
 		}
@@ -1074,7 +1114,7 @@ sub semesterTimeSummary($$$) {
 	    }
 	}
 	foreach my $t (keys %{$rw}) {
-	    #printf "II Identified %s request.\n", $omap{$t};
+	    #printf "II Identified %s (%s) request.\n", $omap{$t}, $t;
 	    $otype{$omap{$t}} += 1;
 	    $ttotal{$omap{$t}} += $rw->{$t};
 	}
@@ -1124,10 +1164,10 @@ sub printSummary($$) {
 		printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n",
 		$arrs[$i], $t->{'16cm'}, $t->{'4cm'}, $t->{'15mm'}, $t->{'7mm'}, 
 		$t->{'3mm'}, $s->{'array_totals'}->{$arrs[$i]};
-		$j++;
 		last;
 	    }
 	}
+	$j++;
 	if ($j > $#arrs) {
 	    last;
 	}
@@ -1138,11 +1178,11 @@ sub printSummary($$) {
     $b->{'7mm'}, $b->{'3mm'}, $s->{'total'};
 
     my @reqtypes = ( "total", "new", "normal", "napa", "large", "excluded", "weird",
-		     "continuum", "1zoom", "64zoom", "pulsar", "vlbi" );
+		     "continuum", "1zoom", "64zoom", "hybrid", "pulsar", "vlbi" );
     my @reqtitles = ( "All", "New", "Normal", "NAPA", "Large Projects", 
 		      "Legacy Projects", "Weird Projects", "Continuum",
-		      "1 MHz zooms", "64 MHz zooms", "Pulsar Binning",
-		      "VLBI" );
+		      "1 MHz zooms", "64 MHz zooms", "1/64 MHz hybrid",
+		      "Pulsar Binning", "VLBI" );
     
     printf "II Request types:\n";
     printf "II %30s %4s %7s %10s\n", "Experiment Type", "#", "(%)", "Time (h)";
@@ -1174,4 +1214,96 @@ sub printSummary($$) {
     printf "II %30s %10d h\n", "Requested", $s->{'total'};
     my $osub = $s->{'total'} / $shours;
     printf "II %30s %10.1f\n", "Oversubscription rate", $osub;
+}
+
+sub printSep() {
+    return "------------------------------------------------------------------------";
+}
+
+sub printFileTextSummary($$$$$$$$$) {
+    my $fname = shift;
+    my $obs = shift;
+    my $sem = shift;
+    my $arrays = shift;
+    my $maint = shift;
+    my $vlbi = shift;
+    my $lvlbi = shift;
+    my $holidays = shift;
+    my $projects = shift;
+    
+    # Open the file.
+    open(O, ">".$fname) || die "!! Unable to open $fname for writing.\n";
+
+    # Print the header.
+    printf O "Observatory: %s\n", $obs;
+    printf O "Arrays: %s\;\n", join("; ", @{$arrays});
+    printf O "Term: %sS\n", $sem;
+    printf O "Maintenance:";
+    for (my $i = 0; $i <= $#{$maint}; $i++) {
+	my $n = 4 - $i;
+	for (my $j = 0; $j < $maint->[$i]; $j++) {
+	    printf O " %d-day;", $n;
+	}
+    }
+    printf O "\n";
+    printf O "Holidays:";
+    my @hkeys = sort (keys %{$holidays});
+    for (my $i = 0; $i <= $#hkeys; $i++) {
+	my $d = $holidays->{$hkeys[$i]}->{'datetime'};
+	printf O " %02d/%02d;", $d->day(), $d->month();
+    }
+    printf O "\n";
+    printf O "VLBI:";
+    for (my $i = 0; $i <= $#{$vlbi}; $i++) {
+	for (my $j = 0; $j < $vlbi->[$i]; $j++) {
+	    printf O " %d;", $lvlbi->[$i];
+	}
+    }
+    printf O "\n";
+    printf O "%s\n", &printSep();
+
+    # Go through the list of projects.
+    for (my $i = 0; $i <= $#{$projects}; $i++) {
+	my $p = $projects->[$i];
+	printf O "Project id: %s\n", $p->{'project'};
+	printf O "%s", join("", &nicePrint("Title:", $p->{'title'}, {
+	    'nobreaks' => 1 }));
+	printf O "PI: %s\n", $p->{'principal'};
+	printf O "Email: %s\n", $p->{'pi_email'};
+	my $ob = $p->{'observations'};
+	printf O "%s", join("", &nicePrint("Requested time:",
+					   $ob->{'summary_requested_times'}, {
+					       'delimiter' => "; " }));
+	printf O "%s", join("", &nicePrint("Array:",
+					   $ob->{'summary_requested_arrays'}, {
+					       'delimiter' => "; " }));
+	printf O "%s", join("", &nicePrint("Band:",
+					   $ob->{'summary_requested_bands'}, {
+					       'delimiter' => "; ",
+					       'replace' => [ "/", " " ] }));
+	printf O "%s", join("", &nicePrint("BW:",
+					   $ob->{'summary_requested_bandwidths'}, {
+					       'delimiter' => "; " }));
+	printf O "%s", join("", &nicePrint("Source:",
+					   $ob->{'summary_requested_sources'}, {
+					       'delimiter' => "; " }));
+	printf O "%s", join("", &nicePrint("RADEC:",
+					   $ob->{'summary_requested_positions'}, {
+					       'delimiter' => "; "}));
+	# Nobody ever gets the good and impossible dates correct.
+	printf O "Good dates:\n";
+	printf O "Bad dates:\n";
+	printf O "%s", join("", &nicePrint("Service obs:",
+					   $p->{'service'}));
+	printf O "%s", join("", &nicePrint("Comments:",
+					   $p->{'comments'}." ".
+					   $p->{'other'}." ".
+					   $p->{'preferred'}." ".
+					   $p->{'impossible'}, {
+					       'undertitle' => 1,
+					       'eol_slashes' => 0 }));
+	printf O "%s\n", &printSep();
+    }
+   
+    close(O);
 }
