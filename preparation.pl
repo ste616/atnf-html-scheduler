@@ -1351,39 +1351,76 @@ sub printFileJson($$$$$$$$$) {
     my $u = $jobj{'program'};
     for (my $i = 0; $i <= $#{$projects}; $i++) {
 	my $p = $projects->[$i];
-	my $proj = {
-	    'ident' => $p->{'project'},
-	    'type' => "ASTRO",
-	    'PI' => $p->{'principal'},
-	    'comments' => $p->{'comments'}." ".$p->{'other'},
-	    'title' => $p->{'title'},
-	    'excluded_dates' => $p->{'impossible'},
-	    'preferred_dates' => $p->{'preferred'},
-	    'slot' => []
-	};
+	my $proj = &createProject($p->{'project'}, "ASTRO", $p->{'principal'},
+				  $p->{'comments'}." ".$p->{'other'},
+				  $p->{'title'}, $p->{'impossible'},
+				  $p->{'preferred'});
 	my $s = $proj->{'slot'};
 	my $o = $p->{'observations'};
 	for (my $j = 0; $j <= $#{$o->{'requested_times'}}; $j++) {
-	    my @bands = split(/\s+/, $o->{'requested_bands'}->[$j]);
-	    my @pos = split(/\,/, $o->{'requested_positions'}->[$j]);
-	    my $slot = {
-		'array' => $o->{'requested_arrays'}->[$j],
-		'bands' => \@bands,
-		'bandwidth' => $o->{'requested_bandwidths'}->[$j],
-		'source' => $o->{'requested_sources'}->[$j],
-		'position' => { 'ra' => $pos[0], 'dec' => $pos[1] },
-		'requested_duration' => $o->{'requested_times'}->[$j],
-		'scheduled_duration' => 0,
-		'scheduled_start' => 0,
-		'scheduled' => 0,
-		'rating' => 0,
-		'lst_limits_used' => 0,
-		'lst_start' => $o->{'requested_lsts'}->[$j]->[0],
-		'lst_end' => $o->{'requested_lsts'}->[$j]->[1]
-	    };
-	    push @{$s}, $slot;
+	    push @{$s}, &createSlot(
+		$o->{'requested_arrays'}->[$j],
+		$o->{'requested_bands'}->[$j],
+		$o->{'requested_bandwidths'}->[$j],
+		$o->{'requested_sources'}->[$j],
+		$o->{'requested_positions'}->[$j],
+		$o->{'requested_times'}->[$j],
+		0, 0, $o->{'requested_lsts'}->[$j]->[0],
+		$o->{'requested_lsts'}->[$j]->[1]
+		);
 	}
 	push @{$u->{'project'}}, $proj;
+    }
+    # Put the maintenance time in.
+    my $proj = &createProject("MAINT", "MAINT", "Mirtschin/Wilson",
+			      "", "Maintenance/Test", $holidays, "");
+    push @{$u->{'project'}}, $proj;
+    my $s = $proj->{'slot'};
+    for (my $i = 0; $i <= $#{$maint}; $i++) {
+	for (my $j = 0; $j < $maint->[$i]; $j++) {
+	    my $sname = sprintf "%d-day", (4 - $i);
+	    my $rdur = 8;
+	    if ($i == 0) {
+		$rdur = 103;
+	    } elsif ($i == 1) {
+		$rdur = 80;
+	    } elsif ($i == 2) {
+		$rdur = 32;
+	    }
+	    push @{$s}, &createSlot(
+		"any", "", "", $sname, "00:00:00,-90:00:00",
+		$rdur, 6, 0, "00:00", "23:59");
+	}
+    }
+    # And the VLBI time.
+    $proj = &createProject("VLBI", "ASTRO", "Phillips", "", "VLBI", "", "");
+    push @{$u->{'project'}}, $proj;
+    $s = $proj->{'slot'};
+    for (my $i = 0; $i <= $#{$vlbi}; $i++) {
+	for (my $j = 0; $j < $vlbi->[$i]; $j++) {
+	    push @{$s}, &createSlot(
+		"any", "16cm 4cm 15mm", "VLBI", "VLBI",
+		"00:00:00,-90:00:00", (1 * $lvlbi->[$i]), 5, 0, "00:00", "23:59");
+	}
+    }
+    # And the reconfigurations.
+    $proj = &createProject("CONFIG", "CONFIG", "Stevens", "", "Reconfig",
+			   $holidays, "");
+    push @{$u->{'project'}}, $proj;
+    $s = $proj->{'slot'};
+    for (my $i = 0; $i <= $#{$arrays}; $i++) {
+	push @{$s}, &createSlot(
+	    $arrays->[$i], "", "", "100", "00:00:00,-90:00:00",
+	    24, 6, 0, "00:00", "23:59");
+    }
+    # And some CABB reconfigurations.
+    $proj = &createProject("CABB", "NASA", "Stevens", "", "CABB", "", "");
+    push @{$u->{'project'}}, $proj;
+    $s = $proj->{'slot'};
+    for (my $i = 0; $i < 30; $i++) {
+	push @{$s}, &createSlot(
+	    "any", "", "", "CABB", "00:00:00,-90:00:00", 
+	    1, 6, 0, "00:00", "23:59");
     }
 
     # Write out the JSON.
@@ -1392,4 +1429,72 @@ sub printFileJson($$$$$$$$$) {
     open(O, ">".$fname) || die "!! Unable to open $fname for writing.\n";
     printf O "%s\n", $json->pretty->encode(\%jobj);
     close(O);
+}
+
+sub createProject($$$$$$$) {
+    my $ident = shift;
+    my $type = shift;
+    my $pi = shift;
+    my $comments = shift;
+    my $title = shift;
+    my $impossible = shift;
+    my $preferred = shift;
+
+    my $date_impossible = $impossible;
+    my $date_preferred = $preferred;
+    if (ref $date_impossible eq "HASH") {
+	# Convert this into an array of epochs.
+	$date_impossible = &datehash2epochs($impossible);
+    }
+    if (ref $date_preferred eq "HASH") {
+	$date_preferred = &datehash2epochs($preferred);
+    }
+    
+    return {
+	'ident' => $ident,
+	'type' => $type,
+	'PI' => $pi,
+	'comments' => $comments,
+	'title' => $title,
+	'excluded_dates' => $date_impossible,
+	'preferred_dates' => $date_preferred,
+	'slot' => []
+    };
+}
+
+sub createSlot($$$$$$$$$$) {
+    my $array = shift;
+    my $bands = shift;
+    my $bandwidth = shift;
+    my $source = shift;
+    my $position = shift;
+    my $requested_duration = shift;
+    my $rating = shift;
+    my $lst_limits_used = shift;
+    my $lst_start = shift;
+    my $lst_end = shift;
+
+    my @bands = split(/\s+/, $bands);
+    my @pos = split(/\,/, $position);
+    
+    return {
+	'array' => $array, 'bands' => \@bands, 'source' => $source,
+	'position' => { 'ra' => $pos[0], 'dec' => $pos[1] }, 
+	'requested_duration' => $requested_duration,
+	'scheduled_duration' => 0, 'scheduled_start' => 0, 'scheduled' => 0,
+	'rating' => $rating, 'lst_limits_used' => $lst_limits_used,
+	'lst_start' => $lst_start, 'lst_end' => $lst_end
+    };
+}
+
+sub datehash2epochs($) {
+    my $dh = shift;
+
+    my @dates;
+    
+    for my $dk (keys %{$dh}) {
+	push @dates, $dh->{$dk}->{'datetime'}->epoch();
+    }
+
+    return \@dates;
 }
