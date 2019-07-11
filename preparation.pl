@@ -4,7 +4,7 @@ use URI;
 use Web::Scraper;
 use Encode;
 use DateTime;
-#use JSON::Simple;
+use JSON;
 use Getopt::Long;
 use XML::Simple;
 use String::ShellQuote;
@@ -122,9 +122,13 @@ my @n_vlbi = split(/\,/, $vlbi_days);
 my @l_vlbi = split(/\,/, $vlbi_length);
 # Output the text schedule summary.
 my $summary_file = sprintf "ca-prep-%s.txt", $semname;
-printFileTextSummary($summary_file, $obs, $semname, \@available_arrays, 
-		     \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
-		     \@projects);
+&printFileTextSummary($summary_file, $obs, $semname, \@available_arrays, 
+		      \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
+		      \@projects);
+my $summary_json = sprintf "ca-%s.json", $semname;
+&printFileJson($summary_json, $obs, $semname, \@available_arrays,
+	       \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
+	       \@projects, $semesterDetails);
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -482,6 +486,7 @@ sub getObs($$$) {
     my @bandwidths;
     my @sources;
     my @radecs;
+    my @lsts;
 
     my $obsarr;
     if ($obs eq "atca") {
@@ -509,6 +514,16 @@ sub getObs($$$) {
 	    $ra = "00:00:00";
 	    $dec = "-90:00:00";
 	}
+	# Get the LSTs as well.
+	my $lst_start = $obsarr->[$i]->{'lstStart'};
+	if (ref $lst_start eq "HASH") {
+	    $lst_start = "00:00";
+	}
+	my $lst_end = $obsarr->[$i]->{'lstEnd'};
+	if ($lst_end eq "Never") {
+	    $lst_end = "23:59";
+	}
+	push @lsts, [ $lst_start, $lst_end ];
 	my $tdec = str2turn($dec, "D");
 	my $b;
 	if ($obs eq "atca") {
@@ -639,7 +654,8 @@ sub getObs($$$) {
 	'summary_requested_sources' => $sources_string,
 	'requested_positions' => \@radecs,
 	'summary_requested_positions' => $pos_string,
-	'nrepeats' => \@repeats
+	'nrepeats' => \@repeats,
+	'requested_lsts' => \@lsts
     };
     
 }
@@ -1305,5 +1321,75 @@ sub printFileTextSummary($$$$$$$$$) {
 	printf O "%s\n", &printSep();
     }
    
+    close(O);
+}
+
+sub printFileJson($$$$$$$$$) {
+    my $fname = shift;
+    my $obs = shift;
+    my $sem = shift;
+    my $arrays = shift;
+    my $maint = shift;
+    my $vlbi = shift;
+    my $lvlbi = shift;
+    my $holidays = shift;
+    my $projects = shift;
+    my $details = shift;
+
+    my %jobj = (
+	'program' => {
+	    'observatory' => { 'observatory' => $obs },
+	    'term' => { 'term' => $semname, 'version' => 1,
+			'configs' => $arrays, 
+			'start' => $details->{"startString"},
+			'end' => $details->{"endString"}
+	    },
+	    'project' => []
+	}
+	);
+    # Add each of the projects.
+    my $u = $jobj{'program'};
+    for (my $i = 0; $i <= $#{$projects}; $i++) {
+	my $p = $projects->[$i];
+	my $proj = {
+	    'ident' => $p->{'project'},
+	    'type' => "ASTRO",
+	    'PI' => $p->{'principal'},
+	    'comments' => $p->{'comments'}." ".$p->{'other'},
+	    'title' => $p->{'title'},
+	    'excluded_dates' => $p->{'impossible'},
+	    'preferred_dates' => $p->{'preferred'},
+	    'slot' => []
+	};
+	my $s = $proj->{'slot'};
+	my $o = $p->{'observations'};
+	for (my $j = 0; $j <= $#{$o->{'requested_times'}}; $j++) {
+	    my @bands = split(/\s+/, $o->{'requested_bands'}->[$j]);
+	    my @pos = split(/\,/, $o->{'requested_positions'}->[$j]);
+	    my $slot = {
+		'array' => $o->{'requested_arrays'}->[$j],
+		'bands' => \@bands,
+		'bandwidth' => $o->{'requested_bandwidths'}->[$j],
+		'source' => $o->{'requested_sources'}->[$j],
+		'position' => { 'ra' => $pos[0], 'dec' => $pos[1] },
+		'requested_duration' => $o->{'requested_times'}->[$j],
+		'scheduled_duration' => 0,
+		'scheduled_start' => 0,
+		'scheduled' => 0,
+		'rating' => 0,
+		'lst_limits_used' => 0,
+		'lst_start' => $o->{'requested_lsts'}->[$j]->[0],
+		'lst_end' => $o->{'requested_lsts'}->[$j]->[1]
+	    };
+	    push @{$s}, $slot;
+	}
+	push @{$u->{'project'}}, $proj;
+    }
+
+    # Write out the JSON.
+    my $json = JSON->new->allow_nonref;
+    
+    open(O, ">".$fname) || die "!! Unable to open $fname for writing.\n";
+    printf O "%s\n", $json->pretty->encode(\%jobj);
     close(O);
 }
