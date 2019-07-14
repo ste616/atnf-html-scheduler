@@ -3,6 +3,11 @@
  * Jamie Stevens 2019
  */
 
+// Some global variables we need in multiple routines.
+var arrayLayer = null;
+var scheduleData = null;
+var scheduleFirst = null;
+
 // Function to calculate the DOY.
 const doy = function(d) {
   var foy = new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0);
@@ -300,78 +305,27 @@ const drawNightTimes = function(t, g) {
   g.add(eveningPoly);
 };
 
-// Set up the schedule.
-var semester = "APR";
-var year = 2019;
+// Load the schedule JSON file.
+const loadFile = function(callback) {
+  // The name of the JSON file.
+  var schedJson = "schedule.json";
 
-// Get the date for the first day of the schedule.
-var semesterStart = new Date();
-var semesterStartMonth = -1;
-if (semester == "APR") {
-  semesterStartMonth = 4;
-} else if (semester == "OCT") {
-  semesterStartMonth = 10;
-}
-semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);
-// Subtract a few days.
-var scheduleFirst = new Date();
-scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
-// Make all the dates.
-var allSunDates = [];
-for (var i = -1; i <= nDays; i++) {
-  var pdate = new Date();
-  pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
-  allSunDates.push(pdate);
-}
-var allDates = allSunDates.slice(1, nDays);
+  // Grab this file.
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', schedJson, true);
+  xhr.responseType = "json";
+  xhr.onload = function() {
+    var status = xhr.status;
+    if (status === 200) {
+      callback(null, xhr.response);
+    } else {
+      callback(status, xhr.response);
+    }
+  };
+  xhr.send();
+};
 
-// Set up the canvas.
-var stage = new Konva.Stage({
-  container: "schedtable",
-  width: meas.width, height: meas.height
-});
-
-// Make the background layer.
-var backgroundLayer = new Konva.Layer();
-// Add to this a group which will contain all the day boxes.
-var dayBoxGroup = new Konva.Group({
-  draggable: false
-});
-
-allDates.forEach(function(d, i) {
-  drawDay(i, d, dayBoxGroup);
-});
-// Draw the hour labels at the top.
-drawHourLabels(dayBoxGroup);
-// Add the background groups and layer to the stage.
-backgroundLayer.add(dayBoxGroup);
-stage.add(backgroundLayer);
-
-// Make the top layer, which will be for the LST and daylight.
-var topLayer = new Konva.Layer();
-// The group here will contain all the lines for LST, and the
-// shaded night area.
-var timeGroup = new Konva.Group({
-  draggable: false
-});
-
-// For each day draw the LST.
-var lstLines = [ 0, 6, 12, 18 ];
-var lstProps = [ { stroke: 'red' },
-		 { stroke: 'blue', dash: [ 24, 11 ] },
-		 { stroke: 'orange', dash: [ 24, 11 ] },
-		 { stroke: '#ee82ee', dash: [ 24, 11 ] } ];
-for (var i = 0; i < lstLines.length; i++) {
-  allDates.forEach(function(d, j) {
-    lstDraw(j, allDates[j], lstLines[i], lstProps[i], timeGroup);
-  });
-}
-
-var nightGroup = new Konva.Group({
-  draggable: false
-});
-// Calculate the sunrise/sunset time for each day.
-var sunTimes = allSunDates.map(function(d) {
+const calculateSunStuff = function(d) {
   var mjd = date2mjd(d);
   var sp = sunPosition(mjd);
   var decd = rad2deg(sp[1]);
@@ -383,9 +337,170 @@ var sunTimes = allSunDates.map(function(d) {
   var riseDayHour = hoursUntilLst(zlst, riseHour);
   var setDayHour = hoursUntilLst(zlst, setHour);
   return [ riseDayHour, setDayHour ];
-});
-drawNightTimes(sunTimes, nightGroup);
+};
 
-topLayer.add(nightGroup);
-topLayer.add(timeGroup);
-stage.add(topLayer);
+
+// Do all the things needed to create the page, after the schedule
+// has been loaded.
+const createPage = function(status, data) {
+
+  if ((typeof data == "undefined") || (data == null)) {
+    console.log("Unable to retrieve data.");
+    return;
+  }
+
+  // Keep the data for later.
+  scheduleData = data;
+  
+  // Set up the schedule.
+  var re = /^(\d\d\d\d)(\D\D\D)$/g;
+  var rmatch = re.exec(data.program.term.term);
+  var semester = rmatch[2]
+  var year = parseInt(rmatch[1]);
+  
+  // Get the date for the first day of the schedule.
+  var semesterStart = new Date();
+  var semesterStartMonth = -1;
+  if (semester == "APR") {
+    semesterStartMonth = 4;
+  } else if (semester == "OCT") {
+    semesterStartMonth = 10;
+  }
+  semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);
+  // Subtract a few days.
+  scheduleFirst = new Date();
+  scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
+  // Make all the dates.
+  var allSunDates = [];
+  for (var i = -1; i <= nDays; i++) {
+    var pdate = new Date();
+    pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
+    allSunDates.push(pdate);
+  }
+  var allDates = allSunDates.slice(1, nDays);
+  
+  // Set up the canvas.
+  var stage = new Konva.Stage({
+    container: "schedtable",
+    width: meas.width, height: meas.height
+  });
+  
+  // Make the background layer.
+  var backgroundLayer = new Konva.Layer();
+  // Add to this a group which will contain all the day boxes.
+  var dayBoxGroup = new Konva.Group({
+    draggable: false
+  });
+  
+  allDates.forEach(function(d, i) {
+    drawDay(i, d, dayBoxGroup);
+  });
+  // Draw the hour labels at the top.
+  drawHourLabels(dayBoxGroup);
+  // Add the background groups and layer to the stage.
+  backgroundLayer.add(dayBoxGroup);
+  stage.add(backgroundLayer);
+  
+  // Make the top layer, which will be for the LST and daylight.
+  var topLayer = new Konva.Layer();
+  // The group here will contain all the lines for LST, and the
+  // shaded night area.
+  var timeGroup = new Konva.Group({
+    draggable: false
+  });
+  
+  // For each day draw the LST.
+  var lstLines = [ 0, 6, 12, 18 ];
+  var lstProps = [ { stroke: 'red' },
+		   { stroke: 'blue', dash: [ 24, 11 ] },
+		   { stroke: 'orange', dash: [ 24, 11 ] },
+		   { stroke: '#ee82ee', dash: [ 24, 11 ] } ];
+  for (var i = 0; i < lstLines.length; i++) {
+    allDates.forEach(function(d, j) {
+      lstDraw(j, allDates[j], lstLines[i], lstProps[i], timeGroup);
+    });
+  }
+  
+  var nightGroup = new Konva.Group({
+    draggable: false
+  });
+  // Calculate the sunrise/sunset time for each day.
+  var sunTimes = allSunDates.map(calculateSunStuff);
+  drawNightTimes(sunTimes, nightGroup);
+  
+  topLayer.add(nightGroup);
+  topLayer.add(timeGroup);
+  stage.add(topLayer);
+
+  // Add the side layer for the array configuration.
+  arrayLayer = new Konva.Layer();
+  stage.add(arrayLayer);
+};
+
+// Find a project by name.
+const getProjectByName = function(name) {
+  if (scheduleData == null) {
+    return;
+  }
+  var allProjects = scheduleData.program.project;
+  for (var i = 0; i < allProjects.length; i++) {
+    if (name == allProjects[i].ident) {
+      return allProjects[i];
+    }
+  }
+
+  return null;
+};
+
+const drawConfiguration(layer, start, end) {
+  
+};
+
+// Draw the status of the array configurations.
+const drawArrayConfigurations = function() {
+  // Go through the array configurations in the data and work out
+  // how the boxes should look on the right side.
+  // Get the list of configurations.
+  var configs = getProjectByName("CONFIG");
+  var slots = configs.slots;
+
+  // Check if the first slot has a start time.
+  if (slots[0].scheduled_start == 0) {
+    // This is the first array, so we assume it is from
+    // the start of the semester.
+    slots[0].scheduled_start = scheduleFirst.getTime();
+  }
+
+  var currentConfig = 0;
+  // Go through all the configs until we find the next one.
+  var minDiff = 365 * 86400 * 1000;
+  while (true) {
+    var nextConfig = -1;
+    for (var i = 0; i < slots.length; i++) {
+      if (i == currentConfig) {
+	continue;
+      }
+      if (slots[i].scheduled_start == 0) {
+	continue;
+      }
+      var tdiff = slots[i].scheduled_start - slots[currentConfig].scheduled_start;
+      if (tdiff < minDiff) {
+	tdiff = minDiff;
+	nextConfig = i;
+      }
+    }
+
+    if (nextConfig == -1) {
+      // We've reached the end of the configurations.
+      break;
+    }
+
+    drawConfiguration(arrayLayer, slots[currentConfig].scheduled_start,
+		      slots[nextConfig].scheduled_start);
+  }
+
+};
+
+// Start the process by loading the file.
+loadFile(createPage);
+
