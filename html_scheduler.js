@@ -5,8 +5,10 @@
 
 // Some global variables we need in multiple routines.
 var arrayLayer = null;
+var arrayGroup = null;
 var scheduleData = null;
 var scheduleFirst = null;
+var scheduleLast = null;
 
 // Function to calculate the DOY.
 const doy = function(d) {
@@ -46,7 +48,9 @@ var meas = {
   // The height of a single day.
   dayHeight: 40,
   // The width of the label which holds the date string.
-  dayLabelWidth: 140
+  dayLabelWidth: 140,  
+  // The width of the array panel.
+  arrayLabelWidth: 60
 };
 
 // The number of days to display (basically half a leap year, plus a few.
@@ -76,8 +80,9 @@ const drawDay = function(n, d, g) {
   var dayLabelBox = new Konva.Rect(dayLabelOpts);
   // Make the string to go into this box.
   var dateString = new Konva.Text({
-    x: meas.margin + 5, y: (meas.margin + n * meas.dayHeight + 5),
-    text: printDate(d), fontSize: 16
+    x: meas.margin + 5, y: (meas.margin + n * meas.dayHeight),
+    text: printDate(d), fontSize: 16, verticalAlign: "middle",
+    height: meas.dayHeight
   });
   // Draw the outline of the box for the hours.
   var dayBox = new Konva.Rect({
@@ -378,6 +383,8 @@ const createPage = function(status, data) {
     allSunDates.push(pdate);
   }
   var allDates = allSunDates.slice(1, nDays);
+  scheduleLast = new Date();
+  scheduleLast.setTime(allDates[allDates.length - 1].getTime() + 86400 * 1000);
   
   // Set up the canvas.
   var stage = new Konva.Stage({
@@ -434,7 +441,14 @@ const createPage = function(status, data) {
 
   // Add the side layer for the array configuration.
   arrayLayer = new Konva.Layer();
+  arrayGroup = new Konva.Group({
+    draggable: false
+  });
+  arrayLayer.add(arrayGroup);
   stage.add(arrayLayer);
+
+  // Draw the initial array configurations.
+  drawArrayConfigurations();
 };
 
 // Find a project by name.
@@ -452,7 +466,36 @@ const getProjectByName = function(name) {
   return null;
 };
 
-const drawConfiguration(layer, start, end) {
+const drawConfiguration = function(title, start, end) {
+  // Draw a box on the right.
+  var nDaysSinceStart = (start - scheduleFirst.getTime()) / (86400 * 1000);
+  var nDays = (end - start) / (86400 * 1000);
+
+  var boxLeft = meas.margin + meas.dayLabelWidth + meas.dayWidth;
+  var boxTop = meas.margin + nDaysSinceStart * meas.dayHeight;
+  var boxWidth = meas.arrayLabelWidth;
+  var boxHeight = nDays * meas.dayHeight;
+  
+  var arrayBoxOpts = {
+    x: boxLeft, y: boxTop, width: boxWidth, height: boxHeight,
+    stroke: "black", strokeWidth: 2, fill: "#ffffff"
+  };
+  var arrayBox = new Konva.Rect(arrayBoxOpts);
+  arrayGroup.add(arrayBox);
+
+  // Create the label. We repeat it every two weeks if required.
+  var limitHeight = 14 * meas.dayHeight;
+  var totalHeight = 0;
+  while (boxHeight > 0) {
+    var labelHeight = (boxHeight > limitHeight) ? limitHeight : boxHeight;
+    var arrayLabelString = new Konva.Text({
+      x: boxLeft, y: boxTop + totalHeight, width: boxWidth, height: labelHeight,
+      align: "center", verticalAlign: "middle", text: title, fontSize: 20
+    });
+    totalHeight += labelHeight;
+    boxHeight -= labelHeight;
+    arrayGroup.add(arrayLabelString);
+  }
   
 };
 
@@ -462,8 +505,12 @@ const drawArrayConfigurations = function() {
   // how the boxes should look on the right side.
   // Get the list of configurations.
   var configs = getProjectByName("CONFIG");
-  var slots = configs.slots;
+  console.log(configs);
+  var slots = configs.slot;
 
+  // Destroy all the current children.
+  arrayGroup.destroyChildren();
+  
   // Check if the first slot has a start time.
   if (slots[0].scheduled_start == 0) {
     // This is the first array, so we assume it is from
@@ -495,10 +542,15 @@ const drawArrayConfigurations = function() {
       break;
     }
 
-    drawConfiguration(arrayLayer, slots[currentConfig].scheduled_start,
+    drawConfiguration(slots[currentConfig].array, slots[currentConfig].scheduled_start,
 		      slots[nextConfig].scheduled_start);
   }
 
+  // Draw the last configuration.
+  drawConfiguration(slots[currentConfig].array, slots[currentConfig].scheduled_start,
+		    scheduleLast.getTime());
+
+  arrayLayer.draw();
 };
 
 // Start the process by loading the file.
