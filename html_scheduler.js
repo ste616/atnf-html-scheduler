@@ -423,33 +423,33 @@ const summariseSemester = function() {
 
   var allProjects = scheduleData.program.project;
   for (var i = 0; i < allProjects.length; i++) {
-    console.log(allProjects[i]);
+    //console.log(allProjects[i]);
     var slots = allProjects[i].slot;
     var isCalibration = false;
     if (allProjects[i].ident == "C007") {
-      console.log("calibration");
+      //console.log("calibration");
       isCalibration = true;
     }
     var isLegacy = false;
     if (legacyProjects.indexOf(allProjects[i].ident) >= 0) {
-      console.log("legacy");
+      //console.log("legacy");
       isLegacy = true;
     }
     var isVlbi = false;
     if (allProjects[i].ident == "VLBI") {
-      console.log("VLBI");
+      //console.log("VLBI");
       isVlbi = true;
     }
     var isMaintenance = false;
     if ((allProjects[i].ident == "MAINT") ||
 	(allProjects[i].ident == "CONFIG") ||
 	(allProjects[i].ident == "CABB")) {
-      console.log("maintenance");
+      //console.log("maintenance");
       isMaintenance = true;
     }
     var isNapa = false;
     if (/^NAPA/.test(allProjects[i].title)) {
-      console.log("NAPA");
+      //console.log("NAPA");
       isNapa = true;
     }
     
@@ -459,7 +459,7 @@ const summariseSemester = function() {
 	  (isLegacy && (projectTotalTime >= legacyLimit))) {
 	break;
       }
-      if (!isCalibration && !isLegacy && !isMaintenance && !isVlbi) {
+      if (!isCalibration && !isLegacy && !isMaintenance && !isVlbi && !isNapa) {
 	r.timeSummary.requested += slots[j].requested_duration;
 	r.timeSummary.scheduled += slots[j].scheduled_duration;
 	projectTotalTime += slots[j].scheduled_duration;
@@ -475,19 +475,33 @@ const summariseSemester = function() {
       }
 
       // Add to the correct array.
-      if (!isMaintenance && !isVlbi) {
-	var pntr = null;
-	if (slots[j].array == "6a") {
-	  pntr = r['arrays']['6km']['a'];
-	} else if (slots[j].array == "6b") {
-	  pntr = r['arrays']['6km']['b'];
-	}
-	if (pntr != null) {
-	  pntr += slots[j].requested_duration;
+      if (!isMaintenance && !isVlbi && !isNapa) {
+	var opath = [];
+	if ((slots[j].array == "6a") || (slots[j].array == "6b") ||
+	    (slots[j].array == "6c") || (slots[j].array == "6d") ||
+	    (slots[j].array == "any6")) {
+	  var v = slots[j].array.replace("6", "");
+	  r['arrays']["6km"][v] += slots[j].requested_duration;
+	} else if ((slots[j].array == "1.5a") || (slots[j].array == "1.5b") ||
+		   (slots[j].array == "1.5c") || (slots[j].array == "1.5d") ||
+		   (slots[j].array == "any1.5")) {
+	  var v = slots[j].array.replace("1.5", "");
+	  r['arrays']["1.5km"][v] += slots[j].requested_duration;
+	} else if ((slots[j].array == "750a") || (slots[j].array == "750b") ||
+		   (slots[j].array == "750c") || (slots[j].array == "750d") ||
+		   (slots[j].array == "any750")) {
+	  var v = slots[j].array.replace("750", "");
+	  r['arrays']["750m"][v] += slots[j].requested_duration;
+	} else if (slots[j].array == "any") {
+	  r['arrays']['any']['any'] += slots[j].requested_duration;
+	} else {
+	  console.log("found array string " + slots[j].array);
 	}
       }
     }
   }
+
+  return r;
 };
 
 // Make the project table.
@@ -562,7 +576,8 @@ const updateProjectTable = function() {
 // Display the status of the entire semester.
 const updateSemesterSummary = function() {
   // Get our helper to make the summary.
-  summariseSemester();
+  var semsum = summariseSemester();
+  console.log(semsum);
 };
 
 
