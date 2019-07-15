@@ -29,6 +29,7 @@ my $calibration_time = 144; # hours.
 my $first_array = "";
 my $arrays = "";
 my $last_project = "C007";
+my $big_count = 200;
 # The maintenance_days is a list of how many
 # 4-day, 3-day, 2-day and 1-day maintenance blocks to include.
 my $maintenance_days = "4,5,4,37";
@@ -50,7 +51,8 @@ GetOptions(
     "tlegacy=i", \$legacy_time,
     "first=s" => \$first_array,
     "arrays=s" => \$arrays,
-    "last=s" => \$last_project
+    "last=s" => \$last_project,
+    "big=i" => \$big_count
     ) or die "Error in command line arguments.\n";
 
 $sem = lc($sem); # Should look like 2019OCT
@@ -98,7 +100,7 @@ printf "II Found %d projects.\n", ($#projects + 1);
 #for (my $i = 0; $i <= $#projects; $i++) {
 #    printf "II Project %d: Code %s\n", ($i + 1), $projects[$i]->{'project'};
 #}
-my $summary = &semesterTimeSummary(\@projects, \@legacy, $last_project);
+my $summary = &semesterTimeSummary(\@projects, \@legacy, $last_project, $big_count);
 &printSummary($summary, {
     'name' => $semname, 'length' => $semesterDetails->{'nDays'},
     'maintenance' => $maint_time, 'calibration' => $calibration_time,
@@ -1018,6 +1020,7 @@ sub semesterTimeSummary($$$) {
     my $projects = shift;
     my $exprojects = shift;
     my $lp = shift;
+    my $biglimit = shift;
 
     # Make a summary of amount of time requested as a function of array,
     # band, and type.
@@ -1025,7 +1028,7 @@ sub semesterTimeSummary($$$) {
     my %otype = ( "total" => 0, "normal" => 0, "napa" => 0, "large" => 0,
 		  "weird" => 0, "excluded" => 0,
 		  "continuum" => 0, "1zoom" => 0, "64zoom" => 0,
-		  "pulsar" => 0, "vlbi" => 0, "new" => 0 );
+		  "pulsar" => 0, "vlbi" => 0, "new" => 0, "big" => 0 );
     my %omap = ( "CFB1M" => "continuum", "CFB1M-0.5k" => "1zoom",
 		 "CFB64M-32k" => "64zoom", "CFB1M-pulsar" => "pulsar",
 		 "CFB1-64M" => "hybrid" );
@@ -1036,7 +1039,8 @@ sub semesterTimeSummary($$$) {
 		 "750d" => "750m", "any750" => "750m", "ew367" => "compact",
 		 "anycompact" => "compact", "ew352" => "compact",
 		 "h75/168" => [ "h75", "h168" ],
-		 "any 750 or greater" => [ "750m", "1.5km", "6km" ]);
+		 "any 750 or greater" => [ "750m", "1.5km", "6km" ],
+		 "any" => "any" );
     my $band_totals = &initBandRef();
     my %ttotal = ( "normal" => 0, "large" => 0, "napa" => 0, "continuum" => 0,
 		   "1zoom" => 0, "64zoom" => 0, "pulsar" => 0, "vlbi" => 0,
@@ -1081,9 +1085,10 @@ sub semesterTimeSummary($$$) {
 	#printf "DD requests arrays:\n";
 	my $o = $p->{'observations'};
 	my $rw = {};
+	my $ptotaltime = 0;
 	for (my $j = 0; $j <= $#{$o->{'requested_arrays'}}; $j++) {
 	    #printf "DD  %s\n", $o->{'requested_arrays'}->[$j];
-	    my $a = $o->{'requested_arrays'}->[$j];
+	    my $a = lc($o->{'requested_arrays'}->[$j]);
 	    if (defined $amap{$a}) {
 		$a = $amap{$a};
 	    }
@@ -1093,6 +1098,7 @@ sub semesterTimeSummary($$$) {
 	    }
 	    for (my $k = 0; $k <= $#{$a}; $k++) {
 		my $ta = $a->[$k];
+		#printf "DD found array request %s\n", $ta;
 		
 		if (!defined $array_requests{$ta}) {
 		    $array_requests{$ta} = &initBandRef();
@@ -1106,6 +1112,7 @@ sub semesterTimeSummary($$$) {
 		for (my $l = 0; $l <= $#bands; $l++) {
 		    # Get rid of punctuation.
 		    $bands[$l] =~ s/[\.\,\s]//g;
+		    $ptotaltime += $dt;
 		    if (defined $array_requests{$ta}->{$bands[$l]}) {
 			#printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
 			$array_requests{$ta}->{$bands[$l]} += $dt;
@@ -1133,6 +1140,9 @@ sub semesterTimeSummary($$$) {
 	    #printf "II Identified %s (%s) request.\n", $omap{$t}, $t;
 	    $otype{$omap{$t}} += 1;
 	    $ttotal{$omap{$t}} += $rw->{$t};
+	}
+	if ($ptotaltime > $biglimit) {
+	    $otype{'big'} += 1;
 	}
     }
 
@@ -1171,6 +1181,7 @@ sub printSummary($$) {
     my @array_order = ( "h75", "h168", "h214", "compact", "750m", "1.5km", 
 			"6km", "any" );
     my @arrs = @{$s->{'arrays'}};
+
     my $j = 0;
     while (1) {
 	for (my $i = 0; $i <= $#arrs; $i++) {
@@ -1184,7 +1195,7 @@ sub printSummary($$) {
 	    }
 	}
 	$j++;
-	if ($j > $#arrs) {
+	if ($j > $#array_order) {
 	    last;
 	}
     }
@@ -1194,11 +1205,11 @@ sub printSummary($$) {
     $b->{'7mm'}, $b->{'3mm'}, $s->{'total'};
 
     my @reqtypes = ( "total", "new", "normal", "napa", "large", "excluded", "weird",
-		     "continuum", "1zoom", "64zoom", "hybrid", "pulsar", "vlbi" );
+		     "continuum", "1zoom", "64zoom", "hybrid", "pulsar", "vlbi", "big" );
     my @reqtitles = ( "All", "New", "Normal", "NAPA", "Large Projects", 
 		      "Legacy Projects", "Weird Projects", "Continuum",
 		      "1 MHz zooms", "64 MHz zooms", "1/64 MHz hybrid",
-		      "Pulsar Binning", "VLBI" );
+		      "Pulsar Binning", "VLBI", "Big Ask" );
     
     printf "II Request types:\n";
     printf "II %30s %4s %7s %10s\n", "Experiment Type", "#", "(%)", "Time (h)";
@@ -1358,16 +1369,18 @@ sub printFileJson($$$$$$$$$) {
 	my $s = $proj->{'slot'};
 	my $o = $p->{'observations'};
 	for (my $j = 0; $j <= $#{$o->{'requested_times'}}; $j++) {
-	    push @{$s}, &createSlot(
-		$o->{'requested_arrays'}->[$j],
-		$o->{'requested_bands'}->[$j],
-		$o->{'requested_bandwidths'}->[$j],
-		$o->{'requested_sources'}->[$j],
-		$o->{'requested_positions'}->[$j],
-		$o->{'requested_times'}->[$j],
-		0, 0, $o->{'requested_lsts'}->[$j]->[0],
-		$o->{'requested_lsts'}->[$j]->[1]
-		);
+	    for (my $k = 0; $k < $o->{'nrepeats'}->[$j]; $k++) {
+		push @{$s}, &createSlot(
+		    $o->{'requested_arrays'}->[$j],
+		    $o->{'requested_bands'}->[$j],
+		    $o->{'requested_bandwidths'}->[$j],
+		    $o->{'requested_sources'}->[$j],
+		    $o->{'requested_positions'}->[$j],
+		    $o->{'requested_times'}->[$j],
+		    0, 0, $o->{'requested_lsts'}->[$j]->[0],
+		    $o->{'requested_lsts'}->[$j]->[1]
+		    );
+	    }
 	}
 	push @{$u->{'project'}}, $proj;
     }

@@ -4,12 +4,26 @@
     <script src="https://unpkg.com/konva@3.3.3/konva.min.js"></script>
     <style>
       #schedtable { float: left; width: 60%; }
-      #schedsummary { float: left; }
+      #schedsummary { left: 62%; position: fixed; right: 99%; height: 100%;
+      background-color: #cccccc; width: 37%;  }
+      #projectdetails { top: 1em; bottom: 33%; position: absolute; }
+      #projecttable { top: 33%; bottom: 66%; position: absolute; overflow: auto;
+      height: 33%; width: 100%; }
+      #projects-table { width: 100%; border-collapse: collapse;
+      border: 2px solid black; }
+      #projects-table th { background-color: black; color: white;
+      border: 1px solid black; }
+      #projects-table td { border: 1px dotted black; text-align: center;
+      padding: 0.2em 0; }
     </style>
   </head>
   <body>
     <div id="schedtable"></div>
-    <div id="schedsummary"></div>
+    <div id="schedsummary">
+      <div id="projectdetails"></div>
+      <div id="projecttable"></div>
+      <div id="semestersummary"></div>
+    </div>
     <script src="html_scheduler.js"></script>
   </body>
 </html>

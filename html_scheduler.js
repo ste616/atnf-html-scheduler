@@ -344,19 +344,232 @@ const calculateSunStuff = function(d) {
   return [ riseDayHour, setDayHour ];
 };
 
+// This contains all the nodes for each project in the table.
+var tableRows = {};
 
-// Do all the things needed to create the page, after the schedule
-// has been loaded.
-const createPage = function(status, data) {
-
-  if ((typeof data == "undefined") || (data == null)) {
-    console.log("Unable to retrieve data.");
-    return;
+// A helper function.
+const makeElement = function(type, text, attrs) {
+  var e = document.createElement(type);
+  if ((typeof text != "undefined") && (text != null)) {
+    e.innerHTML = text;
+  }
+  if (typeof attrs != "undefined") {
+    for (var a in attrs) {
+      if (attrs.hasOwnProperty(a)) {
+	var n = document.createAttribute(a);
+	n.value = attrs[a];
+	e.setAttributeNode(n);
+      }
+    }
   }
 
-  // Keep the data for later.
-  scheduleData = data;
-  
+  return e;
+};
+
+const legacyProjects = [ "C3132", "C3145", "C3152", "C3157" ];
+const legacyLimit = 400; // Hours.
+const projectLimit = 300; // Hours
+
+// Make a summary of the current state of the projects.
+const summariseProjects = function() {
+  var r = [];
+
+  var allProjects = scheduleData.program.project;
+  for (var i = 0; i < allProjects.length; i++) {
+    var s = { 'ident': allProjects[i].ident };
+    var slots = allProjects[i].slot;
+    s.requestedSlots = slots.length;
+    s.scheduledSlots = 0;
+    s.requestedTime = 0;
+    s.scheduledTime = 0;
+    s.rating = 0;
+    for (var j = 0; j < slots.length; j++) {
+      if (slots[j].scheduled == 1) {
+	s.scheduledSlots++;
+	s.scheduledTime += slots[j].scheduled_duration;
+      }
+      s.requestedTime += slots[j].requested_duration;
+      if (slots[j].rating > s.rating) {
+	s.rating = slots[j].rating;
+      }
+    }
+    r.push(s);
+  }
+
+  return r;
+};
+
+// Make a summary of the array configurations required,
+// and a general summary of the semester.
+const summariseSemester = function() {
+  var r = { 'arrays': {
+    '6km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+    '1.5km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+    '750m': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+    'compact': { 'ew367': 0, 'ew352': 0, 'any': 0 },
+    'hybrid': { 'h214': 0, 'h168': 0, 'h75': 0 },
+    'any': { 'any': 0 }
+  }, 'timeSummary': {
+    'total': 0,
+    'maintenance': 0,
+    'vlbi': 0,
+    'calibration': 0,
+    'legacy': 0,
+    'available': 0,
+    'scheduled': 0,
+    'requested': 0,
+    'lowScore': 6
+  }};
+
+  var allProjects = scheduleData.program.project;
+  for (var i = 0; i < allProjects.length; i++) {
+    console.log(allProjects[i]);
+    var slots = allProjects[i].slot;
+    var isCalibration = false;
+    if (allProjects[i].ident == "C007") {
+      console.log("calibration");
+      isCalibration = true;
+    }
+    var isLegacy = false;
+    if (legacyProjects.indexOf(allProjects[i].ident) >= 0) {
+      console.log("legacy");
+      isLegacy = true;
+    }
+    var isVlbi = false;
+    if (allProjects[i].ident == "VLBI") {
+      console.log("VLBI");
+      isVlbi = true;
+    }
+    var isMaintenance = false;
+    if ((allProjects[i].ident == "MAINT") ||
+	(allProjects[i].ident == "CONFIG") ||
+	(allProjects[i].ident == "CABB")) {
+      console.log("maintenance");
+      isMaintenance = true;
+    }
+    var isNapa = false;
+    if (/^NAPA/.test(allProjects[i].title)) {
+      console.log("NAPA");
+      isNapa = true;
+    }
+    
+    var projectTotalTime = 0;
+    for (var j = 0; j < slots.length; j++) {
+      if ((!isLegacy && (projectTotalTime >= projectLimit)) ||
+	  (isLegacy && (projectTotalTime >= legacyLimit))) {
+	break;
+      }
+      if (!isCalibration && !isLegacy && !isMaintenance && !isVlbi) {
+	r.timeSummary.requested += slots[j].requested_duration;
+	r.timeSummary.scheduled += slots[j].scheduled_duration;
+	projectTotalTime += slots[j].scheduled_duration;
+      } else if (isCalibration) {
+	r.timeSummary.calibration += slots[j].scheduled_duration;
+      } else if (isLegacy) {
+	r.timeSummary.legacy += slots[j].scheduled_duration;
+	projectTotalTime += slots[j].scheduled_duration;
+      } else if (isVlbi) {
+	r.timeSummary.vlbi += slots[j].scheduled_duration;
+      } else if (isMaintenance) {
+	r.timeSummary.maintenance += slots[j].scheduled_duration;
+      }
+
+      // Add to the correct array.
+      if (!isMaintenance && !isVlbi) {
+	var pntr = null;
+	if (slots[j].array == "6a") {
+	  pntr = r['arrays']['6km']['a'];
+	} else if (slots[j].array == "6b") {
+	  pntr = r['arrays']['6km']['b'];
+	}
+	if (pntr != null) {
+	  pntr += slots[j].requested_duration;
+	}
+      }
+    }
+  }
+};
+
+// Make the project table.
+const updateProjectTable = function() {
+  // Have we already made the table?
+  var t = document.getElementById("projects-table");
+  if (!t) {
+    // Not made yet.
+    console.log("the table hasn't been made yet!");
+    // Make it.
+    t = makeElement("table", null, { 'id': "projects-table" });
+    var d = document.getElementById("projecttable");
+    d.appendChild(t);
+    var h = makeElement("tr");
+    var th = makeElement("th", "Project", { 'rowspan': 2 });
+    h.appendChild(th);
+    th = makeElement("th", "Rank", { 'rowspan': 2 });
+    h.appendChild(th);
+    th = makeElement("th", "Time (h)", { 'colspan': 2 });
+    h.appendChild(th);
+    th = makeElement("th", "Slots", { 'colspan': 2 });
+    h.appendChild(th);
+    t.appendChild(h);
+    h = makeElement("tr");
+    th = makeElement("th", "Sched");
+    h.appendChild(th);
+    th = makeElement("th", "Req");
+    h.appendChild(th);
+    th = makeElement("th", "Sched");
+    h.appendChild(th);
+    th = makeElement("th", "Req");
+    h.appendChild(th);
+    t.appendChild(h);
+  }
+
+  // Go through the projects.
+  var allProjectSummary = summariseProjects();
+  // Sort the projects by rank.
+  var sortedProjects = allProjectSummary;
+  sortedProjects.sort(function(a, b) {
+    return (b.rating - a.rating);
+  });
+
+  for (var i = 0; i < sortedProjects.length; i++) {
+    var p = sortedProjects[i];
+    // Check if we've already made it.
+    if (typeof tableRows[p.ident] == "undefined") {
+      // Make it.
+      var r = makeElement("tr");
+      t.appendChild(r);
+      tableRows[p.ident] = r;
+      var td = makeElement("td", p.ident);
+      r.appendChild(td);
+      td = makeElement("td", p.rating);
+      r.appendChild(td);
+      td = makeElement("td", p.scheduledTime);
+      r.appendChild(td);
+      td = makeElement("td", p.requestedTime);
+      r.appendChild(td);
+      td = makeElement("td", p.scheduledSlots);
+      r.appendChild(td);
+      td = makeElement("td", p.requestedSlots);
+      r.appendChild(td);
+    } else {
+
+    }
+    
+  }
+
+};
+
+// Display the status of the entire semester.
+const updateSemesterSummary = function() {
+  // Get our helper to make the summary.
+  summariseSemester();
+};
+
+
+// Do all the things needed to create the canvas, after the schedule
+// has been loaded.
+const setupCanvas = function(data) {
+
   // Set up the schedule.
   var re = /^(\d\d\d\d)(\D\D\D)$/g;
   var rmatch = re.exec(data.program.term.term);
@@ -505,7 +718,6 @@ const drawArrayConfigurations = function() {
   // how the boxes should look on the right side.
   // Get the list of configurations.
   var configs = getProjectByName("CONFIG");
-  console.log(configs);
   var slots = configs.slot;
 
   // Destroy all the current children.
@@ -542,7 +754,8 @@ const drawArrayConfigurations = function() {
       break;
     }
 
-    drawConfiguration(slots[currentConfig].array, slots[currentConfig].scheduled_start,
+    drawConfiguration(slots[currentConfig].array,
+		      slots[currentConfig].scheduled_start,
 		      slots[nextConfig].scheduled_start);
   }
 
@@ -553,6 +766,21 @@ const drawArrayConfigurations = function() {
   arrayLayer.draw();
 };
 
+// The page initialisation function.
+const pageInit = function(status, data) {
+  if ((typeof data == "undefined") || (data == null)) {
+    console.log("Unable to retrieve data.");
+    return;
+  }
+
+  // Keep the data for later.
+  scheduleData = data;
+  
+  setupCanvas(scheduleData);
+  updateProjectTable();
+  updateSemesterSummary();
+}
+
 // Start the process by loading the file.
-loadFile(createPage);
+loadFile(pageInit);
 
