@@ -4,8 +4,8 @@
     <script src="https://unpkg.com/konva@3.3.3/konva.min.js"></script>
     <style>
       #schedtable { float: left; width: 60%; }
-      #schedsummary { left: 62%; position: fixed; right: 99%; height: 100%;
-      background-color: #cccccc; width: 37%;  }
+      #schedsummary { left: 840px; position: fixed; right: 99%; height: 100%;
+      background-color: #cccccc; width: 40%; width: calc(99% - 840px); }
       #projectdetails { top: 1em; bottom: 33%; position: absolute; }
       #projecttable { top: 33%; bottom: 66%; position: absolute; overflow: auto;
       height: 33%; width: 100%; }
@@ -15,6 +15,19 @@
       border: 1px solid black; }
       #projects-table td { border: 1px dotted black; text-align: center;
       padding: 0.2em 0; }
+      #semestersummary { top: 66%; position: absolute; overflow: auto;
+      height: 33%; width: 100%; }
+      #array-demand-table { width: 100%; border-collapse: collapse;
+      border: 2px solid blue; }
+      #array-demand-table th { background-color: blue; color: yellow;
+      border: 1px solid blue; }
+      #array-demand-table td { border: 1px dotted blue; text-align: center;
+      padding: 0.2em 0; }
+      #semester-state-table { width: 100%; border-collapse: collapse;
+      border: 2px solid green; margin-top: 0.2em; }
+      #semester-state-table th { background: green; color: black;
+      text-align: right; }
+      #semester-state-table td { text-align: center; padding: 0.2em; }
     </style>
   </head>
   <body>

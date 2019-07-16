@@ -42,7 +42,8 @@ var meas = {
   // The width of a half-hour (the smallest increment we schedule to).
   halfHourWidth: 12,
   // The margin around the schedule box.
-  margin: 60,
+  marginLeft: 20,
+  marginTop: 60,
   // The width of the right-side area where we see the individual elements.
   elementWidth: 0,
   // The height of a single day.
@@ -60,16 +61,16 @@ const nDays = (366 / 2) + 4;
 // The width of an entire day.
 meas.dayWidth = 48 * meas.halfHourWidth;
 // The canvas width.
-meas.width = meas.dayWidth + 3 * meas.margin + meas.elementWidth + meas.dayLabelWidth;
+meas.width = meas.dayWidth + 3 * meas.marginLeft + meas.elementWidth + meas.dayLabelWidth + meas.arrayLabelWidth;
 // The canvas height.
-meas.height = nDays * meas.dayHeight + 2 * meas.margin;
+meas.height = nDays * meas.dayHeight + 2 * meas.marginTop;
 
 // Function that draws the n-th day in the schedule.
 // Takes the day number n, the Date d and the group g to draw to.
 const drawDay = function(n, d, g) {
   // The date is shown in the day label box.
   var dayLabelOpts = {
-    x: meas.margin, y: (meas.margin + n * meas.dayHeight),
+    x: meas.marginLeft, y: (meas.marginTop + n * meas.dayHeight),
     width: meas.dayLabelWidth, height: meas.dayHeight,
     stroke: "black", strokeWidth: 2, fill: '#ffffff'
   };
@@ -80,13 +81,13 @@ const drawDay = function(n, d, g) {
   var dayLabelBox = new Konva.Rect(dayLabelOpts);
   // Make the string to go into this box.
   var dateString = new Konva.Text({
-    x: meas.margin + 5, y: (meas.margin + n * meas.dayHeight),
+    x: meas.marginLeft + 5, y: (meas.marginTop + n * meas.dayHeight),
     text: printDate(d), fontSize: 16, verticalAlign: "middle",
     height: meas.dayHeight
   });
   // Draw the outline of the box for the hours.
   var dayBox = new Konva.Rect({
-    x: meas.margin + meas.dayLabelWidth, y: (meas.margin + n * meas.dayHeight),
+    x: meas.marginLeft + meas.dayLabelWidth, y: (meas.marginTop + n * meas.dayHeight),
     width: meas.dayWidth, height: meas.dayHeight,
     stroke: "black", strokeWidth: 2
   });
@@ -101,8 +102,8 @@ const drawDay = function(n, d, g) {
       fillColour = "#ffffff";
     }
     var hourRect = new Konva.Rect({
-      x: (meas.margin + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
-      y: (meas.margin + n * meas.dayHeight + 1),
+      x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
+      y: (meas.marginTop + n * meas.dayHeight + 1),
       width: (2 * meas.halfHourWidth), height: (meas.dayHeight - 2),
       fill: fillColour, stroke: fillColour, strokeWidth: 0
     });
@@ -115,15 +116,15 @@ const drawDay = function(n, d, g) {
 const drawHourLabels = function(g) {
   for (var j = 0; j <= 24; j += 2) {
     var hourLabel = new Konva.Text({
-      x: (meas.margin + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
-      y: meas.margin, text: "" + (j % 24), fontSize: 20
+      x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
+      y: meas.marginTop, text: "" + (j % 24), fontSize: 20
     });
     hourLabel.offsetX(hourLabel.width() / 2);
     hourLabel.offsetY(hourLabel.height() * 1.1);
     g.add(hourLabel);
     var utcLabel = new Konva.Text({
-      x: (meas.margin + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
-      y: meas.margin, text: "" + ((j + 14) % 24), fontSize: 20
+      x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
+      y: meas.marginTop, text: "" + ((j + 14) % 24), fontSize: 20
     });
     utcLabel.offsetX(utcLabel.width() / 2);
     utcLabel.offsetY(utcLabel.height() * 2.2);
@@ -243,11 +244,11 @@ const lstDraw = function(n, d, l, p, g) {
   var midHours = hoursUntilLst(zlst, l);
   var topHours = midHours + (2 / 60);
   var bottomHours = midHours - (2 / 60);
-  var topX = meas.margin + meas.dayLabelWidth + (topHours * (2 * meas.halfHourWidth));
-  var bottomX = meas.margin + meas.dayLabelWidth + (bottomHours * (2 * meas.halfHourWidth));
+  var topX = meas.marginLeft + meas.dayLabelWidth + (topHours * (2 * meas.halfHourWidth));
+  var bottomX = meas.marginLeft + meas.dayLabelWidth + (bottomHours * (2 * meas.halfHourWidth));
   var lobj = p;
-  lobj.points = [ topX, (meas.margin + n * meas.dayHeight),
-		  bottomX, (meas.margin + (n + 1) * meas.dayHeight) ];
+  lobj.points = [ topX, (meas.marginTop + n * meas.dayHeight),
+		  bottomX, (meas.marginTop + (n + 1) * meas.dayHeight) ];
   lobj.strokeWidth = 4;
   var line = new Konva.Line(lobj);
   g.add(line);
@@ -284,20 +285,20 @@ const sunPosition = function(mjd) {
 
 // Draw a polygon to show when it's night times.
 const drawNightTimes = function(t, g) {
-  var morningPos = [ meas.margin + meas.dayLabelWidth, meas.margin ];
-  var eveningPos = [ meas.margin + meas.dayLabelWidth + 48 * meas.halfHourWidth, meas.margin ];
+  var morningPos = [ meas.marginLeft + meas.dayLabelWidth, meas.marginTop ];
+  var eveningPos = [ meas.marginLeft + meas.dayLabelWidth + 48 * meas.halfHourWidth, meas.marginTop ];
   for (i = 0; i < (t.length - 2); i++) {
     //console.log(t[i]);
-    var y = meas.margin + i * meas.dayHeight;
-    morningPos.push(meas.margin + meas.dayLabelWidth + t[i][0] * (2 * meas.halfHourWidth));
+    var y = meas.marginTop + i * meas.dayHeight;
+    morningPos.push(meas.marginLeft + meas.dayLabelWidth + t[i][0] * (2 * meas.halfHourWidth));
     morningPos.push(y);
-    eveningPos.push(meas.margin + meas.dayLabelWidth + t[i][1] * (2 * meas.halfHourWidth));
+    eveningPos.push(meas.marginLeft + meas.dayLabelWidth + t[i][1] * (2 * meas.halfHourWidth));
     eveningPos.push(y);
   }
-  morningPos.push(meas.margin + meas.dayLabelWidth);
-  morningPos.push(meas.margin + (nDays - 1) * meas.dayHeight);
-  eveningPos.push(meas.margin + meas.dayLabelWidth + 48 * meas.halfHourWidth);
-  eveningPos.push(meas.margin + (nDays - 1) * meas.dayHeight);
+  morningPos.push(meas.marginLeft + meas.dayLabelWidth);
+  morningPos.push(meas.marginTop + (nDays - 1) * meas.dayHeight);
+  eveningPos.push(meas.marginLeft + meas.dayLabelWidth + 48 * meas.halfHourWidth);
+  eveningPos.push(meas.marginTop + (nDays - 1) * meas.dayHeight);
   var morningPoly = new Konva.Line({
     points: morningPos, fill: "#888888", stroke: "#888888", strokeWidth: 0,
     closed: true, opacity: 0.7
@@ -407,7 +408,7 @@ const summariseSemester = function() {
     '1.5km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
     '750m': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
     'compact': { 'ew367': 0, 'ew352': 0, 'any': 0 },
-    'hybrid': { 'h214': 0, 'h168': 0, 'h75': 0 },
+    'hybrid': { 'h214': 0, 'h168': 0, 'h75': 0, 'any': 0 },
     'any': { 'any': 0 }
   }, 'timeSummary': {
     'total': 0,
@@ -419,7 +420,31 @@ const summariseSemester = function() {
     'scheduled': 0,
     'requested': 0,
     'lowScore': 6
-  }};
+  }, 'arrayLabels': [ { '6km': { 'a': "6A" } },
+		      { '6km': { 'b': "6B" } },
+		      { '6km': { 'c': "6C" } },
+		      { '6km': { 'd': "6D" } },
+		      { '6km': { 'any': "6*"} },
+		      { '1.5km': { 'a': "1.5A" } },
+		      { '1.5km': { 'b': "1.5B" } },
+		      { '1.5km': { 'c': "1.5C" } },
+		      { '1.5km': { 'd': "1.5D" } },
+		      { '1.5km': { 'any': "1.5*" } },
+		      { '750m': { 'a': "750A" } },
+		      { '750m': { 'b': "750B" } },
+		      { '750m': { 'c': "750C" } },
+		      { '750m': { 'd': "750D" } },
+		      { '750m': { 'any': "750*" } },
+		      { 'compact': { 'ew367': "367" } },
+		      { 'compact': { 'ew352': "352" } },
+		      { 'compact': { 'any': "cmp" } },
+		      { 'hybrid': { 'h214': "H214" } },
+		      { 'hybrid': { 'h168': "H168" } },
+		      { 'hybrid': { 'h75': "H75" } },
+		      { 'hybrid': { 'any': "H*" } },
+		      { 'any': { 'any': "*" } }
+		      ]
+	  };
 
   var allProjects = scheduleData.program.project;
   for (var i = 0; i < allProjects.length; i++) {
@@ -492,6 +517,17 @@ const summariseSemester = function() {
 		   (slots[j].array == "any750")) {
 	  var v = slots[j].array.replace("750", "");
 	  r['arrays']["750m"][v] += slots[j].requested_duration;
+	} else if ((slots[j].array == "ew352") || (slots[j].array == "ew367") ||
+		   (slots[j].array == "anycompact")) {
+	  var v = slots[j].array.replace("compact", "");
+	  r['arrays']["compact"][v] += slots[j].requested_duration;
+	} else if ((slots[j].array == "h168") || (slots[j].array == "h214") ||
+		   (slots[j].array == "h75")) {
+	  var v = slots[j].array;
+	  r['arrays']["hybrid"][v] += slots[j].requested_duration;
+	} else if (/^h/.test(slots[j].array)) {
+	  // This means some other hybrid combination: we put this as any.
+	  r['arrays']["hybrid"]['any'] += slots[j].requested_duration;
 	} else if (slots[j].array == "any") {
 	  r['arrays']['any']['any'] += slots[j].requested_duration;
 	} else {
@@ -573,11 +609,140 @@ const updateProjectTable = function() {
 
 };
 
+// Another helper function.
+const makeTableCell = function(type, text, parent, attr) {
+  var e = makeElement(type, text, attr);
+  parent.appendChild(e);
+  return e;
+};
+
+var savedDomNodes = {};
+
 // Display the status of the entire semester.
 const updateSemesterSummary = function() {
   // Get our helper to make the summary.
   var semsum = summariseSemester();
   console.log(semsum);
+
+  // Step 1: show the demand for each array type.
+  // Have we already made the table?
+  var arrayTable = document.getElementById("array-demand-table");
+  if (!arrayTable) {
+    // Not made yet, so we make it.
+    var ss = document.getElementById("semestersummary");
+    arrayTable = makeElement("table", null, { 'id': "array-demand-table" });
+    ss.appendChild(arrayTable);
+    var r = makeElement("tr");
+    arrayTable.appendChild(r);
+    var th = makeElement("th", "Score", { 'rowspan': 2 });
+    r.appendChild(th);
+    th = makeElement("th", "Time Requested (days)", {
+      'colspan': semsum.arrayLabels.length });
+    r.appendChild(th);
+    r = makeElement("tr");
+    arrayTable.appendChild(r);
+    for (var i = 0; i < semsum.arrayLabels.length; i++) {
+      var label = "";
+      var tm = semsum.arrays;
+      for (var k in semsum.arrayLabels[i]) {
+	if (semsum.arrayLabels[i].hasOwnProperty(k)) {
+	  tm = tm[k];
+	  for (var l in semsum.arrayLabels[i][k]) {
+	    if (semsum.arrayLabels[i][k].hasOwnProperty(l)) {
+	      tm = tm[l]
+	      label = semsum.arrayLabels[i][k][l];
+	    }
+	  }
+	}
+      }
+      if (tm > 0) {
+	th = makeElement("th", label);
+	r.appendChild(th);
+      }
+    }
+
+    // Go through each of the scores: TODO
+    var score = 0.0;
+    r = makeElement("tr");
+    arrayTable.appendChild(r);
+    th = makeElement("th", score);
+    r.appendChild(th);
+    for (var i = 0; i < semsum.arrayLabels.length; i++) {
+      var tm = semsum.arrays;
+      for (var k in semsum.arrayLabels[i]) {
+	if (semsum.arrayLabels[i].hasOwnProperty(k)) {
+	  tm = tm[k];
+	  for (var l in semsum.arrayLabels[i][k]) {
+	    if (semsum.arrayLabels[i][k].hasOwnProperty(l)) {
+	      tm = tm[l];
+	    }
+	  }
+	}
+      }
+      var nd = Math.ceil(tm / 24.0);
+      if (nd > 0) {
+	var td = makeElement("td", Math.ceil(tm / 24.0));
+	r.appendChild(td);
+      }
+    }
+  }
+
+  // Step 2: show the current state.
+  // Have we already made the table?
+  var stateTable = document.getElementById("semester-state-table");
+  if (!stateTable) {
+    // Not made yet, so we make it.
+    var semesterStateTable = makeElement("table", null, {
+      'id': "semester-state-table" });
+    var th, td;
+    var ss = document.getElementById("semestersummary");
+    ss.appendChild(semesterStateTable);
+    var r = makeElement("tr");
+    semesterStateTable.appendChild(r);
+    makeTableCell("th", "Available (h):", r);
+    savedDomNodes.availableTime = makeTableCell("td", "NN", r, {
+      'id': "sst-available-time" });
+    makeTableCell("th", "Scheduled (h):", r);
+    savedDomNodes.scheduledTime = makeTableCell("td", "NN", r, {
+      'id': "sst-scheduled-time" });
+    makeTableCell("th", "Remaining (h):", r);
+    savedDomNodes.remainingTime = makeTableCell("td", "NN", r, {
+      'id': "sst-remaining-time" });
+    r = makeElement("tr");
+    semesterStateTable.appendChild(r);
+    makeTableCell("th", "Calibration:", r);
+    savedDomNodes.calibrationTime = makeTableCell("td", "NN", r, {
+      'id': "sst-calibration-allocation" });
+    makeTableCell("th", "Legacy:", r);
+    savedDomNodes.legacyTime = makeTableCell("td", "NN", r, {
+      'id': "sst-legacy-allocation" });
+    makeTableCell("th", "VLBI:", r);
+    savedDomNodes.vlbiTime = makeTableCell("td", "NN", r, {
+      'id': "sst-vlbi-allocation" });
+    r = makeElement("tr");
+    semesterStateTable.appendChild(r);
+    makeTableCell("th", "Maintenance:", r);
+    savedDomNodes.maintenanceTime = makeTableCell("td", "NN", r, {
+      'id': "sst-maintenance-allocation" });
+    makeTableCell("th", "Reconfigs:", r);
+    savedDomNodes.reconfigTime = makeTableCell("td", "NN", r, {
+      'id': "sst-reconfig-allocation" });
+    makeTableCell("th", "CABB:", r);
+    savedDomNodes.cabbTime = makeTableCell("td", "NN", r, {
+      'id': "sst-cabb-allocation" });
+    
+  }
+
+  // Update the table.
+  savedDomNodes.scheduledTime.innerHTML = semsum.timeSummary.scheduled;
+  savedDomNodes.remainingTime.innerHTML = (semsum.timeSummary.requested -
+					   semsum.timeSummary.scheduled);
+  savedDomNodes.calibrationTime.innerHTML = semsum.timeSummary.calibration;
+  savedDomNodes.legacyTime.innerHTML = semsum.timeSummary.legacy;
+  savedDomNodes.vlbiTime.innerHTML = semsum.timeSummary.vlbi;
+  savedDomNodes.maintenanceTime.innerHTML = semsum.timeSummary.maintenance;
+
+
 };
 
 
@@ -699,8 +864,8 @@ const drawConfiguration = function(title, start, end) {
   var nDaysSinceStart = (start - scheduleFirst.getTime()) / (86400 * 1000);
   var nDays = (end - start) / (86400 * 1000);
 
-  var boxLeft = meas.margin + meas.dayLabelWidth + meas.dayWidth;
-  var boxTop = meas.margin + nDaysSinceStart * meas.dayHeight;
+  var boxLeft = meas.marginLeft + meas.dayLabelWidth + meas.dayWidth;
+  var boxTop = meas.marginTop + nDaysSinceStart * meas.dayHeight;
   var boxWidth = meas.arrayLabelWidth;
   var boxHeight = nDays * meas.dayHeight;
   
