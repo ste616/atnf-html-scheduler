@@ -9,6 +9,9 @@ var arrayGroup = null;
 var scheduleData = null;
 var scheduleFirst = null;
 var scheduleLast = null;
+var serverModificationTime = null;
+var localModificationTime = null;
+var localChecked = false;
 
 // Function to calculate the DOY.
 const doy = function(d) {
@@ -341,12 +344,43 @@ const cleanjson = function(d) {
 
 // Load the schedule JSON file.
 const loadFile = function(callback) {
-  // Check if we're online.
-  if (navigator.onLine) {
-    console.log("we're online");
+  // We don't do anything if we haven't checked for a local file.
+  console.log("file loading commenced");
+  if (!localChecked) {
+    return;
+  }
+
+  console.log(localModificationTime);
+  console.log(navigator.onLine);
+  
+  // If we're not online and we have no local file, we can't do anything.
+  if ((localChecked) && (!navigator.onLine) && (localModificationTime == null)) {
+    return;
+  }
+
+  console.log("checking for who to load");
+  
+  // If we're not online, we load the local file.
+  var loadLocal = null;
+  if (!navigator.onLine) {
+    loadLocal = true;
+  } else {
+    // We work out which to load based on their modification times.
+    if (localModificationTime == null) {
+      // We have to load the server version.
+      loadLocal = false;
+    } else if (localModificationTime > serverModificationTime) {
+      // We load the local version as it's more recent.
+      loadLocal = true;
+    } else {
+      // We load the server version as it's more recent.
+      loadLocal = false;
+    }
+  }
+  if (loadLocal == true) {
+    callback(null, getLocalSchedule);
+  } else if (loadLocal == false) {
     // We get the file from a CGI script.
-    
-    // Grab this file.
     var xhr = new XMLHttpRequest();
     xhr.open('GET', "/cgi-bin/scheduler.pl?request=load", true);
     xhr.responseType = "json";
@@ -359,6 +393,9 @@ const loadFile = function(callback) {
       }
     };
     xhr.send();
+  } else {
+    // What??
+    console.log("something unexpected happened while loading schedule");
   }
 };
 
@@ -1008,6 +1045,11 @@ const pageInit = function(status, data) {
 
   // Keep the data for later.
   scheduleData = data;
+
+  // Save the data locally.
+  saveLocalSchedule();
+  // Display some times.
+  checkLocalTime(displayModificationTimes);
   
   setupCanvas(scheduleData);
   updateProjectTable();
@@ -1024,8 +1066,85 @@ const showLineState = function() {
   }
 };
 
+// Check what the server schedule modification time is.
+const checkServerTime = function(callback) {
+  if (navigator.onLine) {
+    // We need to be online of course.
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', "/cgi-bin/scheduler.pl?request=loadtime", true);
+    xhr.responseType = "json";
+    xhr.onload = function() {
+      var status = xhr.status;
+      if (status === 200) {
+	serverModificationTime = xhr.response.modificationTime;
+	if (typeof callback != "undefined") {
+	  callback();
+	}
+      } else {
+	console.log("cannot get server modification time");
+      }
+    };
+    xhr.send();
+  }
+};
+
+const getTimeString = function(dateObject) {
+  var dstring = dateObject.toISOString();
+  return dstring.substring(0, 19).replace("T", " ");
+};
+
+const displayModificationTimes = function() {
+  if (serverModificationTime != null) {
+    var stime = document.getElementById("serverSaveTime");
+    var sdate = new Date(serverModificationTime * 1000);
+    stime.innerHTML = getTimeString(sdate);
+  }
+  if (localModificationTime != null) {
+    var stime = document.getElementById("localSaveTime");
+    var sdate = new Date(localModificationTime * 1000);
+    stime.innerHTML = getTimeString(sdate);
+  }
+};
+
+const localKey = "atnfSchedule";
+
+const getLocalSchedule = function() {
+  // Try to get the schedule from our local storage.
+  var localSchedule = window.localStorage.getItem(localKey);
+  if (typeof localSchedule != "undefined") {
+    return JSON.parse(localSchedule);
+  }
+  return null;
+};
+
+const saveLocalSchedule = function() {
+  if (scheduleData != null) {
+    window.localStorage.setItem(localKey, JSON.stringify(scheduleData));
+  }
+};
+
+const checkLocalTime = function(callback) {
+  // See if we have a local schedule.
+  var localSchedule = getLocalSchedule();
+  if (localSchedule != null) {
+    localModificationTime = localSchedule.modificationTime;
+  }
+  localChecked = true;
+  console.log("marked local checked");
+  if (typeof callback != "undefined") {
+    callback();
+  }
+};
+
 // Start the process by loading the file.
-loadFile(pageInit);
+const pageInitBootstrap = function() {
+  return loadFile(pageInit);
+};
+checkServerTime(pageInitBootstrap);
+checkLocalTime(pageInitBootstrap);
+//loadFile(pageInit);
+//checkServerTime(displayModificationTimes);
+//checkLocalTime(displayModificationTimes);
 
 showLineState();
 const stateChange = function() {

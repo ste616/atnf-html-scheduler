@@ -1483,6 +1483,8 @@ sub printFileJson($$$$$$$$$$) {
     my $scores = shift;
     my $firstreconfig = shift;
 
+    # We assign a modification time.
+    my $modtime = DateTime->now();
     my %jobj = (
 	'program' => {
 	    'observatory' => { 'observatory' => $obs },
@@ -1493,7 +1495,7 @@ sub printFileJson($$$$$$$$$$) {
 	    },
 	    'special' => { 'lastReconfigNumber' => $firstreconfig },
 	    'project' => []
-	}
+	}, 'modificationTime' => $modtime->epoch()
 	);
     # Add each of the projects.
     my $u = $jobj{'program'};
