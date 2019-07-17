@@ -43,7 +43,8 @@ var meas = {
   halfHourWidth: 12,
   // The margin around the schedule box.
   marginLeft: 20,
-  marginTop: 60,
+  //marginTop: 60,
+  marginTop: 2,
   // The width of the right-side area where we see the individual elements.
   elementWidth: 0,
   // The height of a single day.
@@ -51,7 +52,9 @@ var meas = {
   // The width of the label which holds the date string.
   dayLabelWidth: 140,  
   // The width of the array panel.
-  arrayLabelWidth: 60
+  arrayLabelWidth: 60,
+  // The height of the hour label part.
+  timeLabelHeight: 66
 };
 
 // The number of days to display (basically half a leap year, plus a few.
@@ -117,14 +120,14 @@ const drawHourLabels = function(g) {
   for (var j = 0; j <= 24; j += 2) {
     var hourLabel = new Konva.Text({
       x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
-      y: meas.marginTop, text: "" + (j % 24), fontSize: 20
+      y: meas.timeLabelHeight, text: "" + (j % 24), fontSize: 20
     });
     hourLabel.offsetX(hourLabel.width() / 2);
     hourLabel.offsetY(hourLabel.height() * 1.1);
     g.add(hourLabel);
     var utcLabel = new Konva.Text({
       x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
-      y: meas.marginTop, text: "" + ((j + 14) % 24), fontSize: 20
+      y: meas.timeLabelHeight, text: "" + ((j + 14) % 24), fontSize: 20
     });
     utcLabel.offsetX(utcLabel.width() / 2);
     utcLabel.offsetY(utcLabel.height() * 2.2);
@@ -311,24 +314,52 @@ const drawNightTimes = function(t, g) {
   g.add(eveningPoly);
 };
 
+// Do some number parsing.
+const cleanjson = function(d) {
+  if ((typeof d == "undefined") || (d == null)) {
+    return null;
+  }
+  
+  if ((d.hasOwnProperty("program")) &&
+      (d.program.hasOwnProperty("project"))) {
+    for (var i = 0; i < d.program.project.length; i++) {
+      if (d.program.project[i].hasOwnProperty("slot")) {
+	for (var j = 0; j < d.program.project[i].slot.length; j++) {
+	  d.program.project[i].slot[j].rating = parseFloat(
+	    d.program.project[i].slot[j].rating
+	  );
+	  d.program.project[i].slot[j].requested_duration = parseFloat(
+	    d.program.project[i].slot[j].requested_duration
+	  );
+	}
+      }
+    }
+  }
+
+  return d;
+};
+
 // Load the schedule JSON file.
 const loadFile = function(callback) {
-  // The name of the JSON file.
-  var schedJson = "schedule.json";
-
-  // Grab this file.
-  var xhr = new XMLHttpRequest();
-  xhr.open('GET', schedJson, true);
-  xhr.responseType = "json";
-  xhr.onload = function() {
-    var status = xhr.status;
-    if (status === 200) {
-      callback(null, xhr.response);
-    } else {
-      callback(status, xhr.response);
-    }
-  };
-  xhr.send();
+  // Check if we're online.
+  if (navigator.onLine) {
+    console.log("we're online");
+    // We get the file from a CGI script.
+    
+    // Grab this file.
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', "/cgi-bin/scheduler.pl?request=load", true);
+    xhr.responseType = "json";
+    xhr.onload = function() {
+      var status = xhr.status;
+      if (status === 200) {
+	callback(null, cleanjson(xhr.response));
+      } else {
+	callback(status, xhr.response);
+      }
+    };
+    xhr.send();
+  }
 };
 
 const calculateSunStuff = function(d) {
@@ -793,6 +824,21 @@ const setupCanvas = function(data) {
     container: "schedtable",
     width: meas.width, height: meas.height
   });
+  var hourStage = new Konva.Stage({
+    container: "schedtabletop",
+    width: meas.width, height: meas.timeLabelHeight
+  });
+  // Make a layer for the time labels.
+  var timeLayer = new Konva.Layer();
+  // And we need a group.
+  var timeLabelGroup = new Konva.Group({
+    draggable: false
+  });
+  // Draw the hour labels at the top.
+  drawHourLabels(timeLabelGroup);
+  // Add this to the stage.
+  timeLayer.add(timeLabelGroup);
+  hourStage.add(timeLayer);
   
   // Make the background layer.
   var backgroundLayer = new Konva.Layer();
@@ -804,8 +850,6 @@ const setupCanvas = function(data) {
   allDates.forEach(function(d, i) {
     drawDay(i, d, dayBoxGroup);
   });
-  // Draw the hour labels at the top.
-  drawHourLabels(dayBoxGroup);
   // Add the background groups and layer to the stage.
   backgroundLayer.add(dayBoxGroup);
   stage.add(backgroundLayer);

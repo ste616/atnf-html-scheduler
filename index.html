@@ -3,7 +3,10 @@
   <head><title>ATNF HTML Scheduler</title>
     <script src="konva.min.js"></script>
     <style>
-      #schedtable { float: left; width: 60%; }
+      #schedtabletop { position: fixed; left: 0%; top: 0%; height: 66px;
+      width: 840px; }
+      #schedtable { width: 840px; top: 68px; position: fixed; overflow: auto;
+      left: 0px; height: calc(100% - 68px); }
       #schedsummary { left: 840px; position: fixed; right: 99%; height: 100%;
       background-color: #cccccc; width: 40%; width: calc(99% - 840px); }
       #projectdetails { top: 1em; bottom: 33%; position: absolute; }
@@ -31,6 +34,7 @@
     </style>
   </head>
   <body>
+    <div id="schedtabletop"></div>
     <div id="schedtable"></div>
     <div id="schedsummary">
       <div id="projectdetails"></div>
