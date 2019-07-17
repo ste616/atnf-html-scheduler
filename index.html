@@ -3,13 +3,14 @@
   <head><title>ATNF HTML Scheduler</title>
     <script src="konva.min.js"></script>
     <style>
+      body { font-family: sans-serif; }
       #schedtabletop { position: fixed; left: 0%; top: 0%; height: 66px;
       width: 840px; }
       #schedtable { width: 840px; top: 68px; position: fixed; overflow: auto;
       left: 0px; height: calc(100% - 68px); }
       #schedsummary { left: 840px; position: fixed; right: 99%; height: 100%;
       background-color: #cccccc; width: 40%; width: calc(99% - 840px); }
-      #projectdetails { top: 1em; bottom: 33%; position: absolute; }
+      #projectdetails { top: 64px; bottom: 33%; position: absolute; }
       #projecttable { top: 33%; bottom: 66%; position: absolute; overflow: auto;
       height: 33%; width: 100%; }
       #projects-table { width: 100%; border-collapse: collapse;
@@ -31,12 +32,32 @@
       #semester-state-table th { background: green; color: black;
       text-align: right; }
       #semester-state-table td { text-align: center; padding: 0.2em; }
+      #appstate { top: 0%; bottom: 60px; position: absolute; width: 100%;
+      background-color: #dddddd; height: 60px; }
+      #appstate div { float: left; font-size: 1.2em; height: 100%;
+      font-weight: bold; }
+      #appstate table { margin: 0; border-collapse: collapse; }
+      #onlineState { color: green; margin: 1em; display: table; }
+      #onlineState.offline { color: red; }
     </style>
   </head>
   <body>
     <div id="schedtabletop"></div>
     <div id="schedtable"></div>
     <div id="schedsummary">
+      <div id="appstate">
+	<div><span id="onlineState"></span></div>
+	<div><table><tr><th>Local Save</th></tr>
+	    <tr><td><span id="localSaveTime">None</span></td></tr></table>
+	</div>
+	<div><table><tr><th>Server Save</th></tr>
+	    <tr><td><span id="serverSaveTime">None</span></td></tr></table>
+	</div>
+	<div>
+	  <button id="savebutton">Save</button>
+	  <button id="revertbutton">Revert</button>
+	</div>
+      </div>
       <div id="projectdetails"></div>
       <div id="projecttable"></div>
       <div id="semestersummary"></div>

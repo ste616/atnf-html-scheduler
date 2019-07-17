@@ -1014,6 +1014,23 @@ const pageInit = function(status, data) {
   updateSemesterSummary();
 }
 
+// Show the online or offline state.
+const showLineState = function() {
+  var indicator = document.getElementById("onlineState");
+  if (navigator.onLine) {
+    indicator.innerHTML = "ONLINE";
+  } else {
+    indicator.innerHTML = "OFFLINE";
+  }
+};
+
 // Start the process by loading the file.
 loadFile(pageInit);
 
+showLineState();
+const stateChange = function() {
+  showLineState();
+};
+// Set a handler for when the state changes.
+window.addEventListener("online", stateChange);
+window.addEventListener("offline", stateChange);
