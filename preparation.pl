@@ -27,6 +27,7 @@ my $vlbi_time = 288; # hours.
 my $legacy_time = 1200; # hours.
 my $calibration_time = 144; # hours.
 my $first_array = "";
+my $first_array_reconfignum = 100;
 my $arrays = "";
 my $last_project = "C007";
 my $big_count = 200;
@@ -37,7 +38,14 @@ my $maintenance_days = "4,5,4,37";
 # 168h, 96h, 72h, 48h, 24h, 8h VLBI blocks to include.
 my $vlbi_days = "2,3,1,3,3,7";
 my $vlbi_length = "168,96,72,48,24,8";
+my $grades_file = "";
 my @legacy;
+# You can add projects on the command line.
+# For example, to add C1726 in the summer semester:
+# --add C1726,Hollow,5,1,72,any,4cm,CFB1M,many,00:00:00,-90:00:00
+# That is code, PI, grade, number of slots, length of each slot (hours), array,
+# band, bandwidth, source, ra, dec
+my @added_projects;
 GetOptions(
     "semester=s" => \$sem,
     "zip=s" => \$proposal_zip,
@@ -50,9 +58,12 @@ GetOptions(
     "calibration=i" => \$calibration_time,
     "tlegacy=i", \$legacy_time,
     "first=s" => \$first_array,
+    "firstnum=i" => \$first_array_reconfignum,
     "arrays=s" => \$arrays,
     "last=s" => \$last_project,
-    "big=i" => \$big_count
+    "big=i" => \$big_count,
+    "grades=s" => \$grades_file,
+    "add=s" => \@added_projects
     ) or die "Error in command line arguments.\n";
 
 $sem = lc($sem); # Should look like 2019OCT
@@ -77,7 +88,14 @@ my $mapfile = &downloadProposalMapping($sem, $map_file);
 # Step 5. rename each proposal as required.
 &renameProposals($sem);
 
-# Step 6. prepare the summary file.
+# Step 6. download the scores file.
+my $scorefile = &downloadScores($sem, $grades_file);
+
+# Step 7. Gather the scores.
+my $projectScores = &parseScoreFile($scorefile, \@legacy);
+#print Dumper($projectScores);
+
+# Step 8. prepare the summary file.
 # Get the public holidays.
 my %publicHolidays = &getPublicHolidays();
 # Get the semester start and end dates.
@@ -96,6 +114,8 @@ for (my $i = 0; $i <= $#hkeys; $i++) {
 }
 # Parse the XML for each project.
 my @projects = &xmlParse($sem, $obs);
+&addExtraProjects(\@added_projects, \@projects, $projectScores);
+
 printf "II Found %d projects.\n", ($#projects + 1);
 #for (my $i = 0; $i <= $#projects; $i++) {
 #    printf "II Project %d: Code %s\n", ($i + 1), $projects[$i]->{'project'};
@@ -126,11 +146,12 @@ my @l_vlbi = split(/\,/, $vlbi_length);
 my $summary_file = sprintf "ca-prep-%s.txt", $semname;
 &printFileTextSummary($summary_file, $obs, $semname, \@available_arrays, 
 		      \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
-		      \@projects);
+		      \@projects, $projectScores);
 my $summary_json = sprintf "ca-%s.json", $semname;
 &printFileJson($summary_json, $obs, $semname, \@available_arrays,
 	       \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
-	       \@projects, $semesterDetails);
+	       \@projects, $semesterDetails, $projectScores,
+	       $first_array_reconfignum);
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -234,6 +255,31 @@ sub downloadProposalMapping($$) {
     return $mapfile;
 }
 
+sub downloadScores($$) {
+    my $semester = shift;
+    my $oscorefile = shift;
+
+    printf "== Downloading scores information from OPAL...\n";
+    my $scorefile = $semester."/scores.html";
+
+    if (($oscorefile ne "") && (-e $oscorefile)) {
+	printf "== Copying score file %s to %s ...", $oscorefile, $scorefile;
+	system "cp \"".$oscorefile."\" \"".$scorefile."\"";
+	if (-e $scorefile) {
+	    print " success.\n";
+	} else {
+	    print " failed.\n";
+	    exit;
+	}
+    } else {
+	# We don't support this yet.
+	printf "!! Unable to get scores from OPAL, development required.\n";
+	exit;
+    }
+
+    return $scorefile;
+}
+
 sub renameProposals($) {
     my $semdir = shift;
 
@@ -322,6 +368,33 @@ sub renameProposals($) {
 	system $rename_directory;
     }
     
+}
+
+sub parseScoreFile($$) {
+    my $scorefile = shift;
+    my $legacy = shift;
+
+    my $s = {};
+    open(S, $scorefile) || die "!! cannot open $scorefile\n";
+    while(<S>) {
+	chomp (my $line = $_);
+	$line =~ s/^\s+//g;
+	if ($line =~ /^\<input type\=\"hidden\" id\=.* name\=.* value=\"(.*)\"\>$/) {
+	    my @scorebits = split(/\s+/, $1);
+	    my $ts = ($scorebits[1] eq "-1.0") ? $scorebits[2] : $scorebits[1];
+	    # Over-ride this if it's a Legacy project.
+	    for (my $i = 0; $i <= $#{$legacy}; $i++) {
+		if ($legacy->[$i] eq $scorebits[0]) {
+		    $ts = "5.0";
+		    last;
+		}
+	    }
+	    $s->{$scorebits[0]} = $ts;
+	}
+    }
+    close(S);
+
+    return $s;
 }
 
 sub nicePrint($$) {
@@ -468,6 +541,66 @@ sub zapper($) {
     }
 
     return &stripSpacing($val);
+}
+
+sub addExtraProjects($$) {
+    my $added_projects = shift;
+    my $projects = shift;
+    my $scores = shift;
+    
+    # Add in the extra projects, if any.
+    for (my $i = 0; $i <= $#{$added_projects}; $i++) {
+	my @details = split(/\,/, $added_projects->[$i]);
+	# Check that it is not already on our list.
+	my $existant = 0;
+	for (my $j = 0; $j <= $#{$projects}; $j++) {
+	    if ($projects->[$j]->{'project'} eq $details[0]) {
+		$existant = 1;
+		last;
+	    }
+	}
+	if ($existant == 0) {
+	    my @rt = ( $details[4] );
+	    my @rp = ( $details[3] );
+	    my @ra = ( $details[5] );
+	    my @rb = ( $details[6] );
+	    my @rc = ( $details[7] );
+	    my @rs = ( $details[8] );
+	    my @rd = ( &stripSpacing($details[9].",".$details[10]) );
+	    my @rl = ( [ "00:00", "23:59" ] );
+	    my $srt = &concatArray(\@rt, \@rp, 4);
+	    my $sra = &concatArray(\@ra, \@rp, 3);
+	    my $srb = &concatArray(\@rb, \@rp, 3);
+	    my $src = &concatArray(\@rc, \@rp, 3);
+	    my $srs = &concatArray(\@rs, \@rp, 3);
+	    my $srd = &concatArray(\@rd, \@rp, 3);
+	    push @{$projects}, {
+		"project" => $details[0], "title" => "Added project",
+		"preferred" => "", "impossible" => "",
+		"service" => "", "comment" => "",
+		"other" => "", "proptype" => "ASTRO", 
+		"principal" => $details[1], "pi_email" => "",
+		"observations" => {
+		    'requested_times' => \@rt,
+		    'summary_requested_times' => $srt,
+		    'requested_arrays' => \@ra,
+		    'summary_requested_arrays' => $sra,
+		    'requested_bands' => \@rb,
+		    'summary_requested_bands' => $srb,
+		    'requested_bandwidths' => \@rc,
+		    'summary_requested_bandwidths' => $src,
+		    'requested_sources' => \@rs,
+		    'summary_requested_sources' => $srs,
+		    'requested_positions' => \@rd,
+		    'summary_requested_positions' => $srd,
+		    'nrepeats' => \@rp,
+		    'lsts' => \@rl
+		}
+	    };
+	    $scores->{$details[0]} = $details[2];
+	}
+    }
+
 }
 
 sub getObs($$$) {
@@ -1257,6 +1390,7 @@ sub printFileTextSummary($$$$$$$$$) {
     my $lvlbi = shift;
     my $holidays = shift;
     my $projects = shift;
+    my $scores = shift;
     
     # Open the file.
     open(O, ">".$fname) || die "!! Unable to open $fname for writing.\n";
@@ -1335,7 +1469,7 @@ sub printFileTextSummary($$$$$$$$$) {
     close(O);
 }
 
-sub printFileJson($$$$$$$$$) {
+sub printFileJson($$$$$$$$$$) {
     my $fname = shift;
     my $obs = shift;
     my $sem = shift;
@@ -1346,6 +1480,8 @@ sub printFileJson($$$$$$$$$) {
     my $holidays = shift;
     my $projects = shift;
     my $details = shift;
+    my $scores = shift;
+    my $firstreconfig = shift;
 
     my %jobj = (
 	'program' => {
@@ -1355,6 +1491,7 @@ sub printFileJson($$$$$$$$$) {
 			'start' => $details->{"startString"},
 			'end' => $details->{"endString"}
 	    },
+	    'special' => { 'lastReconfigNumber' => $firstreconfig },
 	    'project' => []
 	}
 	);
@@ -1377,7 +1514,8 @@ sub printFileJson($$$$$$$$$) {
 		    $o->{'requested_sources'}->[$j],
 		    $o->{'requested_positions'}->[$j],
 		    $o->{'requested_times'}->[$j],
-		    0, 0, $o->{'requested_lsts'}->[$j]->[0],
+		    $scores->{$p->{'project'}}, 0, 
+		    $o->{'requested_lsts'}->[$j]->[0],
 		    $o->{'requested_lsts'}->[$j]->[1]
 		    );
 	    }

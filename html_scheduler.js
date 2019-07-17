@@ -419,7 +419,9 @@ const summariseSemester = function() {
     'available': 0,
     'scheduled': 0,
     'requested': 0,
-    'lowScore': 6
+    'lowScore': 6,
+    'nCabb': 0,
+    'nReconfigure': 0
   }, 'arrayLabels': [ { '6km': { 'a': "6A" } },
 		      { '6km': { 'b': "6B" } },
 		      { '6km': { 'c': "6C" } },
@@ -497,6 +499,12 @@ const summariseSemester = function() {
 	r.timeSummary.vlbi += slots[j].scheduled_duration;
       } else if (isMaintenance) {
 	r.timeSummary.maintenance += slots[j].scheduled_duration;
+	if ((allProjects[i].ident == "CONFIG") && (slots[j].scheduled == 1)) {
+	  r.timeSummary.nReconfigure += 1;
+	} else if ((allProjects[i].ident == "CABB") &&
+		   (slots[j].scheduled == 1)) {
+	  r.timeSummary.nCabb += 1;
+	}
       }
 
       // Add to the correct array.
@@ -741,7 +749,8 @@ const updateSemesterSummary = function() {
   savedDomNodes.legacyTime.innerHTML = semsum.timeSummary.legacy;
   savedDomNodes.vlbiTime.innerHTML = semsum.timeSummary.vlbi;
   savedDomNodes.maintenanceTime.innerHTML = semsum.timeSummary.maintenance;
-
+  savedDomNodes.reconfigTime.innerHTML = semsum.timeSummary.nReconfigure;
+  savedDomNodes.cabbTime.innerHTML = semsum.timeSummary.nCabb;
 
 };
 
