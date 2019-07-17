@@ -1,0 +1,1 @@
+./preparation.pl --semester 2019OCT --zip 2019OCTS-proposals.zip --map propmap_2019oct.html --obs atca --clean --legacy C3152 --legacy C3157 --legacy C3145 --legacy C3132 --legacy C007 --last C3317 --arrays 6A,6D,1.5C,1.5D,750D,750A,EW352,EW367,H168 --first H168 --big 150 --grades TACgrades2019oct.html --firstnum 486 --add C1726,Hollow,5,1,72,any,4cm,CFB1M,many,00:00:00,-90:00:00
