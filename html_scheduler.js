@@ -103,7 +103,8 @@ const drawDay = function(n, d, g) {
 
   // Draw an hour grid.
   for (var j = 0; j < 24; j++) {
-    fillColour = "#00aa00";
+    //fillColour = "#00aa00";
+    fillColour = "#" + scheduleData.program.colours.unscheduled;
     if (j % 2) {
       fillColour = "#ffffff";
     }
@@ -454,6 +455,11 @@ const summariseProjects = function() {
     s.requestedTime = 0;
     s.scheduledTime = 0;
     s.rating = 0;
+    if (allProjects[i].hasOwnProperty("colour")) {
+      s.colour = allProjects[i].colour;
+    } else {
+      s.colour = scheduleData.program.colours.default;
+    }
     for (var j = 0; j < slots.length; j++) {
       if (slots[j].scheduled == 1) {
 	s.scheduledSlots++;
@@ -667,6 +673,12 @@ const updateProjectTable = function() {
       t.appendChild(r);
       tableRows[p.ident] = r;
       var td = makeElement("td", p.ident);
+      // Check if this has a colour associated.
+      if (p.hasOwnProperty("colour")) {
+	var st = document.createAttribute("style");
+	st.value = "background-color: #" + p.colour;
+	td.setAttributeNode(st);
+      }
       r.appendChild(td);
       td = makeElement("td", p.rating);
       r.appendChild(td);
