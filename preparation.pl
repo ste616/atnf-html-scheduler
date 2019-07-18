@@ -1522,14 +1522,10 @@ sub printFileJson($$$$$$$$$$$) {
     my $u = $jobj{'program'};
     for (my $i = 0; $i <= $#{$projects}; $i++) {
 	my $p = $projects->[$i];
-	my $col = "";
-	if (defined $colours->{$p->{'project'}}) {
-	    $col = $colours->{$p}->{'project'};
-	}
 	my $proj = &createProject($p->{'project'}, "ASTRO", $p->{'principal'},
 				  $p->{'comments'}." ".$p->{'other'},
 				  $p->{'title'}, $p->{'impossible'},
-				  $p->{'preferred'}, $c);
+				  $p->{'preferred'}, $colours);
 	my $s = $proj->{'slot'};
 	my $o = $p->{'observations'};
 	for (my $j = 0; $j <= $#{$o->{'requested_times'}}; $j++) {
@@ -1551,7 +1547,8 @@ sub printFileJson($$$$$$$$$$$) {
     }
     # Put the maintenance time in.
     my $proj = &createProject("MAINT", "MAINT", "Mirtschin/Wilson",
-			      "", "Maintenance/Test", $holidays, "");
+			      "", "Maintenance/Test", $holidays, "",
+			      $colours);
     push @{$u->{'project'}}, $proj;
     my $s = $proj->{'slot'};
     for (my $i = 0; $i <= $#{$maint}; $i++) {
@@ -1571,7 +1568,8 @@ sub printFileJson($$$$$$$$$$$) {
 	}
     }
     # And the VLBI time.
-    $proj = &createProject("VLBI", "ASTRO", "Phillips", "", "VLBI", "", "");
+    $proj = &createProject("VLBI", "ASTRO", "Phillips", "", "VLBI", "", "",
+			   $colours);
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
     for (my $i = 0; $i <= $#{$vlbi}; $i++) {
@@ -1583,7 +1581,7 @@ sub printFileJson($$$$$$$$$$$) {
     }
     # And the reconfigurations.
     $proj = &createProject("CONFIG", "CONFIG", "Stevens", "", "Reconfig",
-			   $holidays, "");
+			   $holidays, "", $colours);
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
     for (my $i = 0; $i <= $#{$arrays}; $i++) {
@@ -1592,7 +1590,8 @@ sub printFileJson($$$$$$$$$$$) {
 	    24, 6, 0, "00:00", "23:59");
     }
     # And some CABB reconfigurations.
-    $proj = &createProject("CABB", "NASA", "Stevens", "", "CABB", "", "");
+    $proj = &createProject("CABB", "NASA", "Stevens", "", "CABB", "", "",
+			   $colours);
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
     for (my $i = 0; $i < 30; $i++) {
@@ -1617,7 +1616,7 @@ sub createProject($$$$$$$$) {
     my $title = shift;
     my $impossible = shift;
     my $preferred = shift;
-    my $colour = shift;
+    my $colours = shift;
 
     my $date_impossible = $impossible;
     my $date_preferred = $preferred;
@@ -1640,8 +1639,8 @@ sub createProject($$$$$$$$) {
 	'slot' => []
     };
 
-    if ($colour ne "") {
-	$rob->{'colour'} = $colour;
+    if (defined $colours->{$ident}) {
+	$rob->{'colour'} = $colours->{$ident};
     }
     
     return $rob;
