@@ -46,6 +46,9 @@ my @legacy;
 # That is code, PI, grade, number of slots, length of each slot (hours), array,
 # band, bandwidth, source, ra, dec
 my @added_projects;
+# Specifying colours for codes.
+# --colour MAINT,0000ff for really blue maintenance for example
+my @colour_specs;
 GetOptions(
     "semester=s" => \$sem,
     "zip=s" => \$proposal_zip,
@@ -63,8 +66,23 @@ GetOptions(
     "last=s" => \$last_project,
     "big=i" => \$big_count,
     "grades=s" => \$grades_file,
-    "add=s" => \@added_projects
+    "add=s" => \@added_projects,
+    "colour=s" => \@colour_specs
     ) or die "Error in command line arguments.\n";
+
+# Set some default colours.
+my %colours = (
+    'default' => "bbbbbb",
+    'unscheduled' => "33cc33",
+    'MAINT' => "6699ff",
+    'CONFIG' => "ffff99",
+    'CABB' => "ff9999"
+    );
+# Assign any colours we've been given.
+for (my $i = 0; $i <= $#colour_specs; $i++) {
+    my @cspec = split(/\,/, $colour_specs[$i]);
+    $colours{$cspec[0]} = $cspec[1];
+}
 
 $sem = lc($sem); # Should look like 2019OCT
 my $semname = uc($sem);
@@ -151,7 +169,7 @@ my $summary_json = sprintf "ca-%s.json", $semname;
 &printFileJson($summary_json, $obs, $semname, \@available_arrays,
 	       \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
 	       \@projects, $semesterDetails, $projectScores,
-	       $first_array_reconfignum);
+	       $first_array_reconfignum, \%colours);
 
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
@@ -1469,7 +1487,7 @@ sub printFileTextSummary($$$$$$$$$) {
     close(O);
 }
 
-sub printFileJson($$$$$$$$$$) {
+sub printFileJson($$$$$$$$$$$) {
     my $fname = shift;
     my $obs = shift;
     my $sem = shift;
@@ -1482,12 +1500,15 @@ sub printFileJson($$$$$$$$$$) {
     my $details = shift;
     my $scores = shift;
     my $firstreconfig = shift;
+    my $colours = shift;
 
     # We assign a modification time.
     my $modtime = DateTime->now();
     my %jobj = (
 	'program' => {
 	    'observatory' => { 'observatory' => $obs },
+	    'colours' => { 'default' => $colours->{'default'},
+			   'unscheduled' => $colours->{'unscheduled'} },
 	    'term' => { 'term' => $semname, 'version' => 1,
 			'configs' => $arrays, 
 			'start' => $details->{"startString"},
@@ -1501,10 +1522,14 @@ sub printFileJson($$$$$$$$$$) {
     my $u = $jobj{'program'};
     for (my $i = 0; $i <= $#{$projects}; $i++) {
 	my $p = $projects->[$i];
+	my $col = "";
+	if (defined $colours->{$p->{'project'}}) {
+	    $col = $colours->{$p}->{'project'};
+	}
 	my $proj = &createProject($p->{'project'}, "ASTRO", $p->{'principal'},
 				  $p->{'comments'}." ".$p->{'other'},
 				  $p->{'title'}, $p->{'impossible'},
-				  $p->{'preferred'});
+				  $p->{'preferred'}, $c);
 	my $s = $proj->{'slot'};
 	my $o = $p->{'observations'};
 	for (my $j = 0; $j <= $#{$o->{'requested_times'}}; $j++) {
@@ -1584,7 +1609,7 @@ sub printFileJson($$$$$$$$$$) {
     close(O);
 }
 
-sub createProject($$$$$$$) {
+sub createProject($$$$$$$$) {
     my $ident = shift;
     my $type = shift;
     my $pi = shift;
@@ -1592,6 +1617,7 @@ sub createProject($$$$$$$) {
     my $title = shift;
     my $impossible = shift;
     my $preferred = shift;
+    my $colour = shift;
 
     my $date_impossible = $impossible;
     my $date_preferred = $preferred;
@@ -1602,8 +1628,8 @@ sub createProject($$$$$$$) {
     if (ref $date_preferred eq "HASH") {
 	$date_preferred = &datehash2epochs($preferred);
     }
-    
-    return {
+
+    my $rob = {
 	'ident' => $ident,
 	'type' => $type,
 	'PI' => $pi,
@@ -1613,6 +1639,12 @@ sub createProject($$$$$$$) {
 	'preferred_dates' => $date_preferred,
 	'slot' => []
     };
+
+    if ($colour ne "") {
+	$rob->{'colour'} = $colour;
+    }
+    
+    return $rob;
 }
 
 sub createSlot($$$$$$$$$$) {

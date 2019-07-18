@@ -345,20 +345,20 @@ const cleanjson = function(d) {
 // Load the schedule JSON file.
 const loadFile = function(callback) {
   // We don't do anything if we haven't checked for a local file.
-  console.log("file loading commenced");
   if (!localChecked) {
     return;
   }
 
-  console.log(localModificationTime);
-  console.log(navigator.onLine);
-  
   // If we're not online and we have no local file, we can't do anything.
   if ((localChecked) && (!navigator.onLine) && (localModificationTime == null)) {
     return;
   }
 
-  console.log("checking for who to load");
+  // If we've just started, we're online but we haven't heard
+  // from the server, we wait.
+  if ((localChecked) && (navigator.onLine) && (serverModificationTime == null)) {
+    return;
+  }
   
   // If we're not online, we load the local file.
   var loadLocal = null;
@@ -378,8 +378,10 @@ const loadFile = function(callback) {
     }
   }
   if (loadLocal == true) {
+    console.log("chose to load local schedule");
     callback(null, getLocalSchedule);
   } else if (loadLocal == false) {
+    console.log("chose to load server schedule");
     // We get the file from a CGI script.
     var xhr = new XMLHttpRequest();
     xhr.open('GET', "/cgi-bin/scheduler.pl?request=load", true);
@@ -622,7 +624,6 @@ const updateProjectTable = function() {
   var t = document.getElementById("projects-table");
   if (!t) {
     // Not made yet.
-    console.log("the table hasn't been made yet!");
     // Make it.
     t = makeElement("table", null, { 'id': "projects-table" });
     var d = document.getElementById("projecttable");
@@ -698,7 +699,6 @@ var savedDomNodes = {};
 const updateSemesterSummary = function() {
   // Get our helper to make the summary.
   var semsum = summariseSemester();
-  console.log(semsum);
 
   // Step 1: show the demand for each array type.
   // Have we already made the table?
@@ -1111,7 +1111,8 @@ const localKey = "atnfSchedule";
 const getLocalSchedule = function() {
   // Try to get the schedule from our local storage.
   var localSchedule = window.localStorage.getItem(localKey);
-  if (typeof localSchedule != "undefined") {
+  if ((typeof localSchedule != "undefined") &&
+      (localSchedule != "undefined")) {
     return JSON.parse(localSchedule);
   }
   return null;
@@ -1130,11 +1131,12 @@ const checkLocalTime = function(callback) {
     localModificationTime = localSchedule.modificationTime;
   }
   localChecked = true;
-  console.log("marked local checked");
   if (typeof callback != "undefined") {
     callback();
   }
 };
+
+showLineState();
 
 // Start the process by loading the file.
 const pageInitBootstrap = function() {
@@ -1142,11 +1144,7 @@ const pageInitBootstrap = function() {
 };
 checkServerTime(pageInitBootstrap);
 checkLocalTime(pageInitBootstrap);
-//loadFile(pageInit);
-//checkServerTime(displayModificationTimes);
-//checkLocalTime(displayModificationTimes);
 
-showLineState();
 const stateChange = function() {
   showLineState();
 };

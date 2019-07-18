@@ -34,9 +34,8 @@
       #semester-state-table td { text-align: center; padding: 0.2em; }
       #appstate { top: 0%; bottom: 60px; position: absolute; width: 100%;
       background-color: #dddddd; height: 60px; }
-      #appstate div { float: left; font-size: 1.2em; height: 100%;
-      font-weight: bold; }
-      #appstate table { margin: 0; border-collapse: collapse; }
+      #appstate table { margin: 0; border-collapse: collapse; width: 100%; }
+      #appstate table td { text-align: center; }
       #onlineState { color: green; margin: 1em; display: table; }
       #onlineState.offline { color: red; }
       #serverSaveTime,#localSaveTime { font-size: 0.7em; }
@@ -47,17 +46,13 @@
     <div id="schedtable"></div>
     <div id="schedsummary">
       <div id="appstate">
-	<div><span id="onlineState"></span></div>
-	<div><table><tr><th>Local Save</th></tr>
-	    <tr><td><span id="localSaveTime">None</span></td></tr></table>
-	</div>
-	<div><table><tr><th>Server Save</th></tr>
-	    <tr><td><span id="serverSaveTime">None</span></td></tr></table>
-	</div>
-	<div>
-	  <button id="savebutton">Save</button>
-	  <button id="revertbutton">Revert</button>
-	</div>
+	<table>
+	  <tr><td rowspan="2"><span id="onlineState"></span></td>
+	    <th>Local Save</th><th>Server Save</th>
+	    <td rowspan="2"><button id="savebutton">Save</button></td>
+	    <td rowspan="2"><button id="revertbutton">Revert</button></td></tr>
+	  <tr><td><span id="localSaveTime">None</span></td>
+	    <td><span id="serverSaveTime">None</span></td></tr></table>
       </div>
       <div id="projectdetails"></div>
       <div id="projecttable"></div>
