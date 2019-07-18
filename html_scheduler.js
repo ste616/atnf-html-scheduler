@@ -12,6 +12,8 @@ var scheduleLast = null;
 var serverModificationTime = null;
 var localModificationTime = null;
 var localChecked = false;
+var semesterStart = null;
+var semesterEnd = null;
 
 // Function to calculate the DOY.
 const doy = function(d) {
@@ -479,51 +481,64 @@ const summariseProjects = function() {
 // Make a summary of the array configurations required,
 // and a general summary of the semester.
 const summariseSemester = function() {
-  var r = { 'arrays': {
-    '6km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
-    '1.5km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
-    '750m': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
-    'compact': { 'ew367': 0, 'ew352': 0, 'any': 0 },
-    'hybrid': { 'h214': 0, 'h168': 0, 'h75': 0, 'any': 0 },
-    'any': { 'any': 0 }
-  }, 'timeSummary': {
-    'total': 0,
-    'maintenance': 0,
-    'vlbi': 0,
-    'calibration': 0,
-    'legacy': 0,
-    'available': 0,
-    'scheduled': 0,
-    'requested': 0,
-    'lowScore': 6,
-    'nCabb': 0,
-    'nReconfigure': 0
-  }, 'arrayLabels': [ { '6km': { 'a': "6A" } },
-		      { '6km': { 'b': "6B" } },
-		      { '6km': { 'c': "6C" } },
-		      { '6km': { 'd': "6D" } },
-		      { '6km': { 'any': "6*"} },
-		      { '1.5km': { 'a': "1.5A" } },
-		      { '1.5km': { 'b': "1.5B" } },
-		      { '1.5km': { 'c': "1.5C" } },
-		      { '1.5km': { 'd': "1.5D" } },
-		      { '1.5km': { 'any': "1.5*" } },
-		      { '750m': { 'a': "750A" } },
-		      { '750m': { 'b': "750B" } },
-		      { '750m': { 'c': "750C" } },
-		      { '750m': { 'd': "750D" } },
-		      { '750m': { 'any': "750*" } },
-		      { 'compact': { 'ew367': "367" } },
-		      { 'compact': { 'ew352': "352" } },
-		      { 'compact': { 'any': "cmp" } },
-		      { 'hybrid': { 'h214': "H214" } },
-		      { 'hybrid': { 'h168': "H168" } },
-		      { 'hybrid': { 'h75': "H75" } },
-		      { 'hybrid': { 'any': "H*" } },
-		      { 'any': { 'any': "*" } }
-		      ]
+  var r = { 'arrays': [],
+	    'timeSummary': {
+	      'total': 0,
+	      'maintenance': 0,
+	      'vlbi': 0,
+	      'calibration': 0,
+	      'legacy': 0,
+	      'available': 0,
+	      'scheduled': 0,
+	      'requested': 0,
+	      'lowScore': 6,
+	      'nCabb': 0,
+	      'nReconfigure': 0
+	    }, 'arrayLabels': [ { '6km': { 'a': "6A" } },
+				{ '6km': { 'b': "6B" } },
+				{ '6km': { 'c': "6C" } },
+				{ '6km': { 'd': "6D" } },
+				{ '6km': { 'any': "6*"} },
+				{ '1.5km': { 'a': "1.5A" } },
+				{ '1.5km': { 'b': "1.5B" } },
+				{ '1.5km': { 'c': "1.5C" } },
+				{ '1.5km': { 'd': "1.5D" } },
+				{ '1.5km': { 'any': "1.5*" } },
+				{ '750m': { 'a': "750A" } },
+				{ '750m': { 'b': "750B" } },
+				{ '750m': { 'c': "750C" } },
+				{ '750m': { 'd': "750D" } },
+				{ '750m': { 'any': "750*" } },
+				{ 'compact': { 'ew367': "367" } },
+				{ 'compact': { 'ew352': "352" } },
+				{ 'compact': { 'any': "cmp" } },
+				{ 'hybrid': { 'h214': "H214" } },
+				{ 'hybrid': { 'h168': "H168" } },
+				{ 'hybrid': { 'h75': "H75" } },
+				{ 'hybrid': { 'any': "H*" } },
+				{ 'any': { 'any': "*" } }
+			      ]
 	  };
 
+  // The total time available for the semester (in hours).
+  r.timeSummary.available = (semesterEnd.getTime() -
+			     semesterStart.getTime()) / (1000 * 3600);
+
+  // Make the array summary object for each different possible score.
+  var minScore = 0.0;
+  var maxScore = 5.0;
+  var scoreInterval = 0.1;
+  for (var score = minScore; score <= maxScore; score += scoreInterval) {
+    r.arrays.push({ 'score': Math.floor(score * 10) / 10,
+		    '6km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+		    '1.5km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+		    '750m': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+		    'compact': { 'ew367': 0, 'ew352': 0, 'any': 0 },
+		    'hybrid': { 'h214': 0, 'h168': 0, 'h75': 0, 'any': 0 },
+		    'any': { 'any': 0 }
+		  });
+  }
+  
   var allProjects = scheduleData.program.project;
   for (var i = 0; i < allProjects.length; i++) {
     //console.log(allProjects[i]);
@@ -585,43 +600,63 @@ const summariseSemester = function() {
 
       // Add to the correct array.
       if (!isMaintenance && !isVlbi && !isNapa) {
-	var opath = [];
-	if ((slots[j].array == "6a") || (slots[j].array == "6b") ||
-	    (slots[j].array == "6c") || (slots[j].array == "6d") ||
-	    (slots[j].array == "any6")) {
-	  var v = slots[j].array.replace("6", "");
-	  r['arrays']["6km"][v] += slots[j].requested_duration;
-	} else if ((slots[j].array == "1.5a") || (slots[j].array == "1.5b") ||
-		   (slots[j].array == "1.5c") || (slots[j].array == "1.5d") ||
-		   (slots[j].array == "any1.5")) {
-	  var v = slots[j].array.replace("1.5", "");
-	  r['arrays']["1.5km"][v] += slots[j].requested_duration;
-	} else if ((slots[j].array == "750a") || (slots[j].array == "750b") ||
-		   (slots[j].array == "750c") || (slots[j].array == "750d") ||
-		   (slots[j].array == "any750")) {
-	  var v = slots[j].array.replace("750", "");
-	  r['arrays']["750m"][v] += slots[j].requested_duration;
-	} else if ((slots[j].array == "ew352") || (slots[j].array == "ew367") ||
-		   (slots[j].array == "anycompact")) {
-	  var v = slots[j].array.replace("compact", "");
-	  r['arrays']["compact"][v] += slots[j].requested_duration;
-	} else if ((slots[j].array == "h168") || (slots[j].array == "h214") ||
-		   (slots[j].array == "h75")) {
-	  var v = slots[j].array;
-	  r['arrays']["hybrid"][v] += slots[j].requested_duration;
-	} else if (/^h/.test(slots[j].array)) {
-	  // This means some other hybrid combination: we put this as any.
-	  r['arrays']["hybrid"]['any'] += slots[j].requested_duration;
-	} else if (slots[j].array == "any") {
-	  r['arrays']['any']['any'] += slots[j].requested_duration;
-	} else {
-	  console.log("found array string " + slots[j].array);
+	for (var sarr = 0; sarr < r.arrays.length; sarr++) {
+	  if (slots[j].rating < r.arrays[sarr].score) {
+	    break;
+	  }
+	  if ((slots[j].array == "6a") || (slots[j].array == "6b") ||
+	      (slots[j].array == "6c") || (slots[j].array == "6d") ||
+	      (slots[j].array == "any6")) {
+	    var v = slots[j].array.replace("6", "");
+	    r['arrays'][sarr]["6km"][v] += slots[j].requested_duration;
+	  } else if ((slots[j].array == "1.5a") || (slots[j].array == "1.5b") ||
+		     (slots[j].array == "1.5c") || (slots[j].array == "1.5d") ||
+		     (slots[j].array == "any1.5")) {
+	    var v = slots[j].array.replace("1.5", "");
+	    r['arrays'][sarr]["1.5km"][v] += slots[j].requested_duration;
+	  } else if ((slots[j].array == "750a") || (slots[j].array == "750b") ||
+		     (slots[j].array == "750c") || (slots[j].array == "750d") ||
+		     (slots[j].array == "any750")) {
+	    var v = slots[j].array.replace("750", "");
+	    r['arrays'][sarr]["750m"][v] += slots[j].requested_duration;
+	  } else if ((slots[j].array == "ew352") || (slots[j].array == "ew367") ||
+		     (slots[j].array == "anycompact")) {
+	    var v = slots[j].array.replace("compact", "");
+	    r['arrays'][sarr]["compact"][v] += slots[j].requested_duration;
+	  } else if ((slots[j].array == "h168") || (slots[j].array == "h214") ||
+		     (slots[j].array == "h75")) {
+	    var v = slots[j].array;
+	    r['arrays'][sarr]["hybrid"][v] += slots[j].requested_duration;
+	  } else if (/^h/.test(slots[j].array)) {
+	    // This means some other hybrid combination: we put this as any.
+	    r['arrays'][sarr]["hybrid"]['any'] += slots[j].requested_duration;
+	  } else if (slots[j].array == "any") {
+	    r['arrays'][sarr]['any']['any'] += slots[j].requested_duration;
+	  } else {
+	    console.log("found array string " + slots[j].array);
+	    break;
+	  }
 	}
       }
     }
   }
 
   return r;
+};
+
+// Show the details of a particular project, and present the slot
+// scheduling interface for it.
+const showProjectDetails = function(ident) {
+  // Find the project by its ident.
+  var project = getProjectByName(ident);
+
+  if (project == null) {
+    console.log("something has gone horribly wrong");
+    return;
+  }
+
+  console.log(project);
+  
 };
 
 // Make the project table.
@@ -654,24 +689,21 @@ const updateProjectTable = function() {
     th = makeElement("th", "Req");
     h.appendChild(th);
     t.appendChild(h);
-  }
 
-  // Go through the projects.
-  var allProjectSummary = summariseProjects();
-  // Sort the projects by rank.
-  var sortedProjects = allProjectSummary;
-  sortedProjects.sort(function(a, b) {
-    return (b.rating - a.rating);
-  });
-
-  for (var i = 0; i < sortedProjects.length; i++) {
-    var p = sortedProjects[i];
-    // Check if we've already made it.
-    if (typeof tableRows[p.ident] == "undefined") {
-      // Make it.
-      var r = makeElement("tr");
+    // Go through the projects.
+    var allProjectSummary = summariseProjects();
+    // Sort the projects by rank.
+    var sortedProjects = allProjectSummary;
+    sortedProjects.sort(function(a, b) {
+      return (b.rating - a.rating);
+    });
+    
+    for (var i = 0; i < sortedProjects.length; i++) {
+      var p = sortedProjects[i];
+      var r = makeElement("tr", null, { 'id': "row-" + p.ident });
       t.appendChild(r);
       tableRows[p.ident] = r;
+      // The name element never changes.
       var td = makeElement("td", p.ident);
       // Check if this has a colour associated.
       if (p.hasOwnProperty("colour")) {
@@ -679,23 +711,40 @@ const updateProjectTable = function() {
 	st.value = "background-color: #" + p.colour;
 	td.setAttributeNode(st);
       }
+      // We put an event handler on this to show its details.
+      td.addEventListener("click", projectClicker(p.ident));
       r.appendChild(td);
+      // The rating element never changes.
       td = makeElement("td", p.rating);
       r.appendChild(td);
-      td = makeElement("td", p.scheduledTime);
+      // The scheduled time element will need to be changed.
+      td = makeElement("td", "NN", {
+	'id': "scheduledTime-" + p.ident });
       r.appendChild(td);
+      // The requested time does not need to be changed.
       td = makeElement("td", p.requestedTime);
       r.appendChild(td);
-      td = makeElement("td", p.scheduledSlots);
+      // The scheduled slots element will need to be changed.
+      td = makeElement("td", "NN", {
+	'id': "scheduledSlots-" + p.ident });
       r.appendChild(td);
+      // The requested slots does not need to be changed.
       td = makeElement("td", p.requestedSlots);
       r.appendChild(td);
-    } else {
-
     }
-    
   }
 
+  // Update the table cells and rows.
+  for (var i = 0; i < sortedProjects.length; i++) {
+    var p = sortedProjects[i];
+    var scheduledTime = document.getElementById("scheduledTime-" +
+						p.ident);
+    scheduledTime.innerHTML = p.scheduledTime;
+    var scheduledSlots = document.getElementById("scheduledSlots-" +
+						 p.ident);
+    scheduledSlots.innerHTML = p.scheduledSlots;
+  }
+  
 };
 
 // Another helper function.
@@ -722,16 +771,23 @@ const updateSemesterSummary = function() {
     ss.appendChild(arrayTable);
     var r = makeElement("tr");
     arrayTable.appendChild(r);
-    var th = makeElement("th", "Score", { 'rowspan': 2 });
+    var th = makeElement("th", "Score", { 'colspan': 3 });
     r.appendChild(th);
     th = makeElement("th", "Time Requested (days)", {
       'colspan': semsum.arrayLabels.length });
     r.appendChild(th);
     r = makeElement("tr");
     arrayTable.appendChild(r);
+    th = makeElement("th", "%");
+    r.appendChild(th);
+    th = makeElement("th", "Score");
+    r.appendChild(th);
+    th = makeElement("th", "Days");
+    r.appendChild(th);
+    var showLabels = {};
     for (var i = 0; i < semsum.arrayLabels.length; i++) {
       var label = "";
-      var tm = semsum.arrays;
+      var tm = semsum.arrays[0];
       for (var k in semsum.arrayLabels[i]) {
 	if (semsum.arrayLabels[i].hasOwnProperty(k)) {
 	  tm = tm[k];
@@ -746,31 +802,65 @@ const updateSemesterSummary = function() {
       if (tm > 0) {
 	th = makeElement("th", label);
 	r.appendChild(th);
+	showLabels[label] = true;
       }
     }
 
-    // Go through each of the scores: TODO
-    var score = 0.0;
-    r = makeElement("tr");
-    arrayTable.appendChild(r);
-    th = makeElement("th", score);
-    r.appendChild(th);
-    for (var i = 0; i < semsum.arrayLabels.length; i++) {
-      var tm = semsum.arrays;
-      for (var k in semsum.arrayLabels[i]) {
-	if (semsum.arrayLabels[i].hasOwnProperty(k)) {
-	  tm = tm[k];
-	  for (var l in semsum.arrayLabels[i][k]) {
-	    if (semsum.arrayLabels[i][k].hasOwnProperty(l)) {
-	      tm = tm[l];
+    // Show the following fractions of the semester.
+    var semFractions = [ 0.5, 0.7, 0.8 ];
+    var scoreFractions = [ null, null, null ];
+    var scoreDays = [ 0, 0, 0 ];
+    for (var i = (semsum.arrays.length - 1); i >= 0; i--) {
+      // Compute the total.
+      var totalTime = 0;
+      for (var arr in semsum.arrays[i]) {
+	if ((semsum.arrays[i].hasOwnProperty(arr)) &&
+	    (arr != "score")) {
+	  for (var atype in semsum.arrays[i][arr]) {
+	    if (semsum.arrays[i][arr].hasOwnProperty(atype)) {
+	      totalTime += semsum.arrays[i][arr][atype];
 	    }
 	  }
 	}
       }
-      var nd = Math.ceil(tm / 24.0);
-      if (nd > 0) {
-	var td = makeElement("td", Math.ceil(tm / 24.0));
-	r.appendChild(td);
+      // Compute the fraction.
+      var fracTime = totalTime / semsum.timeSummary.available;
+      for (var j = 0; j < semFractions.length; j++) {
+	if (fracTime <= semFractions[j]) {
+	  scoreFractions[j] = semsum.arrays[i];
+	  scoreDays[j] = Math.ceil(totalTime / 24.0);
+	}
+      }
+    }
+
+    for (var i = 0; i < semFractions.length; i++) {
+      r = makeElement("tr");
+      arrayTable.appendChild(r);
+      th = makeElement("th", Math.floor(semFractions[i] * 100));
+      r.appendChild(th);
+      th = makeElement("th", scoreFractions[i].score);
+      r.appendChild(th);
+      th = makeElement("th", scoreDays[i]);
+      r.appendChild(th);
+      for (var j = 0; j < semsum.arrayLabels.length; j++) {
+	var tm = scoreFractions[i];
+	var tlab = "";
+	for (var k in semsum.arrayLabels[j]) {
+	  if (semsum.arrayLabels[j].hasOwnProperty(k)) {
+	    tm = tm[k];
+	    for (var l in semsum.arrayLabels[j][k]) {
+	      if (semsum.arrayLabels[j][k].hasOwnProperty(l)) {
+		tm = tm[l];
+		tlab = semsum.arrayLabels[j][k][l];
+	      }
+	    }
+	  }
+	}
+	var nd = Math.ceil(tm / 24.0);
+	if (showLabels[tlab]) {
+	  var td = makeElement("td", nd);
+	  r.appendChild(td);
+	}
       }
     }
   }
@@ -822,6 +912,10 @@ const updateSemesterSummary = function() {
   }
 
   // Update the table.
+  savedDomNodes.availableTime.innerHTML =
+    semsum.timeSummary.available - semsum.timeSummary.scheduled -
+    semsum.timeSummary.calibration - semsum.timeSummary.legacy -
+    semsum.timeSummary.vlbi - semsum.timeSummary.maintenance;
   savedDomNodes.scheduledTime.innerHTML = semsum.timeSummary.scheduled;
   savedDomNodes.remainingTime.innerHTML = (semsum.timeSummary.requested -
 					   semsum.timeSummary.scheduled);
@@ -844,9 +938,8 @@ const setupCanvas = function(data) {
   var rmatch = re.exec(data.program.term.term);
   var semester = rmatch[2]
   var year = parseInt(rmatch[1]);
-  
+
   // Get the date for the first day of the schedule.
-  var semesterStart = new Date();
   var semesterStartMonth = -1;
   if (semester == "APR") {
     semesterStartMonth = 4;
@@ -961,6 +1054,12 @@ const getProjectByName = function(name) {
   return null;
 };
 
+const projectClicker = function(ident) {
+  return function() {
+    showProjectDetails(ident);
+  };
+};
+
 const drawConfiguration = function(title, start, end) {
   // Draw a box on the right.
   var nDaysSinceStart = (start - scheduleFirst.getTime()) / (86400 * 1000);
@@ -1062,6 +1161,10 @@ const pageInit = function(status, data) {
   saveLocalSchedule();
   // Display some times.
   checkLocalTime(displayModificationTimes);
+
+  // Work out the semester time details.
+  semesterStart = new Date(scheduleData.program.term.start);
+  semesterEnd = new Date(scheduleData.program.term.end);
   
   setupCanvas(scheduleData);
   updateProjectTable();
