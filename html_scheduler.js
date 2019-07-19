@@ -14,6 +14,7 @@ var localModificationTime = null;
 var localChecked = false;
 var semesterStart = null;
 var semesterEnd = null;
+var allProjectSummary = null;
 
 // Function to calculate the DOY.
 const doy = function(d) {
@@ -644,19 +645,134 @@ const summariseSemester = function() {
   return r;
 };
 
+// A little helper function to do things to a DOM element.
+const fillId = function(id, text, addClasses, remClasses) {
+  // Try to find the ID.
+  var e = document.getElementById(id);
+  if ((typeof e == "undefined") || (e == "undefined")) {
+    console.log("cannot find DOM element with id " + id);
+    return;
+  }
+
+  if ((typeof text != "undefined") && (text != null)) {
+    e.innerHTML = text;
+  }
+
+  // Do we want to add one or more classes?
+  if ((typeof addClasses != "undefined") &&
+      (addClasses != null)) {
+    if (addClasses instanceof Array) {
+      for (var i = 0; i < addClasses.length; i++) {
+	if (!e.classList.contains(addClasses[i])) {
+	  // This class is not yet there.
+	  e.classList.add(addClasses[i]);
+	}
+      }
+    } else {
+      if (!e.classList.contains(addClasses)) {
+	e.classList.add(addClasses);
+      }
+    }
+  }
+
+  // Do we want to remove one or more classes.
+  if ((typeof remClasses != "undefined") &&
+      (remClasses != null)) {
+    if (remClasses instanceof Array) {
+      for (var i = 0; i < remClasses.length; i++) {
+	if (e.classList.contains(remClasses[i])) {
+	  e.classList.remove(remClasses[i]);
+	}
+      }
+    } else {
+      if (e.classList.contains(remClasses)) {
+	e.classList.remove(remClasses);
+      }
+    }
+  }
+  
+};
+
+var previouslySelectedProject = null;
+
 // Show the details of a particular project, and present the slot
 // scheduling interface for it.
 const showProjectDetails = function(ident) {
   // Find the project by its ident.
   var project = getProjectByName(ident);
 
-  if (project == null) {
+  if (project.details == null) {
     console.log("something has gone horribly wrong");
     return;
   }
 
-  console.log(project);
+  // Deselect any previously selected project.
+  if (previouslySelectedProject != null) {
+    fillId("row-" + previouslySelectedProject.details.ident, null,
+	   null, "selectedProject");
+    previouslySelectedProject = null;
+  }
   
+  // Select the row in the table.
+  previouslySelectedProject = project;
+  fillId("row-" + project.details.ident, null, "selectedProject");
+  
+  // Display the vital statistics.
+  console.log(project);
+  fillId("projectselectedIdent", project.details.ident);
+  fillId("projectselectedRating", project.summary.rating);
+  fillId("projectselectedTime", project.summary.requestedTime);
+  fillId("projectselectedSlots", project.summary.requestedSlots);
+  
+  // Display the comments for the project.
+  fillId("projectcomments", project.details.comments);
+  // Show the date preferences.
+  var nc = document.getElementById("nighttime");
+  if (project.details.prefers_night == 0) {
+    nc.checked = false;
+  } else {
+    nc.checked = true;
+  }
+
+  // Make a table with each of the slots.
+  // Empty the current table.
+  var slotTable = emptyDomNode("projectslotsSelectionBody");
+  for (var i = 0; i < project.details.slot.length; i++) {
+    var s = project.details.slot[i];
+    var tr = makeElement("tr", null, {
+      'id': "slotrow-" + project.details.ident + "-" + i
+    });
+    slotTable.appendChild(tr);
+    var tsel = makeElement("th", "&nbsp;", {
+      'id': "slotselected-" + project.details.ident + "-" + i
+    });
+    tr.appendChild(tsel);
+    var td = makeElement("td", s.array.toUpperCase());
+    tr.appendChild(td);
+    td = makeElement("td", s.bands.join(","));
+    tr.appendChild(td);
+    td = makeElement("td", s.bandwidth);
+    tr.appendChild(td);
+    td = makeElement("td", s.source);
+    tr.appendChild(td);
+    td = makeElement("td", s.scheduled_duration + " / " +
+		     s.requested_duration);
+    tr.appendChild(td);
+    
+  }
+  
+};
+
+const emptyDomNode = function(id) {
+  var n = document.getElementById(id);
+
+  if ((typeof n != "undefined") && (n != "undefined")) {
+    while (n.firstChild) {
+      n.removeChild(n.firstChild);
+    }
+  }
+
+  return n;
 };
 
 // Make the project table.
@@ -691,7 +807,7 @@ const updateProjectTable = function() {
     t.appendChild(h);
 
     // Go through the projects.
-    var allProjectSummary = summariseProjects();
+    allProjectSummary = summariseProjects();
     // Sort the projects by rank.
     var sortedProjects = allProjectSummary;
     sortedProjects.sort(function(a, b) {
@@ -1044,14 +1160,24 @@ const getProjectByName = function(name) {
   if (scheduleData == null) {
     return;
   }
+  
   var allProjects = scheduleData.program.project;
+
+  var r = { 'details': null, 'summary': null };
   for (var i = 0; i < allProjects.length; i++) {
     if (name == allProjects[i].ident) {
-      return allProjects[i];
+      r.details = allProjects[i];
+    }
+  }
+  if (allProjectSummary != null) {
+    for (var i = 0; i < allProjectSummary.length; i++) {
+      if (name == allProjectSummary[i].ident) {
+	r.summary = allProjectSummary[i];
+      }
     }
   }
 
-  return null;
+  return r;
 };
 
 const projectClicker = function(ident) {
@@ -1099,7 +1225,7 @@ const drawArrayConfigurations = function() {
   // how the boxes should look on the right side.
   // Get the list of configurations.
   var configs = getProjectByName("CONFIG");
-  var slots = configs.slot;
+  var slots = configs.details.slot;
 
   // Destroy all the current children.
   arrayGroup.destroyChildren();
@@ -1155,6 +1281,7 @@ const pageInit = function(status, data) {
   }
 
   // Keep the data for later.
+  console.log(data);
   scheduleData = data;
 
   // Save the data locally.
@@ -1235,8 +1362,12 @@ const getLocalSchedule = function() {
 
 const saveLocalSchedule = function() {
   if (scheduleData != null) {
+    var n = new Date();
+    scheduleData.modificationTime = n.getTime() / 1000;
+    localModificationTime = scheduleData.modificationTime;
     window.localStorage.setItem(localKey, JSON.stringify(scheduleData));
   }
+  displayModificationTimes();
 };
 
 const checkLocalTime = function(callback) {
@@ -1253,7 +1384,34 @@ const checkLocalTime = function(callback) {
 
 showLineState();
 
-// Start the process by loading the file.
+// Our event handler for when the nighttime checkbox changes state.
+const nighttimeChange = function() {
+  var nc = document.getElementById("nighttime");
+  console.log(previouslySelectedProject);
+  // Are we actually looking at a project now?
+  if (previouslySelectedProject == null) {
+    // Nope. Set the checkbox back to unchecked.
+    nc.checked = false;
+    return;
+  }
+
+  // Get the current state.
+  var cs = nc.checked;
+  // Set this in the project details.
+  previouslySelectedProject.details.prefers_night = (nc.checked) ? 1 : 0;
+  // Save the change locally.
+  saveLocalSchedule();
+};
+
+// Configure some event handlers on existing nodes.
+const staticEventHandlers = function() {
+  // Enable the check box for nighttimes.
+  var nc = document.getElementById("nighttime");
+  nc.addEventListener("change", nighttimeChange);
+};
+staticEventHandlers();
+
+  // Start the process by loading the file.
 const pageInitBootstrap = function() {
   return loadFile(pageInit);
 };
