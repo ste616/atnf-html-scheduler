@@ -1636,6 +1636,7 @@ sub createProject($$$$$$$$) {
 	'title' => $title,
 	'excluded_dates' => $date_impossible,
 	'preferred_dates' => $date_preferred,
+	'prefers_night' => 0,
 	'slot' => []
     };
 
