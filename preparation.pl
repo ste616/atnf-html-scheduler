@@ -1662,7 +1662,8 @@ sub createSlot($$$$$$$$$$) {
     my @pos = split(/\,/, $position);
     
     return {
-	'array' => $array, 'bands' => \@bands, 'source' => $source,
+	'array' => $array, 'bands' => \@bands, 'bandwidth' => $bandwidth,
+	'source' => $source,
 	'position' => { 'ra' => $pos[0], 'dec' => $pos[1] }, 
 	'requested_duration' => $requested_duration,
 	'scheduled_duration' => 0, 'scheduled_start' => 0, 'scheduled' => 0,
