@@ -383,7 +383,7 @@ const loadFile = function(callback) {
   }
   if (loadLocal == true) {
     console.log("chose to load local schedule");
-    callback(null, getLocalSchedule);
+    callback(null, getLocalSchedule());
   } else if (loadLocal == false) {
     console.log("chose to load server schedule");
     // We get the file from a CGI script.
@@ -1370,6 +1370,28 @@ const saveLocalSchedule = function() {
   displayModificationTimes();
 };
 
+const saveScheduleToServer = function() {
+  if (scheduleData != null) {
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/cgi-bin/scheduler.pl", true)
+    xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+    xhr.responseType = "json";
+    xhr.onload = function() {
+      var status = xhr.status;
+      console.log(xhr.response);
+      console.log(xhr.status);
+      if (status === 200) {
+	displayModificationTimes();
+      } else {
+	displayModificationTimes();
+      }
+    }
+    //xhr.send({ "request": "save",
+    //	       "schedule": JSON.stringify(scheduleData) });
+    xhr.send("request=save&schedule=" + JSON.stringify(scheduleData));
+  }
+};
+
 const checkLocalTime = function(callback) {
   // See if we have a local schedule.
   var localSchedule = getLocalSchedule();
@@ -1408,6 +1430,10 @@ const staticEventHandlers = function() {
   // Enable the check box for nighttimes.
   var nc = document.getElementById("nighttime");
   nc.addEventListener("change", nighttimeChange);
+
+  // Enable the save button.
+  var sb = document.getElementById("savebutton");
+  sb.addEventListener("click", saveScheduleToServer);
 };
 staticEventHandlers();
 
