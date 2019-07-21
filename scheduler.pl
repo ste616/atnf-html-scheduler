@@ -16,21 +16,8 @@ print $q->header(
     -type => "application/json"
     );
 
-#open(D, ">debug.txt");
-#print D $q->param;
-#print D "\n";
-
 my $reqtype = $q->param('request');
-#$reqtype = "loadtime";
-#$reqtype = "save";
 my $schedstring = $q->param('schedule');
-#$schedstring = "{ \"program\": { \"observatory\": \"atca\", \"term\": { \"term\": \"2019OCT\" } } }";
-#print $reqtype."\n".$schedstring."\n";
-#print D $reqtype."\n";
-#if (defined $schedstring) {
-#    print D $schedstring."\n";
-#}
-#close(D);
 
 
 if ($reqtype eq "load") {
@@ -80,9 +67,10 @@ sub saveSchedule($) {
     # Create a new file. We put the date in this filename.
     my $ndate = DateTime->now();
     my $outfile = sprintf "schedule-%s-%s-%4d%02d%02d_%02d%02d%02d.json",
-    $cjson->{'program'}->{'observatory'}, $cjson->{'program'}->{'term'}->{'term'},
-    $ndate->year(), $ndate->month(), $ndate->day(), $ndate->hour(),
-    $ndate->minute(), $ndate->second();
+	$cjson->{'program'}->{'observatory'}->{'observatory'}, 
+	$cjson->{'program'}->{'term'}->{'term'},
+	$ndate->year(), $ndate->month(), $ndate->day(), $ndate->hour(),
+	$ndate->minute(), $ndate->second();
     open(O, ">".$outfile) || return 1;
     print O $schedstring."\n";
     close(O);

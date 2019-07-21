@@ -645,19 +645,12 @@ const summariseSemester = function() {
   return r;
 };
 
-// A little helper function to do things to a DOM element.
-const fillId = function(id, text, addClasses, remClasses) {
-  // Try to find the ID.
-  var e = document.getElementById(id);
+// Add one or more classes to a DOM element.
+const domAddClasses = function(e, addClasses) {
   if ((typeof e == "undefined") || (e == "undefined")) {
-    console.log("cannot find DOM element with id " + id);
     return;
   }
-
-  if ((typeof text != "undefined") && (text != null)) {
-    e.innerHTML = text;
-  }
-
+  
   // Do we want to add one or more classes?
   if ((typeof addClasses != "undefined") &&
       (addClasses != null)) {
@@ -674,6 +667,23 @@ const fillId = function(id, text, addClasses, remClasses) {
       }
     }
   }
+  
+};
+
+// A little helper function to do things to a DOM element.
+const fillId = function(id, text, addClasses, remClasses) {
+  // Try to find the ID.
+  var e = document.getElementById(id);
+  if ((typeof e == "undefined") || (e == "undefined")) {
+    console.log("cannot find DOM element with id " + id);
+    return;
+  }
+
+  if ((typeof text != "undefined") && (text != null)) {
+    e.innerHTML = text;
+  }
+
+  domAddClasses(e, addClasses);
 
   // Do we want to remove one or more classes.
   if ((typeof remClasses != "undefined") &&
@@ -775,6 +785,15 @@ const emptyDomNode = function(id) {
   return n;
 };
 
+// Add a click handler for a DOM element.
+const addClickHandler = function(e, callback) {
+  if (e) {
+    e.addEventListener("click", callback);
+    // Add the class to show it can be clicked.
+    domAddClasses(e, "clickEnabled");
+  }
+};
+
 // Make the project table.
 const updateProjectTable = function() {
   // Have we already made the table?
@@ -828,7 +847,7 @@ const updateProjectTable = function() {
 	td.setAttributeNode(st);
       }
       // We put an event handler on this to show its details.
-      td.addEventListener("click", projectClicker(p.ident));
+      addClickHandler(td, projectClicker(p.ident));
       r.appendChild(td);
       // The rating element never changes.
       td = makeElement("td", p.rating);
@@ -1360,10 +1379,18 @@ const getLocalSchedule = function() {
   return null;
 };
 
-const saveLocalSchedule = function() {
+const updateLocalSchedule = function() {
+  // This routine uses the save function, but updates the modification
+  // time beforehand.
   if (scheduleData != null) {
     var n = new Date();
     scheduleData.modificationTime = n.getTime() / 1000;
+  }
+  saveLocalSchedule();
+};
+
+const saveLocalSchedule = function() {
+  if (scheduleData != null) {
     localModificationTime = scheduleData.modificationTime;
     window.localStorage.setItem(localKey, JSON.stringify(scheduleData));
   }
@@ -1389,6 +1416,38 @@ const saveScheduleToServer = function() {
     //xhr.send({ "request": "save",
     //	       "schedule": JSON.stringify(scheduleData) });
     xhr.send("request=save&schedule=" + JSON.stringify(scheduleData));
+  }
+};
+
+const displayModalMessage = function(msg) {
+  var m = document.getElementById("myModal");
+  if (typeof msg != "undefined") {
+    fillId("modaltext", msg);
+
+    // Show the modal.
+    m.style.display = "block";
+
+    // Set up a handler to close the modal.
+    var c = document.getElementById("modalcloser");
+    addClickHandler(c, function() {
+      m.style.display = "none";
+    });
+
+  }
+  
+};
+
+const revertScheduleToServer = function() {
+  // We don't do anything unless the server date is earlier
+  // than the local modification date.
+  console.log("attempting to revert schedule");
+  if (!navigator.onLine) {
+    // Can't revert, we're not online.
+    displayModalMessage("Not online, cannot revert.");
+  } else  if (localModificationTime <= serverModificationTime) {
+    displayModalMessage("The local schedule is the same as the server, no need to revert.");
+  } else {
+    displayModalMessage("WARNING: reverting the schedule will lose all changes. Are you sure?");
   }
 };
 
@@ -1422,7 +1481,7 @@ const nighttimeChange = function() {
   // Set this in the project details.
   previouslySelectedProject.details.prefers_night = (nc.checked) ? 1 : 0;
   // Save the change locally.
-  saveLocalSchedule();
+  updateLocalSchedule();
 };
 
 // Configure some event handlers on existing nodes.
@@ -1433,11 +1492,17 @@ const staticEventHandlers = function() {
 
   // Enable the save button.
   var sb = document.getElementById("savebutton");
-  sb.addEventListener("click", saveScheduleToServer);
+  addClickHandler(sb, saveScheduleToServer);
+
+  // Enable the revert button.
+  var rb = document.getElementById("revertbutton");
+  addClickHandler(rb, revertScheduleToServer);
+
 };
 staticEventHandlers();
 
-  // Start the process by loading the file.
+
+// Start the process by loading the file.
 const pageInitBootstrap = function() {
   return loadFile(pageInit);
 };

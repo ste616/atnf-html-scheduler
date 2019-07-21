@@ -1628,6 +1628,9 @@ sub createProject($$$$$$$$) {
 	$date_preferred = &datehash2epochs($preferred);
     }
 
+    # Remove any bad characters from the comments.
+    $comments =~ s/\;//g;
+    
     my $rob = {
 	'ident' => $ident,
 	'type' => $type,
