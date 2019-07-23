@@ -61,13 +61,29 @@
       border: 1px dotted black; }
       #projectslotsSelection thead  th { background-color: lightgreen; }
       .clickEnabled { cursor: pointer; }
-      .modal { display: none; position: fixed; z-index: 1; left: 0; top: 0;
-      width: 100%; height: 100%; overflow: auto; background-color: rgb(0,0,0);
-      background-color: rgba(0,0,0,0.4); }
-      .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px;
-      border: 1px solid #888; width: 80%; }
-      .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
-      .close:hover, .close:focus { color: black; text-decoration: none; cursor: pointer; }
+      .modal { display: none; position: fixed; z-index: 1; left: 0;
+      top: 0; width: 100%; height: 100%; overflow: auto;
+      background-color: rgb(0,0,0); /* Fallback color */
+      background-color: rgba(0,0,0,0.4); /* Black w/ opacity */ }
+      .modal-header { padding: 2px 16px; background-color: #fc1703;
+      color: white; }
+      .modal-body {padding: 2px 16px;}
+      .modal-footer { padding: 2px 16px; background-color: white;
+      color: white; text-align: center; font-size: 1.3em; }
+      .modal-content { position: relative; background-color: #fefefe;
+      margin: auto; padding: 0; border: 1px solid #888; width: 80%;
+      box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
+      animation-name: animatetop; animation-duration: 0.4s; }
+      @keyframes animatetop { from {top: -300px; opacity: 0}
+      to {top: 0; opacity: 1} }
+      .yesoption { padding: 0.4em;
+      background-color: #009e15; color: black; text-align: center;
+      display: inline-block; }
+      .nooption { padding: 0.4em;
+      background-color: #fc1703; color: black; text-align: center;
+      display: inline-block; }
+      .close { padding: 0.4em; background-color: black; color: white;
+      display: inline-block; }
     </style>
   </head>
   <body>
@@ -118,14 +134,21 @@
       <div id="semestersummary"></div>
     </div>
     <div id="myModal" class="modal">
-      
       <!-- Modal content -->
       <div class="modal-content">
-	<span id="modalcloser" class="close">&times;</span>
-	<p id="modaltext">Some text in the Modal..</p>
+	<div class="modal-header">
+	  &nbsp;
+	</div>
+	<div class="modal-body">
+	  <p id="modalBodyText">Some other text...</p>
+	</div>
+	<div class="modal-footer">
+	  <span class="close" id="modalcloser">&times;</span>
+	  <span class="yesoption" id="modalyes">YES</span>
+	  <span class="nooption" id="modalno">NO</span>
+	</div>
       </div>
-      
-    </div>    
+    </div>
     <script src="html_scheduler.js"></script>
   </body>
 </html>

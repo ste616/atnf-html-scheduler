@@ -15,6 +15,7 @@ var localChecked = false;
 var semesterStart = null;
 var semesterEnd = null;
 var allProjectSummary = null;
+var constraintBoxGroup = null;
 
 // Function to calculate the DOY.
 const doy = function(d) {
@@ -76,48 +77,71 @@ meas.height = nDays * meas.dayHeight + 2 * meas.marginTop;
 
 // Function that draws the n-th day in the schedule.
 // Takes the day number n, the Date d and the group g to draw to.
-const drawDay = function(n, d, g) {
-  // The date is shown in the day label box.
-  var dayLabelOpts = {
-    x: meas.marginLeft, y: (meas.marginTop + n * meas.dayHeight),
-    width: meas.dayLabelWidth, height: meas.dayHeight,
-    stroke: "black", strokeWidth: 2, fill: '#ffffff'
-  };
-  // Colour the weekends differently.
-  if ((d.getDay() == 0) || (d.getDay() == 6)) {
-    dayLabelOpts.fill = "#fa8072";
-  }
-  var dayLabelBox = new Konva.Rect(dayLabelOpts);
-  // Make the string to go into this box.
-  var dateString = new Konva.Text({
-    x: meas.marginLeft + 5, y: (meas.marginTop + n * meas.dayHeight),
-    text: printDate(d), fontSize: 16, verticalAlign: "middle",
-    height: meas.dayHeight
-  });
-  // Draw the outline of the box for the hours.
-  var dayBox = new Konva.Rect({
-    x: meas.marginLeft + meas.dayLabelWidth, y: (meas.marginTop + n * meas.dayHeight),
-    width: meas.dayWidth, height: meas.dayHeight,
-    stroke: "black", strokeWidth: 2
-  });
-  g.add(dayLabelBox);
-  g.add(dateString);
-  g.add(dayBox);
-
-  // Draw an hour grid.
-  for (var j = 0; j < 24; j++) {
-    //fillColour = "#00aa00";
-    fillColour = "#" + scheduleData.program.colours.unscheduled;
-    if (j % 2) {
-      fillColour = "#ffffff";
+// Can optionally make cross-hatched areas with colour c and
+// start,end time pairs listed in t. If you don't want that, ensure
+// t is undefined.
+// If the date box doesn't need to be redrawn, set dd to false.
+const drawDay = function(n, d, g, dd, c, t, g2) {
+  if (dd == true) {
+    // The date is shown in the day label box.
+    var dayLabelOpts = {
+      x: meas.marginLeft, y: (meas.marginTop + n * meas.dayHeight),
+      width: meas.dayLabelWidth, height: meas.dayHeight,
+      stroke: "black", strokeWidth: 2, fill: '#ffffff'
+    };
+    // Colour the weekends differently.
+    if ((d.getDay() == 0) || (d.getDay() == 6)) {
+      dayLabelOpts.fill = "#fa8072";
     }
-    var hourRect = new Konva.Rect({
-      x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
-      y: (meas.marginTop + n * meas.dayHeight + 1),
-      width: (2 * meas.halfHourWidth), height: (meas.dayHeight - 2),
-      fill: fillColour, stroke: fillColour, strokeWidth: 0
+    var dayLabelBox = new Konva.Rect(dayLabelOpts);
+    // Make the string to go into this box.
+    var dateString = new Konva.Text({
+      x: meas.marginLeft + 5, y: (meas.marginTop + n * meas.dayHeight),
+      text: printDate(d), fontSize: 16, verticalAlign: "middle",
+      height: meas.dayHeight
     });
-    g.add(hourRect);
+    // Draw the outline of the box for the hours.
+    var dayBox = new Konva.Rect({
+      x: meas.marginLeft + meas.dayLabelWidth, y: (meas.marginTop + n * meas.dayHeight),
+      width: meas.dayWidth, height: meas.dayHeight,
+      stroke: "black", strokeWidth: 2
+    });
+    g.add(dayLabelBox);
+    g.add(dateString);
+    g.add(dayBox);
+    
+    // Draw an hour grid.
+    for (var j = 0; j < 24; j++) {
+      //fillColour = "#00aa00";
+      fillColour = "#" + scheduleData.program.colours.unscheduled;
+      if (j % 2) {
+	fillColour = "#ffffff";
+      }
+      var hourRect = new Konva.Rect({
+	x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
+	y: (meas.marginTop + n * meas.dayHeight + 1),
+	width: (2 * meas.halfHourWidth), height: (meas.dayHeight - 2),
+	fill: fillColour, stroke: fillColour, strokeWidth: 0
+      });
+      g.add(hourRect);
+    }
+  }
+
+  // Make the cross-hatching if asked to.
+  if (typeof t != "undefined") {
+    for (var i = 0; i < t.length; i++) {
+      var leftx = meas.marginLeft + meas.dayLabelWidth +
+	  t[0] * 2 * meas.halfHourWidth;
+      var rightx = meas.marginLeft + meas.dayLabelWidth +
+	  t[1] * 2 * meas.halfHourWidth;
+      var dx = rightx - leftx;
+      var coverageBox = new Konva.Rect({
+	x: leftx, y: (meas.marginTop + n * meas.dayHeight + 1),
+	width: dx, height: (meas.dayHeight - 2),
+	fill: c, opacity: 0.7
+      });
+      g2.add(coverageBox);
+    }
   }
 };
 
@@ -347,7 +371,7 @@ const cleanjson = function(d) {
 };
 
 // Load the schedule JSON file.
-const loadFile = function(callback) {
+const loadFile = function(callback, forceServer) {
   // We don't do anything if we haven't checked for a local file.
   if (!localChecked) {
     return;
@@ -381,6 +405,11 @@ const loadFile = function(callback) {
       loadLocal = false;
     }
   }
+
+  if (forceServer == true) {
+    loadLocal = false;
+  }
+  
   if (loadLocal == true) {
     console.log("chose to load local schedule");
     callback(null, getLocalSchedule());
@@ -670,6 +699,24 @@ const domAddClasses = function(e, addClasses) {
   
 };
 
+// A little helper function to fill input values.
+const fillInput = function(id, text) {
+  var e = document.getElementById(id);
+  if ((typeof e == "undefined") || (e == "undefined")) {
+    console.log("cannot find input with id " + id);
+    return;
+  }
+
+  if ((typeof text != "undefined") && (text != null)) {
+    e.value = text;
+  }
+};
+
+const datetimeToSmallString = function(dts) {
+  var dt = new Date(dts * 1000);
+  return (dt.getDate() + "/" + (dt.getMonth() + 1));
+};
+
 // A little helper function to do things to a DOM element.
 const fillId = function(id, text, addClasses, remClasses) {
   // Try to find the ID.
@@ -743,7 +790,13 @@ const showProjectDetails = function(ident) {
   } else {
     nc.checked = true;
   }
-
+  if ((project.details.excluded_dates instanceof Array) &&
+      (project.details.excluded_dates.length > 0)) {
+    project.details.excluded_dates.sort();
+    var datestrings = project.details.excluded_dates.map(datetimeToSmallString);
+    fillInput("baddates", datestrings.join(","));
+  }
+  
   // Make a table with each of the slots.
   // Empty the current table.
   var slotTable = emptyDomNode("projectslotsSelectionBody");
@@ -768,9 +821,21 @@ const showProjectDetails = function(ident) {
     td = makeElement("td", s.scheduled_duration + " / " +
 		     s.requested_duration);
     tr.appendChild(td);
+
+    // Add a click handler on this row.
     
   }
   
+};
+
+const selectSlot = function(slotnumber) {
+  
+};
+
+const slotSelectorGen = function(sn) {
+  return function() {
+    selectSlot(sn);
+  };
 };
 
 const emptyDomNode = function(id) {
@@ -798,6 +863,14 @@ const addClickHandler = function(e, callback) {
 const updateProjectTable = function() {
   // Have we already made the table?
   var t = document.getElementById("projects-table");
+  // Go through the projects.
+  allProjectSummary = summariseProjects();
+  // Sort the projects by rank.
+  var sortedProjects = allProjectSummary;
+  sortedProjects.sort(function(a, b) {
+    return (b.rating - a.rating);
+  });
+
   if (!t) {
     // Not made yet.
     // Make it.
@@ -825,13 +898,6 @@ const updateProjectTable = function() {
     h.appendChild(th);
     t.appendChild(h);
 
-    // Go through the projects.
-    allProjectSummary = summariseProjects();
-    // Sort the projects by rank.
-    var sortedProjects = allProjectSummary;
-    sortedProjects.sort(function(a, b) {
-      return (b.rating - a.rating);
-    });
     
     for (var i = 0; i < sortedProjects.length; i++) {
       var p = sortedProjects[i];
@@ -1123,13 +1189,19 @@ const setupCanvas = function(data) {
   var dayBoxGroup = new Konva.Group({
     draggable: false
   });
+
+  constraintBoxGroup = new Konva.Group({
+    draggable: false
+  });
+  backgroundLayer.add(constraintBoxGroup);
   
   allDates.forEach(function(d, i) {
-    drawDay(i, d, dayBoxGroup);
+    drawDay(i, d, dayBoxGroup, true);
   });
   // Add the background groups and layer to the stage.
   backgroundLayer.add(dayBoxGroup);
   stage.add(backgroundLayer);
+
   
   // Make the top layer, which will be for the LST and daylight.
   var topLayer = new Konva.Layer();
@@ -1292,6 +1364,28 @@ const drawArrayConfigurations = function() {
   arrayLayer.draw();
 };
 
+// Clear the part of the page which shows the available slots.
+const clearSlotSelector = function() {
+  fillId("projectselectedIdent", "NONE");
+  fillId("projectselectedRating", 0.0);
+  fillId("projectselectedTime", 0);
+  fillId("projectselectedSlots", 0);
+
+  emptyDomNode("projectslotsSelectionBody");
+
+  // Deselect the slots.
+  // TODO
+
+  // Clear the inputs.
+  fillId("projectcomments", "");
+  var nc = document.getElementById("nighttime");
+  nc.checked = false;
+  
+  fillInput("gooddates", "");
+  fillInput("baddates", "");
+  
+};
+
 // The page initialisation function.
 const pageInit = function(status, data) {
   if ((typeof data == "undefined") || (data == null)) {
@@ -1315,6 +1409,9 @@ const pageInit = function(status, data) {
   setupCanvas(scheduleData);
   updateProjectTable();
   updateSemesterSummary();
+
+  // Remove any displayed project.
+  clearSlotSelector();
 }
 
 // Show the online or offline state.
@@ -1419,35 +1516,89 @@ const saveScheduleToServer = function() {
   }
 };
 
-const displayModalMessage = function(msg) {
+const closeModalMessage = function() {
+  var m = document.getElementById("myModal");
+  m.style.display = "none";
+};
+
+const displayModalMessage = function(msg, showOptions, closeHandlers) {
   var m = document.getElementById("myModal");
   if (typeof msg != "undefined") {
-    fillId("modaltext", msg);
+    fillId("modalBodyText", msg);
 
+    // Determine which options to show.
+    var c = document.getElementById("modalcloser");
+    var y = document.getElementById("modalyes");
+    var n = document.getElementById("modalno");
+    if (showOptions == false) {
+      // We display just the closing mark.
+      c.style.display = "inline-block";
+      y.style.display = "none";
+      n.style.display = "none";
+      if ((typeof closeHandlers != "undefined") &&
+	  (typeof closeHandlers.close != "undefined")) {
+	addClickHandler(c, closeHandlers.close);
+      } else {
+	// Generic close handler.
+	addClickHandler(c, closeModalMessage);
+      }
+    } else {
+      // We display the yes/no options.
+      c.style.display = "none";
+      y.style.display = "inline-block";
+      n.style.display = "inline-block";
+      var yHandler = closeModalMessage;
+      var nHandler = closeModalMessage;
+      if (typeof closeHandlers != "undefined") {
+	if (typeof closeHandlers.yes != "undefined") {
+	  yHandler = closeHandlers.yes;
+	}
+	if (typeof closeHandlers.no != "undefined") {
+	  nHandler = closeHandlers.no;
+	}
+      }
+      addClickHandler(y, yHandler);
+      addClickHandler(n, nHandler);
+    }
     // Show the modal.
     m.style.display = "block";
-
-    // Set up a handler to close the modal.
-    var c = document.getElementById("modalcloser");
-    addClickHandler(c, function() {
-      m.style.display = "none";
-    });
-
   }
   
 };
 
 const revertScheduleToServer = function() {
+  // Close the modal.
+  closeModalMessage();
+
+  // Load the schedule.
+  loadFile(pageInit, true);
+  
+  // Tell the user what has happened.
+  displayModalMessage("Schedule reverted to server version.", false);
+  
+};
+
+const revertCancel = function() {
+  // Close the modal.
+  closeModalMessage();
+
+  // Tell the user we didn't revert.
+  displayModalMessage("Revert cancelled.", false);
+  
+};
+
+const revertScheduleToServerCheck = function() {
   // We don't do anything unless the server date is earlier
   // than the local modification date.
-  console.log("attempting to revert schedule");
   if (!navigator.onLine) {
     // Can't revert, we're not online.
     displayModalMessage("Not online, cannot revert.");
   } else  if (localModificationTime <= serverModificationTime) {
-    displayModalMessage("The local schedule is the same as the server, no need to revert.");
+    displayModalMessage("The local schedule is the same as the server, no need to revert.", false);
   } else {
-    displayModalMessage("WARNING: reverting the schedule will lose all changes. Are you sure?");
+    displayModalMessage("WARNING: reverting the schedule will lose all changes. Are you sure?",
+			true, { 'yes': revertScheduleToServer,
+				'no': revertCancel });
   }
 };
 
@@ -1496,7 +1647,7 @@ const staticEventHandlers = function() {
 
   // Enable the revert button.
   var rb = document.getElementById("revertbutton");
-  addClickHandler(rb, revertScheduleToServer);
+  addClickHandler(rb, revertScheduleToServerCheck);
 
 };
 staticEventHandlers();
@@ -1504,7 +1655,7 @@ staticEventHandlers();
 
 // Start the process by loading the file.
 const pageInitBootstrap = function() {
-  return loadFile(pageInit);
+  return loadFile(pageInit, false);
 };
 checkServerTime(pageInitBootstrap);
 checkLocalTime(pageInitBootstrap);
