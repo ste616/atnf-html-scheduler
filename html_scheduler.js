@@ -271,6 +271,45 @@ const hoursUntilLst = function(zlst, dlst) {
   return ((dlst - zlst) / 1.002737909350795);
 };
 
+const smallStringToDatetime = function(smstr) {
+  // We take a date/month string and work out the date given
+  // our semester constraint.
+  var dels = smstr.split("/");
+  var year = semesterStart.getFullYear();
+  console.log("trying " + year + "-" + parseInt(dels[1] - 1) + "-" +
+	      parseInt(dels[0]));
+  var checkDate = new Date(year, parseInt(dels[1] - 1), parseInt(dels[0]));
+  if (checkDate.getTime() < semesterStart.getTime()) {
+    // We're probably in the next year.
+    checkDate = new Date(year + 1, dels[1] - 1, dels[0]);
+  } else if (checkDate.getTime() > semesterEnd.getTime()) {
+    // There should be no way this happens.
+    console.log("found a too big date, weirdly");
+    return null;
+  }
+
+  // We should now be in range.
+  if ((checkDate.getTime() >= semesterStart.getTime()) &&
+      (checkDate.getTime() < semesterEnd.getTime())) {
+    return checkDate;
+  } else {
+    // Poop.
+    console.log("Unable to fit the date!");
+    return null;
+  }
+};
+
+const convertSmallDates = function(smdates) {
+  // Split the date string.
+  var sms = smdates.split(",");
+  var darr = sms.map(smallStringToDatetime);
+  var rarr = darr.map(function(d) {
+    return (d.getTime() / 1000);
+  });
+
+  return rarr;
+};
+
 // Draw an LST line on a particular day.
 const lstDraw = function(n, d, l, p, g) {
   // Calculate the LST at midnight this day.
@@ -751,6 +790,7 @@ const fillId = function(id, text, addClasses, remClasses) {
 };
 
 var previouslySelectedProject = null;
+var previouslySelectedSlot = null;
 
 // Show the details of a particular project, and present the slot
 // scheduling interface for it.
@@ -795,6 +835,17 @@ const showProjectDetails = function(ident) {
     project.details.excluded_dates.sort();
     var datestrings = project.details.excluded_dates.map(datetimeToSmallString);
     fillInput("baddates", datestrings.join(","));
+  } else {
+    // Blank the input.
+    fillInput("baddates", "");
+  }
+  if ((project.details.preferred_dates instanceof Array) &&
+      (project.details.preferred_dates.length > 0)) {
+    project.details.preferred_dates.sort();
+    var datestrings = project.details.preferred_dates.map(datetimeToSmallString);
+    fillInput("gooddates", datestrings.join(","));
+  } else {
+    fillInput("gooddates", "");
   }
   
   // Make a table with each of the slots.
@@ -802,8 +853,9 @@ const showProjectDetails = function(ident) {
   var slotTable = emptyDomNode("projectslotsSelectionBody");
   for (var i = 0; i < project.details.slot.length; i++) {
     var s = project.details.slot[i];
+    var rid = "slotrow-" + project.details.ident + "-" + i;
     var tr = makeElement("tr", null, {
-      'id': "slotrow-" + project.details.ident + "-" + i
+      'id': rid
     });
     slotTable.appendChild(tr);
     var tsel = makeElement("th", "&nbsp;", {
@@ -823,12 +875,44 @@ const showProjectDetails = function(ident) {
     tr.appendChild(td);
 
     // Add a click handler on this row.
-    
+    addClickHandler(tr, slotSelectorGen(i));
   }
   
 };
 
 const selectSlot = function(slotnumber) {
+  // Highlight the table element.
+  var hid = "slotselected-" + previouslySelectedProject.details.ident +
+      "-" + slotnumber;
+  console.log("selecting slot " + slotnumber);
+  fillId(hid, "&nbsp;", "slotSelected");
+  // Dehighlight the previously selected slot.
+  if (previouslySelectedSlot != null) {
+    var pid = "slotselected-" + previouslySelectedProject.details.ident +
+	"-" + previouslySelectedSlot;
+    console.log("deselecting slot " + previouslySelectedSlot);
+    fillId(pid, "&nbsp;", null, "slotSelected");
+  }
+  previouslySelectedSlot = slotnumber;
+  
+  // Remove any previous restrictions from the canvas.
+  constraintBoxGroup.destroyChildren();
+  
+  // Work out the restrictions and put them on the canvas.
+  // Begin with bad dates.
+  for (var i = 0;
+       i < previouslySelectedProject.details.excluded_dates.length; i++) {
+    // Which day needs drawing.
+    var daynum = Math.floor((previouslySelectedProject.details.excluded_dates[i] -
+			     (scheduleFirst.getTime() / 1000)) / 86400) + 1;
+    drawDay(daynum, null, null, false, "red", [ 0, 24 ],
+	    constraintBoxGroup);
+  }
+  constraintBoxGroup.draw();
+  
+  // Scroll to the right place if we have it already
+  // scheduled, or the first good date.
+  
   
 };
 
@@ -848,6 +932,13 @@ const emptyDomNode = function(id) {
   }
 
   return n;
+};
+
+// Add a change handler for a DOM element.
+const addChangeHandler = function(e, callback) {
+  if (e) {
+    e.addEventListener("change", callback);
+  }
 };
 
 // Add a click handler for a DOM element.
@@ -1412,6 +1503,7 @@ const pageInit = function(status, data) {
 
   // Remove any displayed project.
   clearSlotSelector();
+  previouslySelectedProject = null;
 }
 
 // Show the online or offline state.
@@ -1635,6 +1727,37 @@ const nighttimeChange = function() {
   updateLocalSchedule();
 };
 
+// Our event handler for when one of the date boxes gets changed.
+const dateChange = function(type) {
+  var db = null;
+  if (type == "good") {
+    db = document.getElementById("gooddates");
+  } else if (type == "bad") {
+    db = document.getElementById("baddates");
+  } else {
+    return;
+  }
+
+  if (previouslySelectedProject == null) {
+    // Reset the box.
+    if (type == "good") {
+      fillInput("gooddates", "");
+    } else if (type == "bad") {
+      fillInput("baddates", "");
+    }
+    return;
+  }
+
+  var dates = convertSmallDates(db.value);
+  if (type == "good") {
+    previouslySelectedProject.details.preferred_dates = dates;
+  } else if (type == "bad") {
+    previouslySelectedProject.details.excluded_dates = dates;
+  }
+
+  updateLocalSchedule();
+};
+
 // Configure some event handlers on existing nodes.
 const staticEventHandlers = function() {
   // Enable the check box for nighttimes.
@@ -1649,6 +1772,15 @@ const staticEventHandlers = function() {
   var rb = document.getElementById("revertbutton");
   addClickHandler(rb, revertScheduleToServerCheck);
 
+  var gd = document.getElementById("gooddates");
+  addChangeHandler(gd, function() {
+    dateChange("good");
+  });
+
+  var bd = document.getElementById("baddates");
+  addChangeHandler(bd, function() {
+    dateChange("bad");
+  });
 };
 staticEventHandlers();
 
