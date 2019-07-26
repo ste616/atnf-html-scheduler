@@ -15,7 +15,10 @@ var localChecked = false;
 var semesterStart = null;
 var semesterEnd = null;
 var allProjectSummary = null;
+var constraintLayer = null;
 var constraintBoxGroup = null;
+var backgroundLayer = null;
+var allDates = null;
 
 // Function to calculate the DOY.
 const doy = function(d) {
@@ -473,9 +476,51 @@ const loadFile = function(callback, forceServer) {
   }
 };
 
+// The the sexagesimal string s and convert it to degrees,
+// noting if the string is actually in hours.
+const stringToDegrees = function(s, inHours) {
+  var sels = s.split(":");
+  var isNeg = false;
+  if (/^\-/.test(sels[0])) {
+    isNeg = true;
+  }
+
+  var d = Math.abs(parseInt(sels[0]));
+  var m = parseInt(sels[1]);
+  var s = parseFloat(sels[2]);
+  var n = d + m / 60.0 + s / 3600.0;
+  if (isNeg) {
+    n *= -1.0;
+  }
+
+  if (inHours) {
+    n *= 15.0;
+  }
+
+  return n;
+};
+
+const atcaLat = 149.5501388;
+
+// Given some coordinates c (an array with RA, Dec in degrees),
+// on a Date d, calculate the rise hour and set hour in the day.
+const calculateSourceStuff = function(c, d) {
+  var mjd = date2mjd(d);
+  var haset = haset_azel(c[1], atcaLat, 0);
+  var riseHour = hourBounds((c[0] - haset) / 15);
+  var setHour = hourBounds((c[0] + haset) / 15);
+  var zlst = 24 * mjd2lst(mjd, (atcaLat / 360.0), 0);
+  var riseDayHour = hoursUntilLst(zlst, riseHour);
+  var setDayHour = hoursUntilLst(zlst, setHour);
+
+  return [ riseDayHour, setDayHour ];
+};
+
 const calculateSunStuff = function(d) {
   var mjd = date2mjd(d);
   var sp = sunPosition(mjd);
+  return calculateSourceStuff(sp.map(rad2deg), d);
+  
   var decd = rad2deg(sp[1]);
   var haset = haset_azel(decd, 149.5501388, 0);
   var hour = degreesBounds(rad2deg(sp[0]));
@@ -803,11 +848,14 @@ const showProjectDetails = function(ident) {
     return;
   }
 
-  // Deselect any previously selected project.
-  if (previouslySelectedProject != null) {
+  // Deselect any previously selected project, unless it's us.
+  if (previouslySelectedProject == project) {
+    return;
+  } else if (previouslySelectedProject != null) {
     fillId("row-" + previouslySelectedProject.details.ident, null,
 	   null, "selectedProject");
     previouslySelectedProject = null;
+    previouslySelectedSlot = null;
   }
   
   // Select the row in the table.
@@ -881,16 +929,15 @@ const showProjectDetails = function(ident) {
 };
 
 const selectSlot = function(slotnumber) {
+  var psp = previouslySelectedProject.details;
   // Highlight the table element.
-  var hid = "slotselected-" + previouslySelectedProject.details.ident +
+  var hid = "slotselected-" + psp.ident +
       "-" + slotnumber;
-  console.log("selecting slot " + slotnumber);
   fillId(hid, "&nbsp;", "slotSelected");
   // Dehighlight the previously selected slot.
   if (previouslySelectedSlot != null) {
-    var pid = "slotselected-" + previouslySelectedProject.details.ident +
+    var pid = "slotselected-" + psp.ident +
 	"-" + previouslySelectedSlot;
-    console.log("deselecting slot " + previouslySelectedSlot);
     fillId(pid, "&nbsp;", null, "slotSelected");
   }
   previouslySelectedSlot = slotnumber;
@@ -901,14 +948,21 @@ const selectSlot = function(slotnumber) {
   // Work out the restrictions and put them on the canvas.
   // Begin with bad dates.
   for (var i = 0;
-       i < previouslySelectedProject.details.excluded_dates.length; i++) {
+       i < psp.excluded_dates.length; i++) {
     // Which day needs drawing.
-    var daynum = Math.floor((previouslySelectedProject.details.excluded_dates[i] -
+    var daynum = Math.floor((psp.excluded_dates[i] -
 			     (scheduleFirst.getTime() / 1000)) / 86400) + 1;
     drawDay(daynum, null, null, false, "red", [ 0, 24 ],
 	    constraintBoxGroup);
   }
-  constraintBoxGroup.draw();
+  // Then LST.
+  var sourceTimes = allDates.map(function(d) {
+    var ra = stringToDegrees(psp.slot[previouslySelectedSlot].position.ra, true);
+    var dec = stringToDegrees(psp.slot[previouslySelectedSlot].position.dec, false);
+    calculateSourceStuff([ ra, dec ], d);
+  });
+  
+  constraintLayer.draw();
   
   // Scroll to the right place if we have it already
   // scheduled, or the first good date.
@@ -1249,7 +1303,7 @@ const setupCanvas = function(data) {
     pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
     allSunDates.push(pdate);
   }
-  var allDates = allSunDates.slice(1, nDays);
+  allDates = allSunDates.slice(1, nDays);
   scheduleLast = new Date();
   scheduleLast.setTime(allDates[allDates.length - 1].getTime() + 86400 * 1000);
   
@@ -1275,16 +1329,17 @@ const setupCanvas = function(data) {
   hourStage.add(timeLayer);
   
   // Make the background layer.
-  var backgroundLayer = new Konva.Layer();
+  backgroundLayer = new Konva.Layer();
   // Add to this a group which will contain all the day boxes.
   var dayBoxGroup = new Konva.Group({
     draggable: false
   });
 
+  constraintLayer = new Konva.Layer();
   constraintBoxGroup = new Konva.Group({
     draggable: false
   });
-  backgroundLayer.add(constraintBoxGroup);
+  constraintLayer.add(constraintBoxGroup);
   
   allDates.forEach(function(d, i) {
     drawDay(i, d, dayBoxGroup, true);
@@ -1292,7 +1347,8 @@ const setupCanvas = function(data) {
   // Add the background groups and layer to the stage.
   backgroundLayer.add(dayBoxGroup);
   stage.add(backgroundLayer);
-
+  stage.add(constraintLayer);
+  
   
   // Make the top layer, which will be for the LST and daylight.
   var topLayer = new Konva.Layer();
