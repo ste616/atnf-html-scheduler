@@ -134,9 +134,9 @@ const drawDay = function(n, d, g, dd, c, t, g2) {
   if (typeof t != "undefined") {
     for (var i = 0; i < t.length; i++) {
       var leftx = meas.marginLeft + meas.dayLabelWidth +
-	  t[0] * 2 * meas.halfHourWidth;
+	  t[i][0] * 2 * meas.halfHourWidth;
       var rightx = meas.marginLeft + meas.dayLabelWidth +
-	  t[1] * 2 * meas.halfHourWidth;
+	  t[i][1] * 2 * meas.halfHourWidth;
       var dx = rightx - leftx;
       var coverageBox = new Konva.Rect({
 	x: leftx, y: (meas.marginTop + n * meas.dayHeight + 1),
@@ -865,9 +865,9 @@ const showProjectDetails = function(ident) {
   // Display the vital statistics.
   console.log(project);
   fillId("projectselectedIdent", project.details.ident);
-  fillId("projectselectedRating", project.summary.rating);
-  fillId("projectselectedTime", project.summary.requestedTime);
-  fillId("projectselectedSlots", project.summary.requestedSlots);
+  fillId("projectselectedPI", project.details.PI);
+  var projectselectedTable = document.getElementById("projectselected");
+  projectselectedTable.style["background-color"] = "#" + project.summary.colour;
   
   // Display the comments for the project.
   fillId("projectcomments", project.details.comments);
@@ -928,6 +928,14 @@ const showProjectDetails = function(ident) {
   
 };
 
+const calcDayNumber = function(d) {
+  if (d instanceof Date) {
+    return (Math.floor((d.getTime() - scheduleFirst.getTime()) / (86400 * 1000)) + 1);
+  } else {
+    return (Math.floor((d - (scheduleFirst.getTime() / 1000)) / 86400) + 1);
+  }
+};
+
 const selectSlot = function(slotnumber) {
   var psp = previouslySelectedProject.details;
   // Highlight the table element.
@@ -950,18 +958,29 @@ const selectSlot = function(slotnumber) {
   for (var i = 0;
        i < psp.excluded_dates.length; i++) {
     // Which day needs drawing.
-    var daynum = Math.floor((psp.excluded_dates[i] -
-			     (scheduleFirst.getTime() / 1000)) / 86400) + 1;
-    drawDay(daynum, null, null, false, "red", [ 0, 24 ],
+    /*var daynum = Math.floor((psp.excluded_dates[i] -
+      (scheduleFirst.getTime() / 1000)) / 86400) + 1;*/
+    var daynum = calcDayNumber(psp.excluded_dates[i]);
+    drawDay(daynum, null, null, false, "red", [ [ 0, 24 ] ],
 	    constraintBoxGroup);
   }
   // Then LST.
-  var sourceTimes = allDates.map(function(d) {
+  var sourceTimes = allDates.forEach(function(d) {
     var ra = stringToDegrees(psp.slot[previouslySelectedSlot].position.ra, true);
     var dec = stringToDegrees(psp.slot[previouslySelectedSlot].position.dec, false);
-    calculateSourceStuff([ ra, dec ], d);
+    var sourceRiseSets = calculateSourceStuff([ ra, dec ], d);
+    var daynum = calcDayNumber(d) - 1;
+    var tplots = [ sourceRiseSets ];
+    if (sourceRiseSets[0] > sourceRiseSets[1]) {
+      // Backwards order.
+      tplots = [ [ sourceRiseSets[0], 24 ], [ 0, sourceRiseSets[1] ] ];
+    }
+
+    drawDay(daynum, null, null, false, "orange", tplots, constraintBoxGroup);
+    return sourceRiseSets;
   });
-  
+  console.log(sourceTimes);
+
   constraintLayer.draw();
   
   // Scroll to the right place if we have it already
@@ -1514,9 +1533,9 @@ const drawArrayConfigurations = function() {
 // Clear the part of the page which shows the available slots.
 const clearSlotSelector = function() {
   fillId("projectselectedIdent", "NONE");
-  fillId("projectselectedRating", 0.0);
-  fillId("projectselectedTime", 0);
-  fillId("projectselectedSlots", 0);
+  fillId("projectselectedPI", "NOBODY");
+  var projectselectedTable = document.getElementById("projectselected");
+  projectselectedTable.style["background-color"] = "white";
 
   emptyDomNode("projectslotsSelectionBody");
 
