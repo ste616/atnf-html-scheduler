@@ -500,16 +500,18 @@ const stringToDegrees = function(s, inHours) {
   return n;
 };
 
-const atcaLat = 149.5501388;
+const atcaLong = 149.5501388;
+const atcaLat = -30.3128846;
 
 // Given some coordinates c (an array with RA, Dec in degrees),
 // on a Date d, calculate the rise hour and set hour in the day.
-const calculateSourceStuff = function(c, d) {
+// Use the elevation limit ellimit.
+const calculateSourceStuff = function(c, d, ellimit) {
   var mjd = date2mjd(d);
-  var haset = haset_azel(c[1], atcaLat, 0);
+  var haset = haset_azel(c[1], atcaLat, ellimit);
   var riseHour = hourBounds((c[0] - haset) / 15);
   var setHour = hourBounds((c[0] + haset) / 15);
-  var zlst = 24 * mjd2lst(mjd, (atcaLat / 360.0), 0);
+  var zlst = 24 * mjd2lst(mjd, (atcaLong / 360.0), 0);
   var riseDayHour = hoursUntilLst(zlst, riseHour);
   var setDayHour = hoursUntilLst(zlst, setHour);
 
@@ -519,17 +521,7 @@ const calculateSourceStuff = function(c, d) {
 const calculateSunStuff = function(d) {
   var mjd = date2mjd(d);
   var sp = sunPosition(mjd);
-  return calculateSourceStuff(sp.map(rad2deg), d);
-  
-  var decd = rad2deg(sp[1]);
-  var haset = haset_azel(decd, 149.5501388, 0);
-  var hour = degreesBounds(rad2deg(sp[0]));
-  var riseHour = hourBounds((hour - haset) / 15);
-  var setHour = hourBounds((hour + haset) / 15);
-  var zlst = 24 * mjd2lst(mjd, (149.5501388 / 360.0), 0);
-  var riseDayHour = hoursUntilLst(zlst, riseHour);
-  var setDayHour = hoursUntilLst(zlst, setHour);
-  return [ riseDayHour, setDayHour ];
+  return calculateSourceStuff(sp.map(rad2deg), d, 0);
 };
 
 // This contains all the nodes for each project in the table.
@@ -949,6 +941,15 @@ const selectSlot = function(slotnumber) {
     fillId(pid, "&nbsp;", null, "slotSelected");
   }
   previouslySelectedSlot = slotnumber;
+
+  // Fill in the table.
+  var psps = psp.slot[previouslySelectedSlot];
+  fillInput("sourceRightAscension", psps.position.ra);
+  fillInput("sourceDeclination", psps.position.dec);
+  fillInput("sourceLSTRise", psps.lst_start);
+  fillInput("sourceLSTSet", psps.lst_end);
+  var lstIndicator = document.getElementById("sourceUseLST");
+  lstIndicator.checked = (psps.lst_limits_used == 0) ? false : true;
   
   // Remove any previous restrictions from the canvas.
   constraintBoxGroup.destroyChildren();
@@ -966,9 +967,9 @@ const selectSlot = function(slotnumber) {
   }
   // Then LST.
   var sourceTimes = allDates.forEach(function(d) {
-    var ra = stringToDegrees(psp.slot[previouslySelectedSlot].position.ra, true);
-    var dec = stringToDegrees(psp.slot[previouslySelectedSlot].position.dec, false);
-    var sourceRiseSets = calculateSourceStuff([ ra, dec ], d);
+    var ra = stringToDegrees(psps.position.ra, true);
+    var dec = stringToDegrees(psps.position.dec, false);
+    var sourceRiseSets = calculateSourceStuff([ ra, dec ], d, 12);
     var daynum = calcDayNumber(d) - 1;
     var tplots = [ sourceRiseSets ];
     if (sourceRiseSets[0] > sourceRiseSets[1]) {
