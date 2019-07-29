@@ -841,9 +841,8 @@ const showProjectDetails = function(ident) {
   }
 
   // Deselect any previously selected project, unless it's us.
-  if (previouslySelectedProject == project) {
-    return;
-  } else if (previouslySelectedProject != null) {
+  if ((previouslySelectedProject != null) &&
+      (previouslySelectedProject != project)) {
     fillId("row-" + previouslySelectedProject.details.ident, null,
 	   null, "selectedProject");
     previouslySelectedProject = null;
@@ -1087,15 +1086,17 @@ const updateProjectTable = function() {
       td = makeElement("td", "NN", {
 	'id': "scheduledTime-" + p.ident });
       r.appendChild(td);
-      // The requested time does not need to be changed.
-      td = makeElement("td", p.requestedTime);
+      // The requested time may be changed.
+      td = makeElement("td", "NN", {
+	'id': "requestedTime-" + p.ident });
       r.appendChild(td);
       // The scheduled slots element will need to be changed.
       td = makeElement("td", "NN", {
 	'id': "scheduledSlots-" + p.ident });
       r.appendChild(td);
-      // The requested slots does not need to be changed.
-      td = makeElement("td", p.requestedSlots);
+      // The requested slots can be altered.
+      td = makeElement("td", "NN", {
+	'id': "requestedSlots-" + p.ident });
       r.appendChild(td);
     }
   }
@@ -1103,12 +1104,10 @@ const updateProjectTable = function() {
   // Update the table cells and rows.
   for (var i = 0; i < sortedProjects.length; i++) {
     var p = sortedProjects[i];
-    var scheduledTime = document.getElementById("scheduledTime-" +
-						p.ident);
-    scheduledTime.innerHTML = p.scheduledTime;
-    var scheduledSlots = document.getElementById("scheduledSlots-" +
-						 p.ident);
-    scheduledSlots.innerHTML = p.scheduledSlots;
+    fillId("scheduledTime-" + p.ident, p.scheduledTime);
+    fillId("requestedTime-" + p.ident, p.requestedTime);
+    fillId("scheduledSlots-" + p.ident, p.scheduledSlots);
+    fillId("requestedSlots-" + p.ident, p.requestedSlots);
   }
   
 };
@@ -1834,6 +1833,121 @@ const dateChange = function(type) {
   updateLocalSchedule();
 };
 
+// This routine makes a new slot object that is identical to
+// the one passed to it as s.
+const duplicateSlot = function(s) {
+  if (typeof s == "undefined") {
+    return;
+  }
+
+  var sString = JSON.stringify(s);
+  var r = JSON.parse(sString);
+  // Remove any scheduled time from the duplicated object.
+  r.scheduled = 0;
+  r.scheduled_duration = 0;
+  r.scheduled_start = 0;
+  return r;
+};
+
+// Our event handler for when the copy slot button gets clicked.
+const copySlot = function() {
+  // Is anything selected?
+  if ((previouslySelectedProject == null) ||
+      (previouslySelectedSlot == null)) {
+    return;
+  }
+
+  // Copy the currently selected slot and add it to the end
+  // of the slot list.
+  previouslySelectedProject.details.slot.push(
+    duplicateSlot(previouslySelectedProject.details.slot[previouslySelectedSlot])
+  );
+
+  // Update the table.
+  showProjectDetails(previouslySelectedProject.details.ident);
+  selectSlot(previouslySelectedProject.details.slot.length - 1);
+  updateProjectTable();
+
+  // Save the local schedule.
+  updateLocalSchedule();
+};
+
+// Our event handler for when the unschedule slot button gets
+// clicked.
+const unscheduleSlot = function() {
+  // Check if it is actually scheduled.
+  if ((previouslySelectedProject == null) ||
+      (previouslySelectedSlot == null)) {
+    return;
+  }
+
+  if (previouslySelectedProject.details
+      .slot[previouslySelectedSlot].scheduled == 0) {
+    return;
+  }
+
+  // Otherwise, remove it from the schedule.
+  previouslySelectedProject.details.slot[previouslySelectedSlot]
+    .scheduled = 0;
+  previouslySelectedProject.details.slot[previouslySelectedSlot]
+    .scheduled_duration = 0;
+  previouslySelectedProject.details.slot[previouslySelectedSlot]
+    .scheduled_start = 0;
+
+  // Update all the page details.
+  showProjectDetails(previouslySelectedProject.details.ident);
+  updateProjectTable();
+  // TODO: Update the canvas.
+
+  // Save the local schedule.
+  updateLocalSchedule();
+};
+
+// The routine which actually handles a slot deletion.
+const deleteThatSlot = function() {
+  closeModalMessage();
+  
+  previouslySelectedProject.details.slot.splice(
+    previouslySelectedSlot, 1);
+
+  // Update all the page details.
+  previouslySelectedSlot = null;
+  showProjectDetails(previouslySelectedProject.details.ident);
+  updateProjectTable();
+  // TODO: Update the canvas.
+
+  // Save the local schedule.
+  updateLocalSchedule();
+};
+
+// Or if the delete is cancelled.
+const deleteCancelled = function() {
+  closeModalMessage();
+
+  displayModalMessage("Delete cancelled.", false);
+};
+
+// Our event handler for when the delete slot button gets clicked.
+const deleteSlot = function() {
+  // Check if something is selected.
+  if ((previouslySelectedProject == null) ||
+      (previouslySelectedSlot == null)) {
+    return;
+  }
+
+  // Check if we are deleting the first scheduled configuration.
+  if ((previouslySelectedProject.details.ident == "CONFIG") &&
+      (previouslySelectedSlot == 0)) {
+    // Can't delete this one.
+    displayModalMessage("ERROR: Unable to delete first config.", false);
+    return;
+  }
+  
+  // Double check the user wants this.
+  displayModalMessage("Are you sure you want to delete the selected slot?",
+		      true, { 'yes': deleteThatSlot, 'no': deleteCancelled });
+};
+
 // Configure some event handlers on existing nodes.
 const staticEventHandlers = function() {
   // Enable the check box for nighttimes.
@@ -1857,6 +1971,15 @@ const staticEventHandlers = function() {
   addChangeHandler(bd, function() {
     dateChange("bad");
   });
+
+  var cs = document.getElementById("copyslotbutton");
+  addClickHandler(cs, copySlot);
+
+  var us = document.getElementById("unscheduleslotbutton");
+  addClickHandler(us, unscheduleSlot);
+
+  var ds = document.getElementById("deleteslotbutton");
+  addClickHandler(ds, deleteSlot);
 };
 staticEventHandlers();
 

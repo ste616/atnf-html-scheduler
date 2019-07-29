@@ -85,6 +85,9 @@
       .close { padding: 0.4em; background-color: black; color: white;
       display: inline-block; }
       .slotSelected { background-color: red; border: 1px solid red; }
+      #projectslotsManipulation { width: 99%; border: 0; border-collapse: collapse;
+      margin: 0.1em auto; }
+      #projectslotsManipulation td { text-align: center; }
     </style>
   </head>
   <body>
@@ -117,6 +120,11 @@
 	    <tr><td>&nbsp;</td><td>&nbsp;</td>
 	      <th>Use LST:</th>
 	      <td><input type="checkbox" id="sourceUseLST"></td></tr>
+	  </table>
+	  <table id="projectslotsManipulation">
+	    <tr><td><button id="copyslotbutton">Copy</button></td>
+	      <td><button id="unscheduleslotbutton">Unschedule</button></td>
+	      <td><button id="deleteslotbutton">Delete</button></td></tr>
 	  </table>
 	  <table id="projectslotsSelection">
 	    <thead>
