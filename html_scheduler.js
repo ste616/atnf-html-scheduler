@@ -959,8 +959,6 @@ const selectSlot = function(slotnumber) {
   for (var i = 0;
        i < psp.excluded_dates.length; i++) {
     // Which day needs drawing.
-    /*var daynum = Math.floor((psp.excluded_dates[i] -
-      (scheduleFirst.getTime() / 1000)) / 86400) + 1;*/
     var daynum = calcDayNumber(psp.excluded_dates[i]);
     drawDay(daynum, null, null, false, "red", [ [ 0, 24 ] ],
 	    constraintBoxGroup);
@@ -1315,6 +1313,82 @@ const pointerTime = function(e) {
   return { 'day': nDays, 'hour': (nHalfHours / 2) };
 };
 
+// This function compares two dates simply looking if the date and
+// month are the same.
+const compareDates = function(d1, d2) {
+  if (d1 == d2) {
+    return 0;
+  } else if ((d1.getDate() == d2.getDate()) &&
+      (d1.getMonth() == d2.getMonth())) {
+    // Identical.
+    return 0;
+  } else if (d1.getTime() < d2.getTime()) {
+    return -1;
+  } else {
+    return 1;
+  }
+};
+
+// This routine should be called when a project slot is to be
+// scheduled, given an indicative time (day of sched and time).
+// It works out if the slot can be scheduled within some tolerance,
+// and if so, puts it in at the optimal position given the constraints.
+const scheduleInsert = function(ident, slotNumber, time) {
+  // Get the project.
+  var proj = getProjectByName(ident);
+
+  if (proj.details == null) {
+    console.log("something has gone terribly wrong");
+    return;
+  }
+
+  // Get the slot.
+  var slot = proj.details.slot[slotNumber];
+  if (typeof slot == "undefined") {
+    console.log("nothing is going right");
+    return;
+  }
+
+  // Get the actual date for the day number.
+  var d = allDates[time.day];
+  // Check if this is on the excluded days list.
+  var excluded = false;
+  if (proj.details.excluded_dates instanceof Array) {
+    for (var i = 0; i < proj.details.excluded_dates.length; i++) {
+      var cd = new Date(proj.details.excluded_dates[i] * 1000);
+      var dcr = compareDates(d, cd);
+      if (dcr == 0) {
+	excluded = true;
+	break;
+      }
+    }
+  }
+  if (excluded) {
+    console.log("excluded day selected, aborting");
+    return;
+  }
+
+  
+};
+
+const handleCanvasClick = function(e) {
+  // Get the time and day that was clicked.
+  var timeClicked = pointerTime(e);
+
+  // Has a project and slot been selected?
+  if ((previouslySelectedProject != null) &&
+      (previouslySelectedSlot != null)) {
+    // Has this project already been scheduled?
+    if (previouslySelectedProject.details.slot[previouslySelectedSlot]
+	.scheduled == 0) {
+      // It looks like the user wants to schedule this project.
+      scheduleInsert(previouslySelectedProject.details.ident,
+		     previouslySelectedSlot,
+		     timeClicked);
+    }
+  }
+};
+
 // Do all the things needed to create the canvas, after the schedule
 // has been loaded.
 const setupCanvas = function(data) {
@@ -1354,10 +1428,7 @@ const setupCanvas = function(data) {
   });
 
   // Make the stage respond to clicks.
-  stage.on("click", function(e) {
-    var timeClicked = pointerTime(e);
-    console.log("clicked on " + JSON.stringify(timeClicked));
-  });
+  stage.on("click", handleCanvasClick);
   
   var hourStage = new Konva.Stage({
     container: "schedtabletop",

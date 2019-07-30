@@ -1030,7 +1030,7 @@ sub getPublicHolidays() {
 		#printf "%4d - %02d - %02d\n", $year, $month, $day;
 		my $dt = DateTime->new(
 		    year => $year, month => $month, day => $day,
-		    hour => 8, time_zone => 'Australia/Sydney' );
+		    hour => 0, time_zone => 'Australia/Sydney' );
 		my $k = sprintf "%4d-%02d-%02d", $year, $month, $day;
 		$phdates{$k} = { 'datetime' => $dt,
 				 'string' => sprintf "%02d/%02d", $day, $month };
