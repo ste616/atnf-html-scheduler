@@ -19,6 +19,7 @@ var constraintLayer = null;
 var constraintBoxGroup = null;
 var backgroundLayer = null;
 var allDates = null;
+var stage = null;
 
 // Function to calculate the DOY.
 const doy = function(d) {
@@ -1294,6 +1295,26 @@ const updateSemesterSummary = function() {
 };
 
 
+// This function takes a pointer position on the canvas and returns
+// the day number, and hour down to 0.5 precision.
+const pointerTime = function(e) {
+  var pp = stage.getPointerPosition();
+
+  // The day can be gotten from the y location.
+  var nDays = Math.floor((pp.y - meas.marginTop) / meas.dayHeight);
+
+  // The hour can be gotten from the x location.
+  var nHalfHours = Math.floor((pp.x - (meas.marginLeft + meas.dayLabelWidth)) /
+			      meas.halfHourWidth);
+  if (nHalfHours < 0) {
+    nHalfHours = 0;
+  } else if (nHalfHours >= 47) {
+    nHalfHours = 47;
+  }
+
+  return { 'day': nDays, 'hour': (nHalfHours / 2) };
+};
+
 // Do all the things needed to create the canvas, after the schedule
 // has been loaded.
 const setupCanvas = function(data) {
@@ -1327,10 +1348,17 @@ const setupCanvas = function(data) {
   scheduleLast.setTime(allDates[allDates.length - 1].getTime() + 86400 * 1000);
   
   // Set up the canvas.
-  var stage = new Konva.Stage({
+  stage = new Konva.Stage({
     container: "schedtable",
     width: meas.width, height: meas.height
   });
+
+  // Make the stage respond to clicks.
+  stage.on("click", function(e) {
+    var timeClicked = pointerTime(e);
+    console.log("clicked on " + JSON.stringify(timeClicked));
+  });
+  
   var hourStage = new Konva.Stage({
     container: "schedtabletop",
     width: meas.width, height: meas.timeLabelHeight
@@ -1540,7 +1568,12 @@ const clearSlotSelector = function() {
   emptyDomNode("projectslotsSelectionBody");
 
   // Deselect the slots.
-  // TODO
+  if (previouslySelectedSlot != null) {
+    var hid = "slotselected-" + previouslySelectedProject.details.ident +
+	"-" + previouslySelectedSlot;
+    fillId(hid, "&nbsp;", null, "slotSelected");
+    previouslySelectedSlot = null;
+  }
 
   // Clear the inputs.
   fillId("projectcomments", "");
