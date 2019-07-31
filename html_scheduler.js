@@ -106,6 +106,51 @@ meas.height = nDays * meas.dayHeight + 2 * meas.marginTop;
  * can be used by any other function for useful purposes.
  */
 
+const calcDayNumber = function(d) {
+  if (d instanceof Date) {
+    return (Math.floor((d.getTime() - scheduleFirst.getTime()) / (86400 * 1000)) + 1);
+  } else {
+    return (Math.floor((d - (scheduleFirst.getTime() / 1000)) / 86400) + 1);
+  }
+};
+
+// Given some coordinates c (an array with RA, Dec in degrees),
+// on a Date d, calculate the rise hour and set hour in the day.
+// Use the elevation limit ellimit.
+const calculateSourceStuff = function(c, d, ellimit) {
+  var mjd = date2mjd(d);
+  var haset = haset_azel(c[1], atcaLat, ellimit);
+  var riseHour = hourBounds((c[0] - haset) / 15);
+  var setHour = hourBounds((c[0] + haset) / 15);
+  var zlst = 24 * mjd2lst(mjd, (atcaLong / 360.0), 0);
+  var riseDayHour = hoursUntilLst(zlst, riseHour);
+  var setDayHour = hoursUntilLst(zlst, setHour);
+
+  return [ riseDayHour, setDayHour ];
+};
+
+const calculateSunStuff = function(d) {
+  var mjd = date2mjd(d);
+  var sp = sunPosition(mjd);
+  return calculateSourceStuff(sp.map(rad2deg), d, 0);
+};
+
+// This function compares two dates simply looking if the date and
+// month are the same.
+const compareDates = function(d1, d2) {
+  if (d1 == d2) {
+    return 0;
+  } else if ((d1.getDate() == d2.getDate()) &&
+      (d1.getMonth() == d2.getMonth())) {
+    // Identical.
+    return 0;
+  } else if (d1.getTime() < d2.getTime()) {
+    return -1;
+  } else {
+    return 1;
+  }
+};
+
 // Compare two arrays which just have strings as elements.
 // We don't care if the order is different, just if the
 // same strings appear in each.
@@ -153,6 +198,11 @@ var date2mjd = function(d) {
   var D = Math.floor(30.6001 * (m + 1));
   var mjd = B + C + D + utc + 1720994.5 - 2400000.5;
   return mjd;
+};
+
+const datetimeToSmallString = function(dts) {
+  var dt = new Date(dts * 1000);
+  return (dt.getDate() + "/" + (dt.getMonth() + 1));
 };
 
 // Convert degrees to radians.
@@ -290,6 +340,30 @@ const smallStringToDatetime = function(smstr) {
   }
 };
 
+// The the sexagesimal string s and convert it to degrees,
+// noting if the string is actually in hours.
+const stringToDegrees = function(s, inHours) {
+  var sels = s.split(":");
+  var isNeg = false;
+  if (/^\-/.test(sels[0])) {
+    isNeg = true;
+  }
+
+  var d = Math.abs(parseInt(sels[0]));
+  var m = parseInt(sels[1]);
+  var s = parseFloat(sels[2]);
+  var n = d + m / 60.0 + s / 3600.0;
+  if (isNeg) {
+    n *= -1.0;
+  }
+
+  if (inHours) {
+    n *= 15.0;
+  }
+
+  return n;
+};
+
 // Work out where the Sun is on a particular date.
 const sunPosition = function(mjd) {
   // Calculate the number of days since 0 UTC Jan 1 2000.
@@ -326,6 +400,104 @@ const turnFraction = function(f) {
 
 
 
+
+
+
+
+/********************************************************************
+ * DOM FUNCTIONS
+ * These functions manipulate the DOM.
+ */
+
+// Add one or more classes to a DOM element.
+const domAddClasses = function(e, addClasses) {
+  if ((typeof e == "undefined") || (e == "undefined")) {
+    return;
+  }
+  
+  // Do we want to add one or more classes?
+  if ((typeof addClasses != "undefined") &&
+      (addClasses != null)) {
+    if (addClasses instanceof Array) {
+      for (var i = 0; i < addClasses.length; i++) {
+	if (!e.classList.contains(addClasses[i])) {
+	  // This class is not yet there.
+	  e.classList.add(addClasses[i]);
+	}
+      }
+    } else {
+      if (!e.classList.contains(addClasses)) {
+	e.classList.add(addClasses);
+      }
+    }
+  }
+  
+};
+
+// A little helper function to do things to a DOM element.
+const fillId = function(id, text, addClasses, remClasses) {
+  // Try to find the ID.
+  var e = document.getElementById(id);
+  if ((typeof e == "undefined") || (e == "undefined")) {
+    console.log("cannot find DOM element with id " + id);
+    return;
+  }
+
+  if ((typeof text != "undefined") && (text != null)) {
+    e.innerHTML = text;
+  }
+
+  domAddClasses(e, addClasses);
+
+  // Do we want to remove one or more classes.
+  if ((typeof remClasses != "undefined") &&
+      (remClasses != null)) {
+    if (remClasses instanceof Array) {
+      for (var i = 0; i < remClasses.length; i++) {
+	if (e.classList.contains(remClasses[i])) {
+	  e.classList.remove(remClasses[i]);
+	}
+      }
+    } else {
+      if (e.classList.contains(remClasses)) {
+	e.classList.remove(remClasses);
+      }
+    }
+  }
+  
+};
+
+// A little helper function to fill input values.
+const fillInput = function(id, text) {
+  var e = document.getElementById(id);
+  if ((typeof e == "undefined") || (e == "undefined")) {
+    console.log("cannot find input with id " + id);
+    return;
+  }
+
+  if ((typeof text != "undefined") && (text != null)) {
+    e.value = text;
+  }
+};
+
+// A helper function to make a DOM element.
+const makeElement = function(type, text, attrs) {
+  var e = document.createElement(type);
+  if ((typeof text != "undefined") && (text != null)) {
+    e.innerHTML = text;
+  }
+  if (typeof attrs != "undefined") {
+    for (var a in attrs) {
+      if (attrs.hasOwnProperty(a)) {
+	var n = document.createAttribute(a);
+	n.value = attrs[a];
+	e.setAttributeNode(n);
+      }
+    }
+  }
+
+  return e;
+};
 
 
 
@@ -477,6 +649,12 @@ const drawNightTimes = function(t, g) {
   g.add(eveningPoly);
 };
 
+
+/********************************************************************
+ * UNSORTED FUNCTIONS BELOW
+ */
+
+
 // Do some number parsing.
 const cleanjson = function(d) {
   if ((typeof d == "undefined") || (d == null)) {
@@ -566,71 +744,10 @@ const loadFile = function(callback, forceServer) {
   }
 };
 
-// The the sexagesimal string s and convert it to degrees,
-// noting if the string is actually in hours.
-const stringToDegrees = function(s, inHours) {
-  var sels = s.split(":");
-  var isNeg = false;
-  if (/^\-/.test(sels[0])) {
-    isNeg = true;
-  }
-
-  var d = Math.abs(parseInt(sels[0]));
-  var m = parseInt(sels[1]);
-  var s = parseFloat(sels[2]);
-  var n = d + m / 60.0 + s / 3600.0;
-  if (isNeg) {
-    n *= -1.0;
-  }
-
-  if (inHours) {
-    n *= 15.0;
-  }
-
-  return n;
-};
 
 
-// Given some coordinates c (an array with RA, Dec in degrees),
-// on a Date d, calculate the rise hour and set hour in the day.
-// Use the elevation limit ellimit.
-const calculateSourceStuff = function(c, d, ellimit) {
-  var mjd = date2mjd(d);
-  var haset = haset_azel(c[1], atcaLat, ellimit);
-  var riseHour = hourBounds((c[0] - haset) / 15);
-  var setHour = hourBounds((c[0] + haset) / 15);
-  var zlst = 24 * mjd2lst(mjd, (atcaLong / 360.0), 0);
-  var riseDayHour = hoursUntilLst(zlst, riseHour);
-  var setDayHour = hoursUntilLst(zlst, setHour);
-
-  return [ riseDayHour, setDayHour ];
-};
-
-const calculateSunStuff = function(d) {
-  var mjd = date2mjd(d);
-  var sp = sunPosition(mjd);
-  return calculateSourceStuff(sp.map(rad2deg), d, 0);
-};
 
 
-// A helper function.
-const makeElement = function(type, text, attrs) {
-  var e = document.createElement(type);
-  if ((typeof text != "undefined") && (text != null)) {
-    e.innerHTML = text;
-  }
-  if (typeof attrs != "undefined") {
-    for (var a in attrs) {
-      if (attrs.hasOwnProperty(a)) {
-	var n = document.createAttribute(a);
-	n.value = attrs[a];
-	e.setAttributeNode(n);
-      }
-    }
-  }
-
-  return e;
-};
 
 // Make a summary of the current state of the projects.
 const summariseProjects = function() {
@@ -832,81 +949,9 @@ const summariseSemester = function() {
   return r;
 };
 
-// Add one or more classes to a DOM element.
-const domAddClasses = function(e, addClasses) {
-  if ((typeof e == "undefined") || (e == "undefined")) {
-    return;
-  }
-  
-  // Do we want to add one or more classes?
-  if ((typeof addClasses != "undefined") &&
-      (addClasses != null)) {
-    if (addClasses instanceof Array) {
-      for (var i = 0; i < addClasses.length; i++) {
-	if (!e.classList.contains(addClasses[i])) {
-	  // This class is not yet there.
-	  e.classList.add(addClasses[i]);
-	}
-      }
-    } else {
-      if (!e.classList.contains(addClasses)) {
-	e.classList.add(addClasses);
-      }
-    }
-  }
-  
-};
 
-// A little helper function to fill input values.
-const fillInput = function(id, text) {
-  var e = document.getElementById(id);
-  if ((typeof e == "undefined") || (e == "undefined")) {
-    console.log("cannot find input with id " + id);
-    return;
-  }
 
-  if ((typeof text != "undefined") && (text != null)) {
-    e.value = text;
-  }
-};
 
-const datetimeToSmallString = function(dts) {
-  var dt = new Date(dts * 1000);
-  return (dt.getDate() + "/" + (dt.getMonth() + 1));
-};
-
-// A little helper function to do things to a DOM element.
-const fillId = function(id, text, addClasses, remClasses) {
-  // Try to find the ID.
-  var e = document.getElementById(id);
-  if ((typeof e == "undefined") || (e == "undefined")) {
-    console.log("cannot find DOM element with id " + id);
-    return;
-  }
-
-  if ((typeof text != "undefined") && (text != null)) {
-    e.innerHTML = text;
-  }
-
-  domAddClasses(e, addClasses);
-
-  // Do we want to remove one or more classes.
-  if ((typeof remClasses != "undefined") &&
-      (remClasses != null)) {
-    if (remClasses instanceof Array) {
-      for (var i = 0; i < remClasses.length; i++) {
-	if (e.classList.contains(remClasses[i])) {
-	  e.classList.remove(remClasses[i]);
-	}
-      }
-    } else {
-      if (e.classList.contains(remClasses)) {
-	e.classList.remove(remClasses);
-      }
-    }
-  }
-  
-};
 
 
 // Show the details of a particular project, and present the slot
@@ -1016,13 +1061,6 @@ const showProjectDetails = function(ident) {
   
 };
 
-const calcDayNumber = function(d) {
-  if (d instanceof Date) {
-    return (Math.floor((d.getTime() - scheduleFirst.getTime()) / (86400 * 1000)) + 1);
-  } else {
-    return (Math.floor((d - (scheduleFirst.getTime() / 1000)) / 86400) + 1);
-  }
-};
 
 const selectSlot = function(slotnumber) {
   var psp = previouslySelectedProject.details;
@@ -1515,21 +1553,6 @@ const pointerTime = function(e) {
   return { 'day': nDays, 'hour': (nHalfHours / 2) };
 };
 
-// This function compares two dates simply looking if the date and
-// month are the same.
-const compareDates = function(d1, d2) {
-  if (d1 == d2) {
-    return 0;
-  } else if ((d1.getDate() == d2.getDate()) &&
-      (d1.getMonth() == d2.getMonth())) {
-    // Identical.
-    return 0;
-  } else if (d1.getTime() < d2.getTime()) {
-    return -1;
-  } else {
-    return 1;
-  }
-};
 
 // This routine should be called when a project slot is to be
 // scheduled, given an indicative time (day of sched and time).
