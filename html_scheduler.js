@@ -3,7 +3,10 @@
  * Jamie Stevens 2019
  */
 
-// Some global variables we need in multiple routines.
+/********************************************************************
+ * GLOBAL VARIABLES
+ * We use these in various ways throughout the code.
+ */
 var arrayLayer = null;
 var arrayGroup = null;
 var scheduleData = null;
@@ -20,6 +23,21 @@ var constraintBoxGroup = null;
 var backgroundLayer = null;
 var allDates = null;
 var stage = null;
+var previouslySelectedProject = null;
+var previouslySelectedSlot = null;
+// This contains all the nodes for each project in the table.
+var tableRows = {};
+
+// Some constants we need.
+// The observatory coordinates.
+const atcaLong = 149.5501388;
+const atcaLat = -30.3128846;
+// The number of days to display (basically half a leap year, plus a few.
+const nDays = (366 / 2) + 4;
+// Time limits for certain projects.
+const legacyProjects = [ "C3132", "C3145", "C3152", "C3157" ];
+const legacyLimit = 400; // Hours.
+const projectLimit = 300; // Hours
 
 // An object to describe config compatibility.
 // The keys are the available configs, which we can use later to
@@ -45,11 +63,178 @@ const configDescriptor = {
   'h75': [ 16, "any", "hybrid", "h75" ]
 };
 
+// An object to hold all our measurements.
+var meas = {
+  // The width of a half-hour (the smallest increment we schedule to).
+  halfHourWidth: 12,
+  // The margin around the schedule box.
+  marginLeft: 20,
+  //marginTop: 60,
+  marginTop: 2,
+  // The width of the right-side area where we see the individual elements.
+  elementWidth: 0,
+  // The height of a single day.
+  dayHeight: 40,
+  // The width of the label which holds the date string.
+  dayLabelWidth: 140,  
+  // The width of the array panel.
+  arrayLabelWidth: 60,
+  // The height of the hour label part.
+  timeLabelHeight: 66
+};
+
+
+// Compute some secondary measurements from the primary measurements.
+// The width of an entire day.
+meas.dayWidth = 48 * meas.halfHourWidth;
+// The canvas width.
+meas.width = meas.dayWidth + 3 * meas.marginLeft + meas.elementWidth + meas.dayLabelWidth + meas.arrayLabelWidth;
+// The canvas height.
+meas.height = nDays * meas.dayHeight + 2 * meas.marginTop;
+
+
+
+
+
+
+
+
+
+/********************************************************************
+ * HELPER FUNCTIONS
+ * These following functions don't do anything to the page, but
+ * can be used by any other function for useful purposes.
+ */
+
+// Compare two arrays which just have strings as elements.
+// We don't care if the order is different, just if the
+// same strings appear in each.
+const compareStringArrays = function(a, b) {
+  // Check length.
+  if (a.length != b.length) {
+    return false;
+  }
+
+  for (var i = 0; i < a.length; i++) {
+    if (b.indexOf(a[i]) < 0) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const convertSmallDates = function(smdates) {
+  // Split the date string.
+  var sms = smdates.split(",");
+  var darr = sms.map(smallStringToDatetime);
+  var rarr = darr.map(function(d) {
+    return (d.getTime() / 1000);
+  });
+
+  return rarr;
+};
+
+// Calculate the Julian day for a midnight AEST on a given Date d.
+var date2mjd = function(d) {
+  // We assume that we are at midnight AEST, which is 14 in UTC.
+  var utc = d.getUTCDate() + (14 / 24);
+  var mm = d.getUTCMonth() + 1;
+  var m = mm;
+  var y = d.getUTCFullYear();
+  if (mm <= 2) {
+    m = mm + 12;
+    y = d.getUTCFullYear() - 1;
+  }
+  var A = Math.floor(y / 100);
+  var B = 2 - A + Math.floor(A / 4);
+
+  var C = Math.floor(365.25 * y);
+  var D = Math.floor(30.6001 * (m + 1));
+  var mjd = B + C + D + utc + 1720994.5 - 2400000.5;
+  return mjd;
+};
+
+// Convert degrees to radians.
+const deg2rad = function(d) {
+  return (d * Math.PI / 180);
+};
+
+const degreesBounds = function(d) {
+  return numberBounds(d, 360);
+};
+
 // Function to calculate the DOY.
 const doy = function(d) {
   var foy = new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0);
   var td = Math.floor((d.getTime() - foy.getTime()) / (86400 * 1000));
   return (td + 1);
+};
+
+// Calculate the sidereal time at Greenwich, given an MJD.
+const gst = function(mjd, dUT1) {
+  var a = 101.0 + 24110.54581 / 86400.0;
+  var b = 8640184.812886 / 86400.0;
+  var e = 0.093104 / 86400.0;
+  var d = 0.0000062 / 86400.0;
+  var tu = (mjd - (2451545.0 - 2400000.5)) / 36525.0;
+  var sidtim = turnFraction(a + tu * (b + tu * (e - tu * d)));
+  var gmst = turnFraction(sidtim + (mjd - Math.floor(mjd) + dUT1 / 86400.0) * 1.002737909350795);
+  return gmst;
+};
+
+// Determine the LST limits for a source with RA,Dec.
+// Given a Declination dec in degrees, a latitude lat in degrees,
+// and an elevation el which is the limit, work out at which HA (in degrees)
+// it would rise and set.
+const haset_azel = function(dec, lat, el) {
+  var decRad = deg2rad(dec);
+  var latRad = deg2rad(lat);
+  var elRad = deg2rad(el);
+  var cos_haset = (Math.cos((Math.PI / 2) - elRad) -
+		   Math.sin(latRad) * Math.sin(decRad)) /
+      (Math.cos(decRad) * Math.cos(latRad));
+  if (cos_haset > 1) {
+    // The source never rises.
+    return 0;
+  }
+  if (cos_haset < -1) {
+    // The source never sets.
+    return 180;
+  }
+  // Return the HA in degrees.
+  return rad2deg(Math.acos(cos_haset));
+};
+
+const hourBounds = function(h) {
+  return numberBounds(h, 24);
+};
+
+// Given some sidereal time at time 0, work out how many real hours
+// until some nominated sidereal time.
+const hoursUntilLst = function(zlst, dlst) {
+  if (dlst < zlst) {
+    dlst += 24;
+  }
+
+  return ((dlst - zlst) / 1.002737909350795);
+};
+
+// Calculate the sidereal time at some longitude on the Earth.
+const mjd2lst = function(mjd, longitude, dUT1) {
+  var lst = turnFraction(gst(mjd, dUT1) + longitude);
+  return lst;
+};
+
+// Given any number n, put it between 0 and some other number b.
+const numberBounds = function(n, b) {
+  while (n > b) {
+    n -= b;
+  }
+  while (n < 0) {
+    n += b;
+  }
+  return n;
 };
 
 // Function to take a JS Date and output the string that would
@@ -72,36 +257,87 @@ const printDate = function(d) {
   return r;
 };
 
-// An object to hold all our measurements.
-var meas = {
-  // The width of a half-hour (the smallest increment we schedule to).
-  halfHourWidth: 12,
-  // The margin around the schedule box.
-  marginLeft: 20,
-  //marginTop: 60,
-  marginTop: 2,
-  // The width of the right-side area where we see the individual elements.
-  elementWidth: 0,
-  // The height of a single day.
-  dayHeight: 40,
-  // The width of the label which holds the date string.
-  dayLabelWidth: 140,  
-  // The width of the array panel.
-  arrayLabelWidth: 60,
-  // The height of the hour label part.
-  timeLabelHeight: 66
+// Convert radians to degrees.
+const rad2deg = function(r) {
+  return (r * 180 / Math.PI);
 };
 
-// The number of days to display (basically half a leap year, plus a few.
-const nDays = (366 / 2) + 4;
+// We take a date/month string and work out the date given
+// our semester constraint.
+const smallStringToDatetime = function(smstr) {
+  var dels = smstr.split("/");
+  var year = semesterStart.getFullYear();
+  console.log("trying " + year + "-" + parseInt(dels[1] - 1) + "-" +
+	      parseInt(dels[0]));
+  var checkDate = new Date(year, parseInt(dels[1] - 1), parseInt(dels[0]));
+  if (checkDate.getTime() < semesterStart.getTime()) {
+    // We're probably in the next year.
+    checkDate = new Date(year + 1, dels[1] - 1, dels[0]);
+  } else if (checkDate.getTime() > semesterEnd.getTime()) {
+    // There should be no way this happens.
+    console.log("found a too big date, weirdly");
+    return null;
+  }
 
-// Compute some secondary measurements from the primary measurements.
-// The width of an entire day.
-meas.dayWidth = 48 * meas.halfHourWidth;
-// The canvas width.
-meas.width = meas.dayWidth + 3 * meas.marginLeft + meas.elementWidth + meas.dayLabelWidth + meas.arrayLabelWidth;
-// The canvas height.
-meas.height = nDays * meas.dayHeight + 2 * meas.marginTop;
+  // We should now be in range.
+  if ((checkDate.getTime() >= semesterStart.getTime()) &&
+      (checkDate.getTime() < semesterEnd.getTime())) {
+    return checkDate;
+  } else {
+    // Poop.
+    console.log("Unable to fit the date!");
+    return null;
+  }
+};
+
+// Work out where the Sun is on a particular date.
+const sunPosition = function(mjd) {
+  // Calculate the number of days since 0 UTC Jan 1 2000.
+  var jd = mjd + 2400000.5;
+  var n = jd - 2451545.0;
+  // The longitude of the Sun, in degrees.
+  var L = 280.46 + 0.9856474 * n;
+  // Mean anomaly of the Sun, in degrees.
+  var g = 357.528 + 0.9856003 * n;
+  // Ensure bound limits for these numbers.
+  L = degreesBounds(L);
+  g = degreesBounds(g);
+  // Ecliptic longitude of the Sun, in degrees.
+  var lambda = L + 1.915 * Math.sin(deg2rad(g)) + 0.020 * Math.sin(2 * deg2rad(g));
+  // Sun distance from Earth.
+  var R = 1.00014 - 0.01671 * Math.cos(deg2rad(g)) - 0.00014 * Math.cos(2 * deg2rad(g));
+  // The obliquity, in degrees.
+  // We need the number of centuries since J2000.0.
+  var T = (n / (100.0 * 365.2525));
+  var epsilon = 23.4392911 - (46.636769 / 3600.0) * T - (0.0001831 / 3600.0) * T * T +
+      (0.00200340 / 3600.0) * T * T * T;
+  // Get the right ascension in radians.
+  var alpha = Math.atan2(Math.cos(deg2rad(epsilon)) * Math.sin(deg2rad(lambda)),
+			 Math.cos(deg2rad(lambda)));
+  // And declination, in radians.
+  var delta = Math.asin(Math.sin(deg2rad(epsilon)) * Math.sin(deg2rad(lambda)));
+  return [ alpha, delta ];
+};
+
+// Given any number, put it between 0 and 1.
+const turnFraction = function(f) {
+  return numberBounds(f, 1);
+};
+
+
+
+
+
+
+
+
+
+
+
+/********************************************************************
+ * CANVAS FUNCTIONS
+ * These functions draw onto the scheduling canvas.
+ */
 
 // Function that draws the n-th day in the schedule.
 // Takes the day number n, the Date d and the group g to draw to.
@@ -194,149 +430,6 @@ const drawHourLabels = function(g) {
   }
 };
 
-// Convert degrees to radians.
-const deg2rad = function(d) {
-  return (d * Math.PI / 180);
-};
-
-// Convert radians to degrees.
-const rad2deg = function(r) {
-  return (r * 180 / Math.PI);
-};
-
-// Determine the LST limits for a source with RA,Dec.
-// Given a Declination dec in degrees, a latitude lat in degrees,
-// and an elevation el which is the limit, work out at which HA (in degrees)
-// it would rise and set.
-const haset_azel = function(dec, lat, el) {
-  var decRad = deg2rad(dec);
-  var latRad = deg2rad(lat);
-  var elRad = deg2rad(el);
-  var cos_haset = (Math.cos((Math.PI / 2) - elRad) -
-		   Math.sin(latRad) * Math.sin(decRad)) /
-      (Math.cos(decRad) * Math.cos(latRad));
-  if (cos_haset > 1) {
-    // The source never rises.
-    return 0;
-  }
-  if (cos_haset < -1) {
-    // The source never sets.
-    return 180;
-  }
-  // Return the HA in degrees.
-  return rad2deg(Math.acos(cos_haset));
-};
-
-// Calculate the Julian day for a midnight AEST on a given Date d.
-var date2mjd = function(d) {
-  // We assume that we are at midnight AEST, which is 14 in UTC.
-  var utc = d.getUTCDate() + (14 / 24);
-  var mm = d.getUTCMonth() + 1;
-  var m = mm;
-  var y = d.getUTCFullYear();
-  if (mm <= 2) {
-    m = mm + 12;
-    y = d.getUTCFullYear() - 1;
-  }
-  var A = Math.floor(y / 100);
-  var B = 2 - A + Math.floor(A / 4);
-
-  var C = Math.floor(365.25 * y);
-  var D = Math.floor(30.6001 * (m + 1));
-  var mjd = B + C + D + utc + 1720994.5 - 2400000.5;
-  return mjd;
-};
-
-// Given any number n, put it between 0 and some other number b.
-const numberBounds = function(n, b) {
-  while (n > b) {
-    n -= b;
-  }
-  while (n < 0) {
-    n += b;
-  }
-  return n;
-};
-
-// Given any number, put it between 0 and 1.
-const turnFraction = function(f) {
-  return numberBounds(f, 1);
-};
-
-const degreesBounds = function(d) {
-  return numberBounds(d, 360);
-};
-
-const hourBounds = function(h) {
-  return numberBounds(h, 24);
-};
-
-// Calculate the sidereal time at Greenwich, given an MJD.
-const gst = function(mjd, dUT1) {
-  var a = 101.0 + 24110.54581 / 86400.0;
-  var b = 8640184.812886 / 86400.0;
-  var e = 0.093104 / 86400.0;
-  var d = 0.0000062 / 86400.0;
-  var tu = (mjd - (2451545.0 - 2400000.5)) / 36525.0;
-  var sidtim = turnFraction(a + tu * (b + tu * (e - tu * d)));
-  var gmst = turnFraction(sidtim + (mjd - Math.floor(mjd) + dUT1 / 86400.0) * 1.002737909350795);
-  return gmst;
-};
-
-// Calculate the sidereal time at some longitude on the Earth.
-const mjd2lst = function(mjd, longitude, dUT1) {
-  var lst = turnFraction(gst(mjd, dUT1) + longitude);
-  return lst;
-};
-
-// Given some sidereal time at time 0, work out how many real hours
-// until some nominated sidereal time.
-const hoursUntilLst = function(zlst, dlst) {
-  if (dlst < zlst) {
-    dlst += 24;
-  }
-
-  return ((dlst - zlst) / 1.002737909350795);
-};
-
-const smallStringToDatetime = function(smstr) {
-  // We take a date/month string and work out the date given
-  // our semester constraint.
-  var dels = smstr.split("/");
-  var year = semesterStart.getFullYear();
-  console.log("trying " + year + "-" + parseInt(dels[1] - 1) + "-" +
-	      parseInt(dels[0]));
-  var checkDate = new Date(year, parseInt(dels[1] - 1), parseInt(dels[0]));
-  if (checkDate.getTime() < semesterStart.getTime()) {
-    // We're probably in the next year.
-    checkDate = new Date(year + 1, dels[1] - 1, dels[0]);
-  } else if (checkDate.getTime() > semesterEnd.getTime()) {
-    // There should be no way this happens.
-    console.log("found a too big date, weirdly");
-    return null;
-  }
-
-  // We should now be in range.
-  if ((checkDate.getTime() >= semesterStart.getTime()) &&
-      (checkDate.getTime() < semesterEnd.getTime())) {
-    return checkDate;
-  } else {
-    // Poop.
-    console.log("Unable to fit the date!");
-    return null;
-  }
-};
-
-const convertSmallDates = function(smdates) {
-  // Split the date string.
-  var sms = smdates.split(",");
-  var darr = sms.map(smallStringToDatetime);
-  var rarr = darr.map(function(d) {
-    return (d.getTime() / 1000);
-  });
-
-  return rarr;
-};
 
 // Draw an LST line on a particular day.
 const lstDraw = function(n, d, l, p, g) {
@@ -355,34 +448,6 @@ const lstDraw = function(n, d, l, p, g) {
   g.add(line);
 };
 
-// Work out where the Sun is on a particular date.
-const sunPosition = function(mjd) {
-  // Calculate the number of days since 0 UTC Jan 1 2000.
-  var jd = mjd + 2400000.5;
-  var n = jd - 2451545.0;
-  // The longitude of the Sun, in degrees.
-  var L = 280.46 + 0.9856474 * n;
-  // Mean anomaly of the Sun, in degrees.
-  var g = 357.528 + 0.9856003 * n;
-  // Ensure bound limits for these numbers.
-  L = degreesBounds(L);
-  g = degreesBounds(g);
-  // Ecliptic longitude of the Sun, in degrees.
-  var lambda = L + 1.915 * Math.sin(deg2rad(g)) + 0.020 * Math.sin(2 * deg2rad(g));
-  // Sun distance from Earth.
-  var R = 1.00014 - 0.01671 * Math.cos(deg2rad(g)) - 0.00014 * Math.cos(2 * deg2rad(g));
-  // The obliquity, in degrees.
-  // We need the number of centuries since J2000.0.
-  var T = (n / (100.0 * 365.2525));
-  var epsilon = 23.4392911 - (46.636769 / 3600.0) * T - (0.0001831 / 3600.0) * T * T +
-      (0.00200340 / 3600.0) * T * T * T;
-  // Get the right ascension in radians.
-  var alpha = Math.atan2(Math.cos(deg2rad(epsilon)) * Math.sin(deg2rad(lambda)),
-			 Math.cos(deg2rad(lambda)));
-  // And declination, in radians.
-  var delta = Math.asin(Math.sin(deg2rad(epsilon)) * Math.sin(deg2rad(lambda)));
-  return [ alpha, delta ];
-};
 
 // Draw a polygon to show when it's night times.
 const drawNightTimes = function(t, g) {
@@ -525,8 +590,6 @@ const stringToDegrees = function(s, inHours) {
   return n;
 };
 
-const atcaLong = 149.5501388;
-const atcaLat = -30.3128846;
 
 // Given some coordinates c (an array with RA, Dec in degrees),
 // on a Date d, calculate the rise hour and set hour in the day.
@@ -549,8 +612,6 @@ const calculateSunStuff = function(d) {
   return calculateSourceStuff(sp.map(rad2deg), d, 0);
 };
 
-// This contains all the nodes for each project in the table.
-var tableRows = {};
 
 // A helper function.
 const makeElement = function(type, text, attrs) {
@@ -570,10 +631,6 @@ const makeElement = function(type, text, attrs) {
 
   return e;
 };
-
-const legacyProjects = [ "C3132", "C3145", "C3152", "C3157" ];
-const legacyLimit = 400; // Hours.
-const projectLimit = 300; // Hours
 
 // Make a summary of the current state of the projects.
 const summariseProjects = function() {
@@ -851,8 +908,6 @@ const fillId = function(id, text, addClasses, remClasses) {
   
 };
 
-var previouslySelectedProject = null;
-var previouslySelectedSlot = null;
 
 // Show the details of a particular project, and present the slot
 // scheduling interface for it.
@@ -934,19 +989,28 @@ const showProjectDetails = function(ident) {
     addDoubleClickHandler(td,
 			  arraySelectorGen(project.details.ident, i, arrId));
     tr.appendChild(td);
-    td = makeElement("td", s.bands.join(","));
+    var bandId = "slotband-" + project.details.ident + "-" + i;
+    td = makeElement("td", s.bands.join(","), { 'id': bandId });
+    addDoubleClickHandler(td,
+			  bandsSelectorGen(project.details.ident, i, bandId));
     tr.appendChild(td);
-    td = makeElement("td", s.bandwidth);
+    var bandwidthId = "slotbandwidth-" + project.details.ident + "-" + i;
+    td = makeElement("td", s.bandwidth, { 'id': bandwidthId });
+    addDoubleClickHandler(td, cabbSelectorGen(project.details.ident, i,
+					      bandwidthId));
     tr.appendChild(td);
     td = makeElement("td", s.source);
     tr.appendChild(td);
+    var timeId = "slottime-" + project.details.ident + "-" + i;
     td = makeElement("td", s.scheduled_duration + " / " +
-		     s.requested_duration);
+		     s.requested_duration, { 'id': timeId });
+    addDoubleClickHandler(td,
+			  timeSelectorGen(project.details.ident, i,
+					  timeId));
     tr.appendChild(td);
 
     // Add a click handler on this row.
     addClickHandler(tr, slotSelectorGen(i));
-
 
   }
   
@@ -1038,29 +1102,90 @@ const arraySelectorGen = function(ident, slotnum, tdid) {
       return v.toUpperCase();
     });
     // These are our options.
-    displayDropDown(tdid, arrs, {
-      'callback': changeArrayRequirement,
-      'payload': { 'ident': ident, 'slotnum': slotnum }
-    });
+    slotChangeDisplay(tdid, arrs, {
+      'callback': slotChangeFulfillment,
+      'payload': { 'ident': ident, 'slotnum': slotnum,
+		   'type': "array" }
+    }, "select");
   };
 };
 
-// This function changes an array requirement.
-const changeArrayRequirement = function(proj, value) {
+const cabbSelectorGen = function(ident, slotnum, tdid) {
+  // We call a function to display a dropdown box.
+  return function() {
+    var cabbModes = [ "CFB1M", "CFB1M-0.5k", "CFB64M-32k",
+		      "CFB1-64M", "CFB1M-pulsar", "VLBI" ];
+    slotChangeDisplay(tdid, cabbModes, {
+      'callback': slotChangeFulfillment,
+      'payload': { 'ident': ident, 'slotnum': slotnum,
+		   'type': "bandwidth" }
+    }, "select");
+  };
+};
+
+const bandsSelectorGen = function(ident, slotnum, tdid) {
+  return function() {
+    slotChangeDisplay(tdid, null, {
+      'callback': slotChangeFulfillment,
+      'payload': { 'ident': ident, 'slotnum': slotnum,
+		   'type': "band" }
+    }, "input");
+  };
+};
+
+const matchTime = function(v) {
+  var m = /^(\d+)\s+\/\s+(\d+)$/.exec(v);
+  return m[2];
+};
+
+const timeSelectorGen = function(ident, slotnum, tdid) {
+  return function() {
+    slotChangeDisplay(tdid, matchTime,
+		      {'callback': slotChangeFulfillment,
+		       'payload': { 'ident': ident, 'slotnum': slotnum,
+				    'type': "time" }},
+		      'input');
+  };
+};
+
+const slotChangeFulfillment = function(proj, value) {
   var project = getProjectByName(proj.ident);
   var slot = project.details.slot[proj.slotnum];
 
-  // Check if a change has actually been made.
-  var nv = value.toLowerCase();
-  if (slot.array != nv) {
-    slot.array = value.toLowerCase();
-    
-    // Save this locally.
-    updateLocalSchedule();
-  }    
-  // Update the selection table.
-  showProjectDetails(proj.ident);
+  // Check if a change has been made.
+  var changed = false;
+  if (proj.type == "array") {
+    var nv = value.toLowerCase();
+    if (slot.array != nv) {
+      changed = true;
+      slot.array = nv;
+    }
+  } else if (proj.type == "bandwidth") {
+    if (slot.bandwidth != value) {
+      changed = true;
+      slot.bandwidth = value;
+    }
+  } else if (proj.type == "band") {
+    // Split up the new string.
+    var bands = value.split(",");
+    var same = compareStringArrays(bands, slot.bands);
+    if (!same) {
+      changed = true;
+      slot.bands = bands;
+    }
+  } else if (proj.type == "time") {
+    var time = parseFloat(value);
+    if (time != slot.requested_duration) {
+      changed = true;
+      slot.requested_duration = time;
+    }
+  }
 
+  if (changed) {
+    updateLocalSchedule();
+  }
+
+  showProjectDetails(proj.ident);
 };
 
 const emptyDomNode = function(id) {
@@ -2177,51 +2302,66 @@ const deleteSlot = function() {
 		      true, { 'yes': deleteThatSlot, 'no': deleteCancelled });
 };
 
-// The initial callback for the drop down event handler.
-const dropDownEventHandler = function(id, callback) {
-  return function _listener(ev) {
+// The initial callback for the drop down and text input event handlers.
+const slotChangeEventHandler = function(id, callback, type) {
+  var d = document.getElementById(id);
+  var _listener = function(ev) {
     // Remove the event handlers from the ID.
-    var d = document.getElementById(id);
     d.removeEventListener("change", _listener);
     d.removeEventListener("blur", _listener);
-    // Call the callback with the currently selected value.
-    var v = d.options[d.selectedIndex].value;
+    var v;
+    if (type == "select") {
+      // Call the callback with the currently selected value.
+      v = d.options[d.selectedIndex].value;
+    } else if (type == "input") {
+      v = d.value;
+    }
     callback.callback(callback.payload, v);
   };
+
+  // Set up the handlers.
+  d.addEventListener("change", _listener);
+  d.addEventListener("blur", _listener);
 };
 
-// Add a dropdown input to an element, replacing whatever was there.
-const displayDropDown = function(id, options, callback) {
+const slotChangeDisplay = function(id, options, callback, type) {
   // Get the current value.
   var e = document.getElementById(id);
   var cv = e.innerHTML;
+  if ((type == "input") && (options != null)) {
+    // We've been given a manipulation function.
+    cv = options(cv);
+  }
   
   // Remove whatever was there before.
   emptyDomNode(id);
   e.innerHTML = "";
 
   // Set up the dropdown box.
-  var inp = document.createElement("select");
-  var selid = id + "-select";
+  var inp = document.createElement(type);
+  var selid = id + "-" + type;
   inp.setAttribute("id", selid);
-  options.forEach(function(v) {
-    var o = document.createElement("option");
-    o.setAttribute("value", v);
-    if (v == cv) {
-      o.setAttribute("selected", "selected");
-    }
-    o.innerHTML = v;
-    inp.appendChild(o);
-  });
+  if (type == "input") {
+    inp.setAttribute("type", "text");
+    inp.setAttribute("value", cv);
+  } else if (type == "select") {
+    options.forEach(function(v) {
+      var o = document.createElement("option");
+      o.setAttribute("value", v);
+      if (v == cv) {
+	o.setAttribute("selected", "selected");
+      }
+      o.innerHTML = v;
+      inp.appendChild(o);
+    });
+  }
 
   // Add it to the element.
   e.appendChild(inp);
 
-  // Set the handler for change.
-  inp.addEventListener("change", dropDownEventHandler(selid, callback));
-  // And for blye.
-  inp.addEventListener("blur", dropDownEventHandler(selid, callback));
-  
+  // Set the handlers for change and blue.
+  slotChangeEventHandler(selid, callback, type);
+
 };
 
 // Configure some event handlers on existing nodes.
