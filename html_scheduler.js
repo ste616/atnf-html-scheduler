@@ -21,6 +21,30 @@ var backgroundLayer = null;
 var allDates = null;
 var stage = null;
 
+// An object to describe config compatibility.
+// The keys are the available configs, which we can use later to
+// allow for config selection. Each value is an array with the names
+// of all config requirements that are compatible.
+const configDescriptor = {
+  '6a': [ 0, "any", "any6", "any 750 or greater", "6a" ],
+  '6b': [ 1, "any", "any6", "any 750 or greater", "6b" ],
+  '6c': [ 2, "any", "any6", "any 750 or greater", "6c" ],
+  '6d': [ 3, "any", "any6", "any 750 or greater", "6d" ],
+  '1.5a': [ 4, "any", "any1.5", "any 750 or greater", "1.5a" ],
+  '1.5b': [ 5, "any", "any1.5", "any 750 or greater", "1.5b" ],
+  '1.5c': [ 6, "any", "any1.5", "any 750 or greater", "1.5c" ],
+  '1.5d': [ 7, "any", "any1.5", "any 750 or greater", "1.5d" ],
+  '750a': [ 8, "any", "any750", "any 750 or greater", "750a" ],
+  '750b': [ 9, "any", "any750", "any 750 or greater", "750b" ],
+  '750c': [ 10, "any", "any750", "any 750 or greater", "750c" ],
+  '750d': [ 11, "any", "any750", "any 750 or greater", "750d" ],
+  'ew367': [ 12, "any", "anycompact", "ew367" ],
+  'ew352': [ 13, "any", "anycompact", "ew352" ],
+  'h214': [ 14, "any", "hybrid", "h214" ],
+  'h168': [ 15, "any", "hybrid", "h168" ],
+  'h75': [ 16, "any", "hybrid", "h75" ]
+};
+
 // Function to calculate the DOY.
 const doy = function(d) {
   var foy = new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0);
@@ -902,7 +926,13 @@ const showProjectDetails = function(ident) {
       'id': "slotselected-" + project.details.ident + "-" + i
     });
     tr.appendChild(tsel);
-    var td = makeElement("td", s.array.toUpperCase());
+    var arrId = "slotarray-" + project.details.ident + "-" + i;
+    var td = makeElement("td", s.array.toUpperCase(), {
+      'id': arrId
+    });
+    // Add a double-click handler on the array.
+    addDoubleClickHandler(td,
+			  arraySelectorGen(project.details.ident, i, arrId));
     tr.appendChild(td);
     td = makeElement("td", s.bands.join(","));
     tr.appendChild(td);
@@ -916,6 +946,8 @@ const showProjectDetails = function(ident) {
 
     // Add a click handler on this row.
     addClickHandler(tr, slotSelectorGen(i));
+
+
   }
   
 };
@@ -994,6 +1026,43 @@ const slotSelectorGen = function(sn) {
   };
 };
 
+const arraySelectorGen = function(ident, slotnum, tdid) {
+  // We call a function to display a dropdown box.
+  return function() {
+    // Get the list of configurations.
+    var arrs = Object.keys(configDescriptor);
+    arrs.sort(function(a, b) {
+      return (configDescriptor[a][0] - configDescriptor[b][0]);
+    });
+    arrs = arrs.map(function(v) {
+      return v.toUpperCase();
+    });
+    // These are our options.
+    displayDropDown(tdid, arrs, {
+      'callback': changeArrayRequirement,
+      'payload': { 'ident': ident, 'slotnum': slotnum }
+    });
+  };
+};
+
+// This function changes an array requirement.
+const changeArrayRequirement = function(proj, value) {
+  var project = getProjectByName(proj.ident);
+  var slot = project.details.slot[proj.slotnum];
+
+  // Check if a change has actually been made.
+  var nv = value.toLowerCase();
+  if (slot.array != nv) {
+    slot.array = value.toLowerCase();
+    
+    // Save this locally.
+    updateLocalSchedule();
+  }    
+  // Update the selection table.
+  showProjectDetails(proj.ident);
+
+};
+
 const emptyDomNode = function(id) {
   var n = document.getElementById(id);
 
@@ -1017,6 +1086,14 @@ const addChangeHandler = function(e, callback) {
 const addClickHandler = function(e, callback) {
   if (e) {
     e.addEventListener("click", callback);
+    // Add the class to show it can be clicked.
+    domAddClasses(e, "clickEnabled");
+  }
+};
+
+const addDoubleClickHandler = function(e, callback) {
+  if (e) {
+    e.addEventListener("dblclick", callback);
     // Add the class to show it can be clicked.
     domAddClasses(e, "clickEnabled");
   }
@@ -1368,7 +1445,13 @@ const scheduleInsert = function(ident, slotNumber, time) {
     return;
   }
 
-  
+  // Check if the array configuration is suitable.
+  var arrayConfigured = whichArrayConfiguration(time.day);
+  var compatible = arrayCompatible(arrayConfigured, slot.array);
+  if (!compatible) {
+    console.log("incompatible configuration requested, aborting");
+    return;
+  }
 };
 
 const handleCanvasClick = function(e) {
@@ -1575,6 +1658,47 @@ const drawConfiguration = function(title, start, end) {
   
 };
 
+// Work out which array configuration is currently scheduled at
+// some particular day d, which is the day of the schedule.
+const whichArrayConfiguration = function(d) {
+  var configs = getProjectByName("CONFIG");
+  var slots = configs.details.slot;
+
+  var configBefore = slots[0].array;
+  var dtime = allDates[d].getTime() / 1000;
+  var mindiff = dtime - slots[0].scheduled_start;
+  for (var i = 1; i < slots.length; i++) {
+    var cdiff = dtime - slots[i].scheduled_start;
+    if (dtime < 0) {
+      // This is afterwards.
+      continue;
+    }
+    if (cdiff < mindiff) {
+      mindiff = cdiff;
+      configBefore = slots[i].array;
+    }
+  }
+
+  return configBefore;
+};
+
+// Determine if the array configuration config is compatible with
+// the array required.
+const arrayCompatible = function(config, required) {
+  var lconfig = config.toLowerCase();
+  var lrequired = required.toLowerCase();
+  if (configDescriptor.hasOwnProperty(lconfig)) {
+    if (configDescriptor[lconfig].indexOf(lrequired) >= 0) {
+      return true;
+    } else {
+      console.log(lrequired + " not compatible with " + lconfig);
+    }
+  } else {
+    console.log("Config " + lconfig + " not found!");
+  }
+  return false;
+};
+
 // Draw the status of the array configurations.
 const drawArrayConfigurations = function() {
   // Go through the array configurations in the data and work out
@@ -1623,7 +1747,8 @@ const drawArrayConfigurations = function() {
   }
 
   // Draw the last configuration.
-  drawConfiguration(slots[currentConfig].array, slots[currentConfig].scheduled_start,
+  drawConfiguration(slots[currentConfig].array,
+		    slots[currentConfig].scheduled_start,
 		    scheduleLast.getTime());
 
   arrayLayer.draw();
@@ -2050,6 +2175,53 @@ const deleteSlot = function() {
   // Double check the user wants this.
   displayModalMessage("Are you sure you want to delete the selected slot?",
 		      true, { 'yes': deleteThatSlot, 'no': deleteCancelled });
+};
+
+// The initial callback for the drop down event handler.
+const dropDownEventHandler = function(id, callback) {
+  return function _listener(ev) {
+    // Remove the event handlers from the ID.
+    var d = document.getElementById(id);
+    d.removeEventListener("change", _listener);
+    d.removeEventListener("blur", _listener);
+    // Call the callback with the currently selected value.
+    var v = d.options[d.selectedIndex].value;
+    callback.callback(callback.payload, v);
+  };
+};
+
+// Add a dropdown input to an element, replacing whatever was there.
+const displayDropDown = function(id, options, callback) {
+  // Get the current value.
+  var e = document.getElementById(id);
+  var cv = e.innerHTML;
+  
+  // Remove whatever was there before.
+  emptyDomNode(id);
+  e.innerHTML = "";
+
+  // Set up the dropdown box.
+  var inp = document.createElement("select");
+  var selid = id + "-select";
+  inp.setAttribute("id", selid);
+  options.forEach(function(v) {
+    var o = document.createElement("option");
+    o.setAttribute("value", v);
+    if (v == cv) {
+      o.setAttribute("selected", "selected");
+    }
+    o.innerHTML = v;
+    inp.appendChild(o);
+  });
+
+  // Add it to the element.
+  e.appendChild(inp);
+
+  // Set the handler for change.
+  inp.addEventListener("change", dropDownEventHandler(selid, callback));
+  // And for blye.
+  inp.addEventListener("blur", dropDownEventHandler(selid, callback));
+  
 };
 
 // Configure some event handlers on existing nodes.
