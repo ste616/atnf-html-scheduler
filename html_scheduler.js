@@ -21,6 +21,8 @@ var allProjectSummary = null;
 var constraintLayer = null;
 var constraintBoxGroup = null;
 var backgroundLayer = null;
+var blockLayer = null;
+var blockGroup = null;
 var allDates = null;
 var stage = null;
 var previouslySelectedProject = null;
@@ -219,6 +221,15 @@ const doy = function(d) {
   var foy = new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0);
   var td = Math.floor((d.getTime() - foy.getTime()) / (86400 * 1000));
   return (td + 1);
+};
+
+// Function to compensate for Eastern Standard Time.
+const easternStandardTime = function(jsEpoch) {
+  if (jsEpoch instanceof Date) {
+    return ((jsEpoch.getTime() / 1000) + (10 * 3600));
+  } else {
+    return ((jsEpoch / 1000) + (10 * 3600));
+  }
 };
 
 // Calculate the sidereal time at Greenwich, given an MJD.
@@ -511,6 +522,75 @@ const makeElement = function(type, text, attrs) {
  * These functions draw onto the scheduling canvas.
  */
 
+// Function that draws a scheduled block.
+const drawBlock = function(proj, slot) {
+  // Return immediately if the block isn't scheduled.
+  if ((typeof proj == "undefined") || (typeof slot == "undefined")) {
+    return;
+  }
+
+  if (proj.slot[slot].scheduled == 0) {
+    return;
+  }
+
+  // Split the block up into drawing blocks, one for each day.
+  // Get the day that we start on.
+  var startDayIdx = calcDayNumber(
+    easternStandardTime(proj.slot[slot].scheduled_start * 1000)) - 1;
+  console.log("block starts at " + startDayIdx);
+  // And the day that we end on.
+  var endDayIdx = calcDayNumber(
+    easternStandardTime(endingDate(proj, slot))) - 1;
+
+  for (var i = startDayIdx; i <= endDayIdx; i++) {
+    // Get the time range on this day.
+    var d1 = allDates[i].getTime() / 1000;
+    var d2 = allDates[i + 1].getTime() / 1000;
+    var s1 = d1;
+    if (proj.slot[slot].scheduled_start > s1) {
+      s1 = proj.slot[slot].scheduled_start;
+    }
+    var s2 = d2;
+    var ed = endingDate(proj, slot);
+    var et = ed.getTime() / 1000;
+    if (et < s2) {
+      s2 = et;
+    }
+    console.log(s1 + " - " + s2);
+    // Now the start and end half hours.
+    var hh1 = (s1 - d1) / 1800;
+    var hh2 = (s2 - d1) / 1800;
+    // And let's draw the block.
+    var blockOpts = {
+      x: (meas.marginLeft + meas.dayLabelWidth + hh1 * meas.halfHourWidth),
+      y: (meas.marginTop + i * meas.dayHeight),
+      width: (hh2 - hh1) * meas.halfHourWidth, height: meas.dayHeight,
+      stroke: "black", strokeWidth: 2
+    };
+    var block = new Konva.Rect(blockOpts);
+    blockGroup.add(block);
+    // Draw the background colours.
+    for (var j = hh1; j < hh2; j+= 0.5) {
+      var ti = Math.floor(j / 2);
+      fillColour = "#" + proj.colour;
+      if (ti % 2) {
+	fillColour = "#ffffff";
+      }
+      var halfHourRect = new Konva.Rect({
+	x: (meas.marginLeft + meas.dayLabelWidth + j * meas.halfHourWidth),
+	y: (meas.marginTop + i * meas.dayHeight + 2),
+	width: meas.halfHourWidth, height: (meas.dayHeight - 4),
+	fill: fillColour, stroke: fillColour, strokeWidth: 0
+      });
+      blockGroup.add(halfHourRect);
+    }
+    // Draw the necessary text.
+    
+  }
+
+  
+};
+
 // Function that draws the n-th day in the schedule.
 // Takes the day number n, the Date d and the group g to draw to.
 // Can optionally make cross-hatched areas with colour c and
@@ -548,7 +628,6 @@ const drawDay = function(n, d, g, dd, c, t, g2) {
     
     // Draw an hour grid.
     for (var j = 0; j < 24; j++) {
-      //fillColour = "#00aa00";
       fillColour = "#" + scheduleData.program.colours.unscheduled;
       if (j % 2) {
 	fillColour = "#ffffff";
@@ -680,6 +759,62 @@ const cleanjson = function(d) {
   return d;
 };
 
+// Draw all the blocks.
+const drawAllBlocks = function() {
+  var allProjects = scheduleData.program.project;
+  for (var i = 0; i < allProjects.length; i++) {
+    var slots = allProjects[i].slot;
+    for (var j = 0; j < slots.length; j++) {
+      if (slots[j].scheduled == 1) {
+	drawBlock(allProjects[i], j);
+      }
+    }
+  }
+  blockLayer.draw();
+};
+
+// Return the end time of a particular project and slot as a Date.
+const endingDate = function(proj, slot) {
+  if ((typeof proj == "undefined") || (typeof slot == "undefined")) {
+    return null;
+  }
+
+  if (proj.slot[slot].scheduled == 1) {
+    var schedend = proj.slot[slot].scheduled_start +
+	(proj.slot[slot].scheduled_duration * 3600);
+    return new Date(schedend * 1000);
+  }
+
+  return null;
+};
+
+// Return the earliest scheduled time from a list of projects.
+const getEarliestDate = function(slotList) {
+  if (slotList.length == 0) {
+    return null;
+  }
+
+  var earliest = -1;
+  for (var i = 0; i < slotList.length; i++) {
+    if (slotList[i].project.details.slot[slotList[i].slot].scheduled == 1) {
+      if (earliest == -1) {
+	earliest = slotList[i].project.details.slot[slotList[i].slot]
+	  .scheduled_start;
+      } else if (slotList[i].project.details.slot[slotList[i].slot]
+		 .scheduled_start < earliest) {
+	earliest = slotList[i].project.details.slot[slotList[i].slot]
+	  .scheduled_start;
+      }
+    }
+  }
+
+  if (earliest == -1) {
+    return null;
+  }
+
+  return new Date(earliest * 1000);
+};
+
 // Load the schedule JSON file.
 const loadFile = function(callback, forceServer) {
   // We don't do anything if we haven't checked for a local file.
@@ -749,7 +884,7 @@ const loadFile = function(callback, forceServer) {
 const scheduledAt = function(d) {
   var allProjects = scheduleData.program.project;
   for (var i = 0; i < allProjects.length; i++) {
-    var slots = allProjects[i].details.slot.length;
+    var slots = allProjects[i].slot;
     for (var j = 0; j < slots.length; j++) {
       if (slots[j].scheduled == 1) {
 	var tdiff = (d.getTime() / 1000) - slots[j].scheduled_start;
@@ -762,6 +897,49 @@ const scheduledAt = function(d) {
     }
   }
   return null;
+};
+
+// Return a list of projects scheduled between two dates, or an empty
+// list if nothing is.
+const scheduledBetween = function(d1, d2) {
+  var allProjects = scheduleData.program.project;
+  var projectsFound = [];
+  var td1 = d1.getTime() / 1000;
+  var td2 = d2.getTime() / 1000;
+  for (var i = 0; i < allProjects.length; i++) {
+    var slots = allProjects[i].slot;
+    for (var j = 0; j < slots.length; j++) {
+      if (slots[j].scheduled == 1) {
+	var ts1 = slots[j].scheduled_start;
+	var slotEnd = endingDate(allProjects[i], j);
+	var ts2 = slotEnd.getTime() / 1000;
+	if (((td1 >= ts1) && (td1 <= ts2)) ||
+	    ((td2 >= ts1) && (td2 <= ts2)) ||
+	    ((td1 < ts1) && (td2 > ts2))) {
+	  // This slot conflicts.
+	  projectsFound.push({ 'project': allProjects[j],
+			       'slot': j });
+	}
+      }
+    }
+  }
+  return projectsFound;
+};
+
+// A routine to do a bunch of things if the schedule gets updated.
+const scheduleUpdated = function() {
+  // First, save the schedule locally.
+  updateLocalSchedule();
+
+  // Now redraw the canvas.
+  drawArrayConfigurations();
+  // Delete all the current schedule blocks.
+  blockGroup.destroyChildren();
+  // Draw all the blocks again.
+  drawAllBlocks();
+  
+  // Now redraw all the tables.
+  
 };
 
 // Make a summary of the current state of the projects.
@@ -1622,7 +1800,7 @@ const scheduleInsert = function(ident, slotNumber, time) {
   // Check if the array configuration is suitable.
   var arrayConfigured = whichArrayConfiguration(time.day);
   var compatible = arrayCompatible(arrayConfigured, slot.array);
-  if (!compatible) {
+  if ((!compatible) && (ident != "CONFIG")) {
     console.log("incompatible configuration requested, aborting");
     return;
   }
@@ -1638,7 +1816,7 @@ const scheduleInsert = function(ident, slotNumber, time) {
     startingDate.setHours(8);
     startingDate.setMinutes(0);
     startingDate.setSeconds(0);
-    hStart = ld.getUTCHours() - 14;
+    hStart = startingDate.getUTCHours() - 14;
   }
 
   if (startingDate == null) {
@@ -1648,7 +1826,69 @@ const scheduleInsert = function(ident, slotNumber, time) {
 
   // Check if something else is already scheduled at this time.
   var overlap = scheduledAt(startingDate);
-  
+
+  if (overlap != null) {
+    // Determine what we should do. By default, we assume that the
+    // more desirable project was scheduled first, and we just start when
+    // the slot ends.
+    var endDate = endingDate(overlap.project, overlap.slot);
+    // Check if we can use this end date.
+    if ((ident == "MAINT") || (ident == "CONFIG")) {
+      // We need to start within office hours.
+      if ((endDate.getHours() > 15) || (endDate.getHours() <= 8)) {
+	// This won't work.
+	console.log("can't start maintenance block out of hours, aborting");
+	return;
+      } else {
+	startingDate = endDate;
+      }
+    }
+  }
+
+  // If we reach here we have a usable start date.
+  // Now we determine the duration.
+  var endDate = new Date(startingDate.getTime() +
+			 (slot.requested_duration * 3600000));
+  // Check for a conflicting project.
+  var conflicts = scheduledBetween(startingDate, endDate);
+  if (conflicts.length > 0) {
+    endDate = getEarliestDate(conflicts);
+  }
+  if (endDate < startingDate) {
+    // We've tried to start within a project; shouldn't have happened.
+    console.log("we got trapped somehow, aborting");
+    return;
+  }
+  // Deal with ending dates outside acceptable ranges.
+  if (ident == "MAINT") {
+    // We want to end at or before 4pm local time.
+    if ((endDate.getHours() > 16) ||
+	(endDate.getHours() < 8)) {
+      if (endDate.getHours() < 8) {
+	// We also go back a day.
+	endDate.setTime(endDate.getTime() - 86400000);
+      }
+      endDate.setHours() = 16;
+      endDate.setMinutes() = 0;
+      endDate.setSeconds() = 0;
+    }
+  } else if (ident == "CONFIG") {
+    // We want to end at or before 8am the next day.
+    if ((endDate.getHours() > 8) &&
+	((endDate.getTime() - startingDate.getTime()) > (12 * 3600000))) {
+      endDate.setHours() = 8;
+      endDate.setMinutes() = 0;
+      endDate.setSeconds() = 0;
+    }
+  }
+
+  // If we get here, we're good to put this in the schedule.
+  slot.scheduled_start = startingDate.getTime() / 1000;
+  slot.scheduled_duration = (endDate.getTime() - startingDate.getTime()) / 3600000;
+  slot.scheduled = 1;
+
+  // Redraw everything.
+  scheduleUpdated();
 };
 
 const handleCanvasClick = function(e) {
@@ -1789,6 +2029,17 @@ const setupCanvas = function(data) {
 
   // Draw the initial array configurations.
   drawArrayConfigurations();
+
+  // And the layer for the schedule blocks.
+  blockLayer = new Konva.Layer();
+  blockGroup = new Konva.Group({
+    draggable: true
+  });
+  blockLayer.add(blockGroup);
+  stage.add(blockLayer);
+
+  // Draw all the blocks we know about already.
+  drawAllBlocks();
 };
 
 // Find a project by name.
