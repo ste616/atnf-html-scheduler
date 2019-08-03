@@ -651,9 +651,9 @@ const drawNightTimes = function(t, g) {
 
 
 /********************************************************************
- * UNSORTED FUNCTIONS BELOW
+ * SCHEDULE FUNCTIONS
+ * These functions load, save or modify the schedule in some way.
  */
-
 
 // Do some number parsing.
 const cleanjson = function(d) {
@@ -744,10 +744,25 @@ const loadFile = function(callback, forceServer) {
   }
 };
 
-
-
-
-
+// Return the project and slot scheduled at a specified time, or
+// null if nothing is.
+const scheduledAt = function(d) {
+  var allProjects = scheduleData.program.project;
+  for (var i = 0; i < allProjects.length; i++) {
+    var slots = allProjects[i].details.slot.length;
+    for (var j = 0; j < slots.length; j++) {
+      if (slots[j].scheduled == 1) {
+	var tdiff = (d.getTime() / 1000) - slots[j].scheduled_start;
+	if ((tdiff >= 0) && (tdiff < (slots[j].scheduled_duration * 3600))) {
+	  // This is what we're looking for.
+	  return { 'project': allProjects[i],
+		   'slot': j };
+	}
+      }
+    }
+  }
+  return null;
+};
 
 // Make a summary of the current state of the projects.
 const summariseProjects = function() {
@@ -948,6 +963,17 @@ const summariseSemester = function() {
 
   return r;
 };
+
+
+
+
+
+
+/********************************************************************
+ * UNSORTED FUNCTIONS BELOW
+ */
+
+
 
 
 
@@ -1600,6 +1626,29 @@ const scheduleInsert = function(ident, slotNumber, time) {
     console.log("incompatible configuration requested, aborting");
     return;
   }
+
+  // Work out when we should start on this day.
+  var hStart = null;
+  var startingDate = null;
+  if ((ident == "MAINT") || (ident == "CONFIG")) {
+    // This is a maintenance block, and we try to start at 8am
+    // local on the day that was clicked. This doesn't
+    // necessarily mean 8am AEST, given daylight savings.
+    startingDate = new Date(d.getTime());
+    startingDate.setHours(8);
+    startingDate.setMinutes(0);
+    startingDate.setSeconds(0);
+    hStart = ld.getUTCHours() - 14;
+  }
+
+  if (startingDate == null) {
+    console.log("can't work out when to start this block, aborting");
+    return;
+  }
+
+  // Check if something else is already scheduled at this time.
+  var overlap = scheduledAt(startingDate);
+  
 };
 
 const handleCanvasClick = function(e) {
@@ -1805,6 +1854,8 @@ const drawConfiguration = function(title, start, end) {
   }
   
 };
+
+
 
 // Work out which array configuration is currently scheduled at
 // some particular day d, which is the day of the schedule.
