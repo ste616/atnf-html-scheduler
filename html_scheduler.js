@@ -226,9 +226,9 @@ const doy = function(d) {
 // Function to compensate for Eastern Standard Time.
 const easternStandardTime = function(jsEpoch) {
   if (jsEpoch instanceof Date) {
-    return ((jsEpoch.getTime() / 1000) + (10 * 3600));
+    return ((jsEpoch.getTime() / 1000) + (14 * 3600));
   } else {
-    return ((jsEpoch / 1000) + (10 * 3600));
+    return ((jsEpoch / 1000) + (14 * 3600));
   }
 };
 
@@ -543,20 +543,23 @@ const drawBlock = function(proj, slot) {
     easternStandardTime(endingDate(proj, slot))) - 1;
 
   for (var i = startDayIdx; i <= endDayIdx; i++) {
+    console.log("this day goes from " + (allDates[i].getTime() / 1000) + " to " +
+		(allDates[i + 1].getTime() / 1000));
     // Get the time range on this day.
     var d1 = allDates[i].getTime() / 1000;
     var d2 = allDates[i + 1].getTime() / 1000;
     var s1 = d1;
-    if (proj.slot[slot].scheduled_start > s1) {
-      s1 = proj.slot[slot].scheduled_start;
+    var ts1 = easternStandardTime(proj.slot[slot].scheduled_start * 1000)
+    console.log("slot starts at " + ts1);
+    if (ts1 > s1) {
+      s1 = ts1;
     }
     var s2 = d2;
     var ed = endingDate(proj, slot);
-    var et = ed.getTime() / 1000;
+    var et = easternStandardTime(ed);
     if (et < s2) {
       s2 = et;
     }
-    console.log(s1 + " - " + s2);
     // Now the start and end half hours.
     var hh1 = (s1 - d1) / 1800;
     var hh2 = (s2 - d1) / 1800;
@@ -570,22 +573,41 @@ const drawBlock = function(proj, slot) {
     var block = new Konva.Rect(blockOpts);
     blockGroup.add(block);
     // Draw the background colours.
-    for (var j = hh1; j < hh2; j+= 0.5) {
+    for (var j = hh1; j < hh2; j++) {
       var ti = Math.floor(j / 2);
       fillColour = "#" + proj.colour;
       if (ti % 2) {
 	fillColour = "#ffffff";
       }
-      var halfHourRect = new Konva.Rect({
+      var hhRectOpts = {
 	x: (meas.marginLeft + meas.dayLabelWidth + j * meas.halfHourWidth),
-	y: (meas.marginTop + i * meas.dayHeight + 2),
-	width: meas.halfHourWidth, height: (meas.dayHeight - 4),
+	y: (meas.marginTop + i * meas.dayHeight + 1),
+	width: meas.halfHourWidth, height: (meas.dayHeight - 2),
 	fill: fillColour, stroke: fillColour, strokeWidth: 0
-      });
+      };
+      if (j == hh1) {
+	hhRectOpts.x += 1;
+	hhRectOpts.width -= 1;
+      } else if (j == (hh2 - 1)) {
+	hhRectOpts.width -= 1;
+      }
+      var halfHourRect = new Konva.Rect(hhRectOpts);
       blockGroup.add(halfHourRect);
     }
     // Draw the necessary text.
-    
+    var mainTitleOpts = {
+      x: (blockOpts.x + blockOpts.width / 2),
+      y: (blockOpts.y + blockOpts.height / 2),
+      text: proj.ident + " (" + proj.PI + ")",
+      fontSize: 16, fill: "black"
+    };
+    if (proj.ident == "MAINT") {
+      mainTitleOpts.text = proj.title;
+    }
+    var mainTitleText = new Konva.Text(mainTitleOpts);
+    mainTitleText.offsetX(mainTitleText.width() / 2);
+    mainTitleText.offsetY(mainTitleText.height() / 2);
+    blockGroup.add(mainTitleText);
   }
 
   
@@ -1927,6 +1949,7 @@ const setupCanvas = function(data) {
     semesterStartMonth = 10;
   }
   semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);
+  semesterStart.setHours(14);
   // Subtract a few days.
   scheduleFirst = new Date();
   scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
