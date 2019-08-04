@@ -1916,7 +1916,11 @@ const scheduleInsert = function(ident, slotNumber, time) {
 const handleCanvasClick = function(e) {
   // Get the time and day that was clicked.
   var timeClicked = pointerTime(e);
-
+  console.log("time clicked is " + JSON.stringify(timeClicked));
+  
+  // Check if there is a block scheduled where the click was.
+  
+  
   // Has a project and slot been selected?
   if ((previouslySelectedProject != null) &&
       (previouslySelectedSlot != null)) {
@@ -2009,7 +2013,14 @@ const setupCanvas = function(data) {
   backgroundLayer.add(dayBoxGroup);
   stage.add(backgroundLayer);
   stage.add(constraintLayer);
-  
+
+  // And the layer for the schedule blocks.
+  blockLayer = new Konva.Layer();
+  blockGroup = new Konva.Group({
+    draggable: true
+  });
+  blockLayer.add(blockGroup);
+  stage.add(blockLayer);
   
   // Make the top layer, which will be for the LST and daylight.
   var topLayer = new Konva.Layer();
@@ -2053,13 +2064,6 @@ const setupCanvas = function(data) {
   // Draw the initial array configurations.
   drawArrayConfigurations();
 
-  // And the layer for the schedule blocks.
-  blockLayer = new Konva.Layer();
-  blockGroup = new Konva.Group({
-    draggable: true
-  });
-  blockLayer.add(blockGroup);
-  stage.add(blockLayer);
 
   // Draw all the blocks we know about already.
   drawAllBlocks();
