@@ -571,6 +571,16 @@ const makeElement = function(type, text, attrs) {
  * These functions draw onto the scheduling canvas.
  */
 
+// Dehighlight a selected schedule block.
+const dehighlightBlock = function(proj, slot) {
+  var bo = findBlockObject(proj, slot);
+  for (var i = 0; i < bo.rects.length; i++) {
+    bo.rects[i].stroke("black");
+    bo.rects[i].strokeWidth(2);
+  }
+  blockLayer.draw();
+};
+
 // Function that draws a scheduled block.
 const drawBlock = function(proj, slot) {
   // Return immediately if the block isn't scheduled.
@@ -799,6 +809,17 @@ const drawNightTimes = function(t, g) {
 };
 
 
+// Highlight a selected schedule block.
+const highlightBlock = function(proj, slot) {
+  var bo = findBlockObject(proj, slot);
+  for (var i = 0; i < bo.rects.length; i++) {
+    bo.rects[i].stroke("yellow");
+    bo.rects[i].strokeWidth(4);
+  }
+  bo.group.moveToTop();
+  blockLayer.draw();
+};
+
 // Draw an LST line on a particular day.
 const lstDraw = function(n, d, l, p, g) {
   // Calculate the LST at midnight this day.
@@ -878,6 +899,13 @@ const drawAllBlocks = function() {
     for (var j = 0; j < slots.length; j++) {
       if (slots[j].scheduled == 1) {
 	drawBlock(allProjects[i], j);
+	// Check if we are selected.
+	if ((previouslySelectedProject != null) &&
+	    (allProjects[i].ident == previouslySelectedProject.details.ident) &&
+	    (j == previouslySelectedSlot)) {
+	  // Highlight this block.
+	  highlightBlock(allProjects[i], j);
+	}
       }
     }
   }
@@ -1290,6 +1318,13 @@ const showProjectDetails = function(ident) {
       (previouslySelectedProject != project)) {
     fillId("row-" + previouslySelectedProject.details.ident, null,
 	   null, "selectedProject");
+    // And dehighlight any selected slot on the canvas.
+    if ((previouslySelectedSlot != null) &&
+	(previouslySelectedProject.details.slot[previouslySelectedSlot]
+	 .scheduled == 1)) {
+      dehighlightBlock(previouslySelectedProject.details,
+		       previouslySelectedSlot);
+    }
     previouslySelectedProject = null;
     previouslySelectedSlot = null;
   }
@@ -1396,12 +1431,7 @@ const selectSlot = function(slotnumber) {
     console.log(psp.slot[previouslySelectedSlot]);
     if (psp.slot[previouslySelectedSlot].scheduled == 1) {
       console.log("dehighlighting");
-      var bo = findBlockObject(psp, previouslySelectedSlot);
-      for (var i = 0; i < bo.rects.length; i++) {
-	bo.rects[i].stroke("black");
-	bo.rects[i].strokeWidth(2);
-      }
-      blockLayer.draw();
+      dehighlightBlock(psp, previouslySelectedSlot);
     }
   }
   previouslySelectedSlot = slotnumber;
@@ -1454,13 +1484,7 @@ const selectSlot = function(slotnumber) {
 
   // If it has been scheduled already, highlight it on the canvas.
   if (psps.scheduled == 1) {
-    var bo = findBlockObject(psp, slotnumber);
-    for (var i = 0; i < bo.rects.length; i++) {
-      bo.rects[i].stroke("yellow");
-      bo.rects[i].strokeWidth(8);
-    }
-    bo.group.moveToTop();
-    blockLayer.draw();
+    highlightBlock(psp, slotnumber);
   }
   
 };
@@ -2719,6 +2743,7 @@ const unscheduleSlot = function() {
   }
 
   // Otherwise, remove it from the schedule.
+  undrawBlock(previouslySelectedProject.details, previouslySelectedSlot);
   previouslySelectedProject.details.slot[previouslySelectedSlot]
     .scheduled = 0;
   previouslySelectedProject.details.slot[previouslySelectedSlot]
@@ -2727,7 +2752,6 @@ const unscheduleSlot = function() {
     .scheduled_start = 0;
 
   // Update the page.
-  undrawBlock(previouslySelectedProject.details, previouslySelectedSlot);
   scheduleUpdated();
   
   
