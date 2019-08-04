@@ -22,13 +22,14 @@ var constraintLayer = null;
 var constraintBoxGroup = null;
 var backgroundLayer = null;
 var blockLayer = null;
-var blockGroup = null;
 var allDates = null;
 var stage = null;
 var previouslySelectedProject = null;
 var previouslySelectedSlot = null;
 // This contains all the nodes for each project in the table.
 var tableRows = {};
+// This contains all the block Konva objects.
+var blockObjects = [];
 
 // Some constants we need.
 // The observatory coordinates.
@@ -232,6 +233,18 @@ const easternStandardTime = function(jsEpoch) {
   }
 };
 
+// Find a block in the block object.
+const findBlockObject = function(proj, slot) {
+  for (var i = 0; i < blockObjects.length; i++) {
+    if ((blockObjects[i].ident == proj.ident) &&
+	(blockObjects[i].slot == slot)) {
+      return blockObjects[i];
+    }
+  }
+
+  return null;
+};
+
 // Calculate the sidereal time at Greenwich, given an MJD.
 const gst = function(mjd, dUT1) {
   var a = 101.0 + 24110.54581 / 86400.0;
@@ -321,6 +334,22 @@ const printDate = function(d) {
 // Convert radians to degrees.
 const rad2deg = function(r) {
   return (r * 180 / Math.PI);
+};
+
+// Remove a block in the block object.
+const removeBlockObject = function(proj, slot) {
+  var boidx = -1;
+  for (var i = 0; i < blockObjects.length; i++) {
+    if ((blockObjects[i].ident == proj.ident) &&
+	(blockObjects[i].slot == slot)) {
+      boidx = i;
+      break;
+    }
+  }
+
+  if (boidx >= 0) {
+    blockObjects.splice(boidx, 1);
+  }
 };
 
 // We take a date/month string and work out the date given
@@ -491,6 +520,26 @@ const fillInput = function(id, text) {
   }
 };
 
+const isElementVisible = function(el) {
+    var rect     = el.getBoundingClientRect(),
+        vWidth   = window.innerWidth || doc.documentElement.clientWidth,
+        vHeight  = window.innerHeight || doc.documentElement.clientHeight,
+        efp      = function (x, y) { return document.elementFromPoint(x, y) };     
+
+    // Return false if it's not in the viewport
+    if (rect.right < 0 || rect.bottom < 0 
+            || rect.left > vWidth || rect.top > vHeight)
+        return false;
+
+    // Return true if any of its four corners are visible
+    return (
+          el.contains(efp(rect.left,  rect.top))
+      ||  el.contains(efp(rect.right, rect.top))
+      ||  el.contains(efp(rect.right, rect.bottom))
+      ||  el.contains(efp(rect.left,  rect.bottom))
+    );
+};
+
 // A helper function to make a DOM element.
 const makeElement = function(type, text, attrs) {
   var e = document.createElement(type);
@@ -533,6 +582,11 @@ const drawBlock = function(proj, slot) {
     return;
   }
 
+  // Check if this block has already been drawn.
+  if (findBlockObject(proj, slot) != null) {
+    return;
+  }
+  
   // Split the block up into drawing blocks, one for each day.
   // Get the day that we start on.
   var startDayIdx = calcDayNumber(
@@ -542,6 +596,11 @@ const drawBlock = function(proj, slot) {
   var endDayIdx = calcDayNumber(
     easternStandardTime(endingDate(proj, slot))) - 1;
 
+  var blockGroup = new Konva.Group({
+    draggable: true
+  });
+  var blockRects = [];
+  
   for (var i = startDayIdx; i <= endDayIdx; i++) {
     console.log("this day goes from " + (allDates[i].getTime() / 1000) + " to " +
 		(allDates[i + 1].getTime() / 1000));
@@ -571,6 +630,7 @@ const drawBlock = function(proj, slot) {
       stroke: "black", strokeWidth: 2
     };
     var block = new Konva.Rect(blockOpts);
+    blockRects.push(block);
     blockGroup.add(block);
     // Draw the background colours.
     for (var j = hh1; j < hh2; j++) {
@@ -609,7 +669,14 @@ const drawBlock = function(proj, slot) {
     mainTitleText.offsetY(mainTitleText.height() / 2);
     blockGroup.add(mainTitleText);
   }
+  blockLayer.add(blockGroup);
 
+  // Add this block to the block object array.
+  var blockAddition = {
+    ident: proj.ident, slot: slot,
+    group: blockGroup, rects: blockRects
+  };
+  blockObjects.push(blockAddition);
   
 };
 
@@ -703,25 +770,6 @@ const drawHourLabels = function(g) {
   }
 };
 
-
-// Draw an LST line on a particular day.
-const lstDraw = function(n, d, l, p, g) {
-  // Calculate the LST at midnight this day.
-  var zlst = 24 * mjd2lst(date2mjd(d), (149.5501388 / 360.0), 0);
-  var midHours = hoursUntilLst(zlst, l);
-  var topHours = midHours + (2 / 60);
-  var bottomHours = midHours - (2 / 60);
-  var topX = meas.marginLeft + meas.dayLabelWidth + (topHours * (2 * meas.halfHourWidth));
-  var bottomX = meas.marginLeft + meas.dayLabelWidth + (bottomHours * (2 * meas.halfHourWidth));
-  var lobj = p;
-  lobj.points = [ topX, (meas.marginTop + n * meas.dayHeight),
-		  bottomX, (meas.marginTop + (n + 1) * meas.dayHeight) ];
-  lobj.strokeWidth = 4;
-  var line = new Konva.Line(lobj);
-  g.add(line);
-};
-
-
 // Draw a polygon to show when it's night times.
 const drawNightTimes = function(t, g) {
   var morningPos = [ meas.marginLeft + meas.dayLabelWidth, meas.marginTop ];
@@ -748,6 +796,47 @@ const drawNightTimes = function(t, g) {
   });
   g.add(morningPoly);
   g.add(eveningPoly);
+};
+
+
+// Draw an LST line on a particular day.
+const lstDraw = function(n, d, l, p, g) {
+  // Calculate the LST at midnight this day.
+  var zlst = 24 * mjd2lst(date2mjd(d), (149.5501388 / 360.0), 0);
+  var midHours = hoursUntilLst(zlst, l);
+  var topHours = midHours + (2 / 60);
+  var bottomHours = midHours - (2 / 60);
+  var topX = meas.marginLeft + meas.dayLabelWidth + (topHours * (2 * meas.halfHourWidth));
+  var bottomX = meas.marginLeft + meas.dayLabelWidth + (bottomHours * (2 * meas.halfHourWidth));
+  var lobj = p;
+  lobj.points = [ topX, (meas.marginTop + n * meas.dayHeight),
+		  bottomX, (meas.marginTop + (n + 1) * meas.dayHeight) ];
+  lobj.strokeWidth = 4;
+  var line = new Konva.Line(lobj);
+  g.add(line);
+};
+
+// Get rid of a block on the canvas.
+const undrawBlock = function(proj, slot) {
+  // Return immediately if the block isn't scheduled.
+  if ((typeof proj == "undefined") || (typeof slot == "undefined")) {
+    return;
+  }
+
+  if (proj.slot[slot].scheduled == 0) {
+    return;
+  }
+
+  // Check if this block has already been drawn.
+  var bo = findBlockObject(proj, slot);
+  if (bo == null) {
+    return;
+  }
+
+  // Get rid of it.
+  bo.group.destroy();
+  removeBlockObject(proj, slot);
+  
 };
 
 
@@ -909,7 +998,12 @@ const scheduledAt = function(d) {
     var slots = allProjects[i].slot;
     for (var j = 0; j < slots.length; j++) {
       if (slots[j].scheduled == 1) {
-	var tdiff = (d.getTime() / 1000) - slots[j].scheduled_start;
+	var tdiff;
+	if (d instanceof Date) {
+	  tdiff = (d.getTime() / 1000) - slots[j].scheduled_start;
+	} else {
+	  tdiff = d - slots[j].scheduled_start;
+	}
 	if ((tdiff >= 0) && (tdiff < (slots[j].scheduled_duration * 3600))) {
 	  // This is what we're looking for.
 	  return { 'project': allProjects[i],
@@ -956,7 +1050,7 @@ const scheduleUpdated = function() {
   // Now redraw the canvas.
   drawArrayConfigurations();
   // Delete all the current schedule blocks.
-  blockGroup.destroyChildren();
+  //blockLayer.destroyChildren();
   // Draw all the blocks again.
   drawAllBlocks();
   
@@ -1299,6 +1393,16 @@ const selectSlot = function(slotnumber) {
     var pid = "slotselected-" + psp.ident +
 	"-" + previouslySelectedSlot;
     fillId(pid, "&nbsp;", null, "slotSelected");
+    console.log(psp.slot[previouslySelectedSlot]);
+    if (psp.slot[previouslySelectedSlot].scheduled == 1) {
+      console.log("dehighlighting");
+      var bo = findBlockObject(psp, previouslySelectedSlot);
+      for (var i = 0; i < bo.rects.length; i++) {
+	bo.rects[i].stroke("black");
+	bo.rects[i].strokeWidth(2);
+      }
+      blockLayer.draw();
+    }
   }
   previouslySelectedSlot = slotnumber;
 
@@ -1338,13 +1442,26 @@ const selectSlot = function(slotnumber) {
     drawDay(daynum, null, null, false, "orange", tplots, constraintBoxGroup);
     return sourceRiseSets;
   });
-  console.log(sourceTimes);
 
   constraintLayer.draw();
   
   // Scroll to the right place if we have it already
   // scheduled, or the first good date.
-  
+  var hidEl = document.getElementById(hid);
+  if (!isElementVisible(hidEl)) {
+    hidEl.scrollIntoView();
+  }
+
+  // If it has been scheduled already, highlight it on the canvas.
+  if (psps.scheduled == 1) {
+    var bo = findBlockObject(psp, slotnumber);
+    for (var i = 0; i < bo.rects.length; i++) {
+      bo.rects[i].stroke("yellow");
+      bo.rects[i].strokeWidth(8);
+    }
+    bo.group.moveToTop();
+    blockLayer.draw();
+  }
   
 };
 
@@ -1776,7 +1893,11 @@ const pointerTime = function(e) {
     nHalfHours = 47;
   }
 
-  return { 'day': nDays, 'hour': (nHalfHours / 2) };
+  // Get the time stamp here.
+  var epoch = (allDates[nDays].getTime() / 1000) +
+      (nHalfHours * 1800) - (14 * 3600);
+  
+  return { 'day': nDays, 'hour': (nHalfHours / 2), 'timestamp': epoch };
 };
 
 
@@ -1919,7 +2040,16 @@ const handleCanvasClick = function(e) {
   console.log("time clicked is " + JSON.stringify(timeClicked));
   
   // Check if there is a block scheduled where the click was.
-  
+  var scheduled = scheduledAt(timeClicked.timestamp);
+  if (scheduled != null) {
+    if ((previouslySelectedProject == null) ||
+	(previouslySelectedProject.details.ident != scheduled.project.ident)) {
+      showProjectDetails(scheduled.project.ident);
+    }
+    selectSlot(scheduled.slot);
+  } else {
+    console.log("no scheduled project found");
+  }
   
   // Has a project and slot been selected?
   if ((previouslySelectedProject != null) &&
@@ -2016,10 +2146,6 @@ const setupCanvas = function(data) {
 
   // And the layer for the schedule blocks.
   blockLayer = new Konva.Layer();
-  blockGroup = new Konva.Group({
-    draggable: true
-  });
-  blockLayer.add(blockGroup);
   stage.add(blockLayer);
   
   // Make the top layer, which will be for the LST and daylight.
@@ -2600,13 +2726,11 @@ const unscheduleSlot = function() {
   previouslySelectedProject.details.slot[previouslySelectedSlot]
     .scheduled_start = 0;
 
-  // Update all the page details.
-  showProjectDetails(previouslySelectedProject.details.ident);
-  updateProjectTable();
-  // TODO: Update the canvas.
-
-  // Save the local schedule.
-  updateLocalSchedule();
+  // Update the page.
+  undrawBlock(previouslySelectedProject.details, previouslySelectedSlot);
+  scheduleUpdated();
+  
+  
 };
 
 // The routine which actually handles a slot deletion.
