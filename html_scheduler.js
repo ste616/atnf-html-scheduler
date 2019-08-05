@@ -81,7 +81,7 @@ var meas = {
   // The width of the label which holds the date string.
   dayLabelWidth: 140,  
   // The width of the array panel.
-  arrayLabelWidth: 60,
+  arrayLabelWidth: 80,
   // The height of the hour label part.
   timeLabelHeight: 66
 };
@@ -559,8 +559,142 @@ const makeElement = function(type, text, attrs) {
   return e;
 };
 
+// Show the details of a particular project, and present the slot
+// scheduling interface for it.
+const showProjectDetails = function(ident) {
+  // Find the project by its ident.
+  var project = getProjectByName(ident);
 
+  if (project.details == null) {
+    console.log("something has gone horribly wrong");
+    return;
+  }
 
+  // Deselect any previously selected project, unless it's us.
+  var tableRedrawRequired = true;
+  if ((previouslySelectedProject != null) &&
+      (previouslySelectedProject.details.ident != ident)) {
+    fillId("row-" + previouslySelectedProject.details.ident, null,
+	   null, "selectedProject");
+    // And dehighlight any selected slot on the canvas.
+    if ((previouslySelectedSlot != null) &&
+	(previouslySelectedProject.details.slot[previouslySelectedSlot]
+	 .scheduled == 1)) {
+      dehighlightBlock(previouslySelectedProject.details,
+		       previouslySelectedSlot);
+    }
+    previouslySelectedProject = null;
+    previouslySelectedSlot = null;
+  } else if ((previouslySelectedProject != null) &&
+	     (previouslySelectedProject.details.ident == ident)) {
+    // We've already been selected, we just need to update the
+    // table when we come to it.
+    tableRedrawRequired = false;
+  }
+
+  if (tableRedrawRequired) {
+    // Select the row in the table.
+    previouslySelectedProject = project;
+    fillId("row-" + project.details.ident, null, "selectedProject");
+    
+    // Display the vital statistics.
+    console.log(project);
+    fillId("projectselectedIdent", project.details.ident);
+    fillId("projectselectedPI", project.details.PI);
+    var projectselectedTable = document.getElementById("projectselected");
+    projectselectedTable.style["background-color"] = "#" + project.summary.colour;
+    
+    // Display the comments for the project.
+    fillId("projectcomments", project.details.comments);
+    // Show the date preferences.
+    var nc = document.getElementById("nighttime");
+    if (project.details.prefers_night == 0) {
+      nc.checked = false;
+    } else {
+      nc.checked = true;
+    }
+    if ((project.details.excluded_dates instanceof Array) &&
+	(project.details.excluded_dates.length > 0)) {
+      project.details.excluded_dates.sort();
+      var datestrings = project.details.excluded_dates.map(datetimeToSmallString);
+      fillInput("baddates", datestrings.join(","));
+    } else {
+      // Blank the input.
+      fillInput("baddates", "");
+    }
+    if ((project.details.preferred_dates instanceof Array) &&
+	(project.details.preferred_dates.length > 0)) {
+      project.details.preferred_dates.sort();
+      var datestrings = project.details.preferred_dates.map(datetimeToSmallString);
+      fillInput("gooddates", datestrings.join(","));
+    } else {
+      fillInput("gooddates", "");
+    }
+  
+    // Make a table with each of the slots.
+    // Empty the current table.
+    var slotTable = emptyDomNode("projectslotsSelectionBody");
+    for (var i = 0; i < project.details.slot.length; i++) {
+      var s = project.details.slot[i];
+      var rid = "slotrow-" + project.details.ident + "-" + i;
+      var tr = makeElement("tr", null, {
+	'id': rid
+      });
+      slotTable.appendChild(tr);
+      var tsel = makeElement("th", "&nbsp;", {
+	'id': "slotselected-" + project.details.ident + "-" + i
+      });
+      tr.appendChild(tsel);
+      var arrId = "slotarray-" + project.details.ident + "-" + i;
+      var td = makeElement("td", s.array.toUpperCase(), {
+	'id': arrId
+      });
+      // Add a double-click handler on the array.
+      addDoubleClickHandler(td,
+			    arraySelectorGen(project.details.ident, i, arrId));
+      tr.appendChild(td);
+      var bandId = "slotband-" + project.details.ident + "-" + i;
+      td = makeElement("td", s.bands.join(","), { 'id': bandId });
+      addDoubleClickHandler(td,
+			    bandsSelectorGen(project.details.ident, i, bandId));
+      tr.appendChild(td);
+      var bandwidthId = "slotbandwidth-" + project.details.ident + "-" + i;
+      td = makeElement("td", s.bandwidth, { 'id': bandwidthId });
+      addDoubleClickHandler(td, cabbSelectorGen(project.details.ident, i,
+						bandwidthId));
+      tr.appendChild(td);
+      td = makeElement("td", s.source);
+      tr.appendChild(td);
+      var timeId = "slottime-" + project.details.ident + "-" + i;
+      td = makeElement("td", s.scheduled_duration + " / " +
+		       s.requested_duration, { 'id': timeId });
+      addDoubleClickHandler(td,
+			    timeSelectorGen(project.details.ident, i,
+					    timeId));
+      tr.appendChild(td);
+      
+      // Add a click handler on this row.
+      addClickHandler(tr, slotSelectorGen(i));
+    }
+  } else {
+    // Update the time allocated for each slot.
+    console.log("updating table only");
+    for (var i = 0; i < project.details.slot.length; i++) {
+      var s = project.details.slot[i];
+      var timeId = "slottime-" + project.details.ident + "-" + i;
+      fillId(timeId, s.scheduled_duration + " / " +
+	     s.requested_duration);
+    }
+  }
+  
+};
+
+// Update all the numbers and styling in all the tables.
+const updateAllTables = function() {
+  updateSemesterSummary();
+  updateProjectTable();
+  showProjectDetails(previouslySelectedProject.details.ident);
+};
 
 
 
@@ -610,6 +744,8 @@ const drawBlock = function(proj, slot) {
     draggable: true
   });
   var blockRects = [];
+  var blockTextOpts = [];
+  var blockTexts = [];
   
   for (var i = startDayIdx; i <= endDayIdx; i++) {
     console.log("this day goes from " + (allDates[i].getTime() / 1000) + " to " +
@@ -669,14 +805,21 @@ const drawBlock = function(proj, slot) {
       x: (blockOpts.x + blockOpts.width / 2),
       y: (blockOpts.y + blockOpts.height / 2),
       text: proj.ident + " (" + proj.PI + ")",
-      fontSize: 16, fill: "black"
+      fontSize: 16, fill: "black",
+      type: "main"
     };
     if (proj.ident == "MAINT") {
       mainTitleOpts.text = proj.title;
+    } else if (proj.ident == "CONFIG") {
+      mainTitleOpts.text = "Reconfigure #" + proj.slot[slot].source +
+	"/Calibration";
+      mainTitleOpts.textPattern = "full";
     }
+    blockTextOpts.push(mainTitleOpts);
     var mainTitleText = new Konva.Text(mainTitleOpts);
     mainTitleText.offsetX(mainTitleText.width() / 2);
     mainTitleText.offsetY(mainTitleText.height() / 2);
+    blockTexts.push(mainTitleText);
     blockGroup.add(mainTitleText);
   }
   blockLayer.add(blockGroup);
@@ -684,9 +827,65 @@ const drawBlock = function(proj, slot) {
   // Add this block to the block object array.
   var blockAddition = {
     ident: proj.ident, slot: slot,
-    group: blockGroup, rects: blockRects
+    group: blockGroup, rects: blockRects,
+    textOptions: blockTextOpts, texts: blockTexts
   };
   blockObjects.push(blockAddition);
+  
+};
+
+const drawConfiguration = function(title, start, end) {
+  console.log("drawing configuration for " + title + " from " +
+	      start + " to " + end);
+
+  // Round off the start and end times.
+  var nDaysSinceStart;
+  if (start == scheduleFirst.getTime() / 1000) {
+    nDaysSinceStart = 0;
+  } else {
+    nDaysSinceStart = Math.ceil((start - (scheduleFirst.getTime() / 1000)) /
+				86400) + 0.5;
+  }
+
+  var endDaysSinceStart;
+  if (end == scheduleLast.getTime() / 1000) {
+    endDaysSinceStart = Math.ceil(((scheduleLast.getTime() / 1000) - start) /
+				  86400) + 0.5 - 2 + nDaysSinceStart;
+  } else {
+    endDaysSinceStart = Math.ceil((end - (scheduleFirst.getTime() / 1000)) /
+				  86400) + 0.5;
+  }
+  
+  // Draw a box on the right.
+  var nDays = endDaysSinceStart;// - nDaysSinceStart;//(end - start) / 86400;
+  console.log("drawing from " + nDaysSinceStart + " to " + nDays +
+	      "days");
+  
+  var boxLeft = meas.marginLeft + meas.dayLabelWidth + meas.dayWidth;
+  var boxTop = meas.marginTop + nDaysSinceStart * meas.dayHeight;
+  var boxWidth = meas.arrayLabelWidth;
+  var boxHeight = (nDays - nDaysSinceStart) * meas.dayHeight;
+  
+  var arrayBoxOpts = {
+    x: boxLeft, y: boxTop, width: boxWidth, height: boxHeight,
+    stroke: "black", strokeWidth: 2, fill: "#ffffff"
+  };
+  var arrayBox = new Konva.Rect(arrayBoxOpts);
+  arrayGroup.add(arrayBox);
+
+  // Create the label. We repeat it every two weeks if required.
+  var limitHeight = 14 * meas.dayHeight;
+  var totalHeight = 0;
+  while (boxHeight > 0) {
+    var labelHeight = (boxHeight > limitHeight) ? limitHeight : boxHeight;
+    var arrayLabelString = new Konva.Text({
+      x: boxLeft, y: boxTop + totalHeight, width: boxWidth, height: labelHeight,
+      align: "center", verticalAlign: "middle", text: title, fontSize: 20
+    });
+    totalHeight += labelHeight;
+    boxHeight -= labelHeight;
+    arrayGroup.add(arrayLabelString);
+  }
   
 };
 
@@ -860,6 +1059,28 @@ const undrawBlock = function(proj, slot) {
   
 };
 
+// Relabel all the reconfiguration blocks, according to their new
+// numbers.
+const relabelReconfigs = function() {
+  var configs = getProjectByName("CONFIG");
+  var slots = configs.details.slot;
+
+  for (var i = 1; i < slots.length; i++) {
+    if (slots[i].scheduled == 1) {
+      var bo = findBlockObject(configs.details, i);
+      if (bo != null) {
+	for (var j = 0; j < bo.textOptions.length; j++) {
+	  if (bo.textOptions[j].type == "main") {
+	    bo.textOptions[j].text = "Reconfigure #" +
+	      slots[i].source + "/Calibration";
+	    bo.texts[j].text(bo.textOptions[j].text);
+	  }
+	}
+      }
+    }
+  }
+};
+
 
 /********************************************************************
  * SCHEDULE FUNCTIONS
@@ -893,6 +1114,7 @@ const cleanjson = function(d) {
 
 // Draw all the blocks.
 const drawAllBlocks = function() {
+  console.log("drawing all the blocks on the canvas");
   var allProjects = scheduleData.program.project;
   for (var i = 0; i < allProjects.length; i++) {
     var slots = allProjects[i].slot;
@@ -1018,6 +1240,32 @@ const loadFile = function(callback, forceServer) {
   }
 };
 
+// This function numbers all the reconfigurations based on their
+// current ordering.
+const orderReconfigs = function() {
+  var configs = getProjectByName("CONFIG");
+  var slots = configs.details.slot;
+
+  // We ignore the first configuration, since it is the one we start
+  // with.
+  var rconfigs = slots.slice(1);
+  // Sort these according to start time.
+  rconfigs.sort(function(a, b) {
+    return (a.scheduled_start - b.scheduled_start);
+  });
+
+  var cnumber = scheduleData.program.special.lastReconfigNumber + 1;
+  for (var i = 0; i < rconfigs.length; i++) {
+    if (rconfigs[i].scheduled == 1) {
+      rconfigs[i].source = "" + cnumber;
+      cnumber += 1;
+    }
+  }
+
+  // Call for all the reconfig blocks to be relabelled.
+  relabelReconfigs();
+};
+
 // Return the project and slot scheduled at a specified time, or
 // null if nothing is.
 const scheduledAt = function(d) {
@@ -1072,10 +1320,13 @@ const scheduledBetween = function(d1, d2) {
 
 // A routine to do a bunch of things if the schedule gets updated.
 const scheduleUpdated = function() {
+  console.log("updating page after schedule change");
+  
   // First, save the schedule locally.
   updateLocalSchedule();
 
   // Now redraw the canvas.
+  orderReconfigs();
   drawArrayConfigurations();
   // Delete all the current schedule blocks.
   //blockLayer.destroyChildren();
@@ -1083,7 +1334,7 @@ const scheduleUpdated = function() {
   drawAllBlocks();
   
   // Now redraw all the tables.
-  
+  updateAllTables();
 };
 
 // Make a summary of the current state of the projects.
@@ -1302,119 +1553,6 @@ const summariseSemester = function() {
 
 
 
-// Show the details of a particular project, and present the slot
-// scheduling interface for it.
-const showProjectDetails = function(ident) {
-  // Find the project by its ident.
-  var project = getProjectByName(ident);
-
-  if (project.details == null) {
-    console.log("something has gone horribly wrong");
-    return;
-  }
-
-  // Deselect any previously selected project, unless it's us.
-  if ((previouslySelectedProject != null) &&
-      (previouslySelectedProject != project)) {
-    fillId("row-" + previouslySelectedProject.details.ident, null,
-	   null, "selectedProject");
-    // And dehighlight any selected slot on the canvas.
-    if ((previouslySelectedSlot != null) &&
-	(previouslySelectedProject.details.slot[previouslySelectedSlot]
-	 .scheduled == 1)) {
-      dehighlightBlock(previouslySelectedProject.details,
-		       previouslySelectedSlot);
-    }
-    previouslySelectedProject = null;
-    previouslySelectedSlot = null;
-  }
-  
-  // Select the row in the table.
-  previouslySelectedProject = project;
-  fillId("row-" + project.details.ident, null, "selectedProject");
-  
-  // Display the vital statistics.
-  console.log(project);
-  fillId("projectselectedIdent", project.details.ident);
-  fillId("projectselectedPI", project.details.PI);
-  var projectselectedTable = document.getElementById("projectselected");
-  projectselectedTable.style["background-color"] = "#" + project.summary.colour;
-  
-  // Display the comments for the project.
-  fillId("projectcomments", project.details.comments);
-  // Show the date preferences.
-  var nc = document.getElementById("nighttime");
-  if (project.details.prefers_night == 0) {
-    nc.checked = false;
-  } else {
-    nc.checked = true;
-  }
-  if ((project.details.excluded_dates instanceof Array) &&
-      (project.details.excluded_dates.length > 0)) {
-    project.details.excluded_dates.sort();
-    var datestrings = project.details.excluded_dates.map(datetimeToSmallString);
-    fillInput("baddates", datestrings.join(","));
-  } else {
-    // Blank the input.
-    fillInput("baddates", "");
-  }
-  if ((project.details.preferred_dates instanceof Array) &&
-      (project.details.preferred_dates.length > 0)) {
-    project.details.preferred_dates.sort();
-    var datestrings = project.details.preferred_dates.map(datetimeToSmallString);
-    fillInput("gooddates", datestrings.join(","));
-  } else {
-    fillInput("gooddates", "");
-  }
-  
-  // Make a table with each of the slots.
-  // Empty the current table.
-  var slotTable = emptyDomNode("projectslotsSelectionBody");
-  for (var i = 0; i < project.details.slot.length; i++) {
-    var s = project.details.slot[i];
-    var rid = "slotrow-" + project.details.ident + "-" + i;
-    var tr = makeElement("tr", null, {
-      'id': rid
-    });
-    slotTable.appendChild(tr);
-    var tsel = makeElement("th", "&nbsp;", {
-      'id': "slotselected-" + project.details.ident + "-" + i
-    });
-    tr.appendChild(tsel);
-    var arrId = "slotarray-" + project.details.ident + "-" + i;
-    var td = makeElement("td", s.array.toUpperCase(), {
-      'id': arrId
-    });
-    // Add a double-click handler on the array.
-    addDoubleClickHandler(td,
-			  arraySelectorGen(project.details.ident, i, arrId));
-    tr.appendChild(td);
-    var bandId = "slotband-" + project.details.ident + "-" + i;
-    td = makeElement("td", s.bands.join(","), { 'id': bandId });
-    addDoubleClickHandler(td,
-			  bandsSelectorGen(project.details.ident, i, bandId));
-    tr.appendChild(td);
-    var bandwidthId = "slotbandwidth-" + project.details.ident + "-" + i;
-    td = makeElement("td", s.bandwidth, { 'id': bandwidthId });
-    addDoubleClickHandler(td, cabbSelectorGen(project.details.ident, i,
-					      bandwidthId));
-    tr.appendChild(td);
-    td = makeElement("td", s.source);
-    tr.appendChild(td);
-    var timeId = "slottime-" + project.details.ident + "-" + i;
-    td = makeElement("td", s.scheduled_duration + " / " +
-		     s.requested_duration, { 'id': timeId });
-    addDoubleClickHandler(td,
-			  timeSelectorGen(project.details.ident, i,
-					  timeId));
-    tr.appendChild(td);
-
-    // Add a click handler on this row.
-    addClickHandler(tr, slotSelectorGen(i));
-
-  }
-  
-};
 
 
 const selectSlot = function(slotnumber) {
@@ -1959,6 +2097,12 @@ const scheduleInsert = function(ident, slotNumber, time) {
       }
     }
   }
+  // Check for weekends for certain projects.
+  if ((ident == "MAINT") || (ident == "CONFIG")) {
+    if ((d.getDay() == 0) || (d.getDay() == 6)) {
+      excluded = true;
+    }
+  }
   if (excluded) {
     console.log("excluded day selected, aborting");
     return;
@@ -1975,6 +2119,7 @@ const scheduleInsert = function(ident, slotNumber, time) {
   // Work out when we should start on this day.
   var hStart = null;
   var startingDate = null;
+  console.log(ident);
   if ((ident == "MAINT") || (ident == "CONFIG")) {
     // This is a maintenance block, and we try to start at 8am
     // local on the day that was clicked. This doesn't
@@ -1989,6 +2134,8 @@ const scheduleInsert = function(ident, slotNumber, time) {
   if (startingDate == null) {
     console.log("can't work out when to start this block, aborting");
     return;
+  } else {
+    console.log("start time determined");
   }
 
   // Check if something else is already scheduled at this time.
@@ -2010,6 +2157,8 @@ const scheduleInsert = function(ident, slotNumber, time) {
 	startingDate = endDate;
       }
     }
+  } else {
+    console.log("no overlapping project found");
   }
 
   // If we reach here we have a usable start date.
@@ -2041,6 +2190,7 @@ const scheduleInsert = function(ident, slotNumber, time) {
     }
   } else if (ident == "CONFIG") {
     // We want to end at or before 8am the next day.
+    console.log("finding end date for CONFIG");
     if ((endDate.getHours() > 8) &&
 	((endDate.getTime() - startingDate.getTime()) > (12 * 3600000))) {
       endDate.setHours() = 8;
@@ -2050,6 +2200,7 @@ const scheduleInsert = function(ident, slotNumber, time) {
   }
 
   // If we get here, we're good to put this in the schedule.
+  console.log("scheduling the slot");
   slot.scheduled_start = startingDate.getTime() / 1000;
   slot.scheduled_duration = (endDate.getTime() - startingDate.getTime()) / 3600000;
   slot.scheduled = 1;
@@ -2212,6 +2363,7 @@ const setupCanvas = function(data) {
   stage.add(arrayLayer);
 
   // Draw the initial array configurations.
+  orderReconfigs();
   drawArrayConfigurations();
 
 
@@ -2250,38 +2402,6 @@ const projectClicker = function(ident) {
   };
 };
 
-const drawConfiguration = function(title, start, end) {
-  // Draw a box on the right.
-  var nDaysSinceStart = (start - scheduleFirst.getTime()) / (86400 * 1000);
-  var nDays = (end - start) / (86400 * 1000);
-
-  var boxLeft = meas.marginLeft + meas.dayLabelWidth + meas.dayWidth;
-  var boxTop = meas.marginTop + nDaysSinceStart * meas.dayHeight;
-  var boxWidth = meas.arrayLabelWidth;
-  var boxHeight = nDays * meas.dayHeight;
-  
-  var arrayBoxOpts = {
-    x: boxLeft, y: boxTop, width: boxWidth, height: boxHeight,
-    stroke: "black", strokeWidth: 2, fill: "#ffffff"
-  };
-  var arrayBox = new Konva.Rect(arrayBoxOpts);
-  arrayGroup.add(arrayBox);
-
-  // Create the label. We repeat it every two weeks if required.
-  var limitHeight = 14 * meas.dayHeight;
-  var totalHeight = 0;
-  while (boxHeight > 0) {
-    var labelHeight = (boxHeight > limitHeight) ? limitHeight : boxHeight;
-    var arrayLabelString = new Konva.Text({
-      x: boxLeft, y: boxTop + totalHeight, width: boxWidth, height: labelHeight,
-      align: "center", verticalAlign: "middle", text: title, fontSize: 20
-    });
-    totalHeight += labelHeight;
-    boxHeight -= labelHeight;
-    arrayGroup.add(arrayLabelString);
-  }
-  
-};
 
 
 
@@ -2331,6 +2451,7 @@ const drawArrayConfigurations = function() {
   // Go through the array configurations in the data and work out
   // how the boxes should look on the right side.
   // Get the list of configurations.
+  console.log("working out array configurations for drawing");
   var configs = getProjectByName("CONFIG");
   var slots = configs.details.slot;
 
@@ -2341,24 +2462,27 @@ const drawArrayConfigurations = function() {
   if (slots[0].scheduled_start == 0) {
     // This is the first array, so we assume it is from
     // the start of the semester.
-    slots[0].scheduled_start = scheduleFirst.getTime();
+    slots[0].scheduled_start = scheduleFirst.getTime() / 1000;
   }
 
   var currentConfig = 0;
   // Go through all the configs until we find the next one.
-  var minDiff = 365 * 86400 * 1000;
   while (true) {
     var nextConfig = -1;
+    var minDiff = 365 * 86400 * 1000;
     for (var i = 0; i < slots.length; i++) {
       if (i == currentConfig) {
 	continue;
       }
-      if (slots[i].scheduled_start == 0) {
+      if (slots[i].scheduled == 0) {
 	continue;
       }
+      console.log("determining time difference for array " +
+		  slots[i].array);
       var tdiff = slots[i].scheduled_start - slots[currentConfig].scheduled_start;
-      if (tdiff < minDiff) {
-	tdiff = minDiff;
+      console.log("time difference is " + tdiff);
+      if ((tdiff > 0) && (tdiff < minDiff)) {
+	minDiff = tdiff;
 	nextConfig = i;
       }
     }
@@ -2371,12 +2495,13 @@ const drawArrayConfigurations = function() {
     drawConfiguration(slots[currentConfig].array,
 		      slots[currentConfig].scheduled_start,
 		      slots[nextConfig].scheduled_start);
+    currentConfig = nextConfig;
   }
 
   // Draw the last configuration.
   drawConfiguration(slots[currentConfig].array,
 		    slots[currentConfig].scheduled_start,
-		    scheduleLast.getTime());
+		    (scheduleLast.getTime() / 1000));
 
   arrayLayer.draw();
 };
