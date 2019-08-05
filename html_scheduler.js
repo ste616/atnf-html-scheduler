@@ -595,7 +595,12 @@ const showProjectDetails = function(ident) {
   if (tableRedrawRequired) {
     // Select the row in the table.
     previouslySelectedProject = project;
-    fillId("row-" + project.details.ident, null, "selectedProject");
+    var projrowId = "row-" + project.details.ident;
+    fillId(projrowId, null, "selectedProject");
+    var projrow = document.getElementById(projrowId);
+    if (!isElementVisible(projrow)) {
+      projrow.scrollIntoView();
+    }
     
     // Display the vital statistics.
     console.log(project);
@@ -641,6 +646,11 @@ const showProjectDetails = function(ident) {
 	'id': rid
       });
       slotTable.appendChild(tr);
+      if (s.scheduled_duration >= s.requested_duration) {
+	fillId(rid, null, "completelyScheduled");
+      } else if (s.scheduled_duration > 0) {
+	fillId(rid, null, "partiallyScheduled");
+      }
       var tsel = makeElement("th", "&nbsp;", {
 	'id': "slotselected-" + project.details.ident + "-" + i
       });
@@ -701,10 +711,20 @@ const showProjectDetails = function(ident) {
 	     s.requested_duration);
 
       // Ensure we colour our selection if we are.
+      var tselId = "slotrow-" + project.details.ident + "-" + i;
       if (i == previouslySelectedSlot) {
-	var tselId = "slotselected-" + project.details.ident + "-" + i;
-	fillId(tselId, "&nbsp;", "slotSelected");
+	fillId(tselId, null, "slotSelected");
       }
+
+      if (s.scheduled_duration >= s.requested_duration) {
+	fillId(tselId, null, "completelyScheduled", "partiallyScheduled");
+      } else if (s.scheduled_duration > 0) {
+	fillId(tselId, null, "partiallyScheduled", "completelyScheduled");
+      } else {
+	fillId(tselId, null, null,
+	       [ "partiallyScheduled", "completelyScheduled" ]);
+      }
+
     }
   }
   
@@ -1611,18 +1631,16 @@ const summariseSemester = function() {
 const selectSlot = function(slotnumber) {
   var psp = previouslySelectedProject.details;
   // Highlight the table element.
-  var hid = "slotselected-" + psp.ident +
+  var hid = "slotrow-" + psp.ident +
       "-" + slotnumber;
-  fillId(hid, "&nbsp;", "slotSelected");
+  fillId(hid, null, "slotSelected");
   // Dehighlight the previously selected slot.
   if ((previouslySelectedSlot != null) &&
       (previouslySelectedSlot != slotnumber)) {
-    var pid = "slotselected-" + psp.ident +
+    var pid = "slotrow-" + psp.ident +
 	"-" + previouslySelectedSlot;
-    fillId(pid, "&nbsp;", null, "slotSelected");
-    console.log(psp.slot[previouslySelectedSlot]);
+    fillId(pid, null, null, "slotSelected");
     if (psp.slot[previouslySelectedSlot].scheduled == 1) {
-      console.log("dehighlighting");
       dehighlightBlock(psp, previouslySelectedSlot);
     }
   }
@@ -1906,6 +1924,15 @@ const updateProjectTable = function() {
     fillId("requestedTime-" + p.ident, p.requestedTime);
     fillId("scheduledSlots-" + p.ident, p.scheduledSlots);
     fillId("requestedSlots-" + p.ident, p.requestedSlots);
+    var prow = "row-" + p.ident;
+    if (p.scheduledTime >= p.requestedTime) {
+      fillId(prow, null, "completelyScheduled", "partiallyScheduled");
+    } else if (p.scheduledTime > 0) {
+      fillId(prow, null, "partiallyScheduled", "completelyScheduled");
+    } else {
+      fillId(prow, null, null,
+	     [ "partiallyScheduled", "completelyScheduled" ]);
+    }
   }
   
 };
@@ -2572,9 +2599,9 @@ const clearSlotSelector = function() {
 
   // Deselect the slots.
   if (previouslySelectedSlot != null) {
-    var hid = "slotselected-" + previouslySelectedProject.details.ident +
+    var hid = "slotrow-" + previouslySelectedProject.details.ident +
 	"-" + previouslySelectedSlot;
-    fillId(hid, "&nbsp;", null, "slotSelected");
+    fillId(hid, null, null, "slotSelected");
     previouslySelectedSlot = null;
   }
 

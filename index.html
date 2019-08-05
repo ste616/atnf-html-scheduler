@@ -54,8 +54,7 @@
       #projectselected { width: 98%; margin: 2px auto; padding: 0px;
       color: black; }
       #projectselected th,#projectselected td { width: 25%; text-align: center; }
-      #projects-table tr.selectedProject td { background-color: lightgreen;
-      border: 2px solid brown; }
+      #projects-table tr.selectedProject { border: 3px solid brown; }
       #projectslotsSelection { margin: 6px auto; border: 1px solid black; }
       #projectslotsSelection th,#projectslotsSelection td { text-align: right;
       border: 1px dotted black; }
@@ -84,10 +83,13 @@
       display: inline-block; }
       .close { padding: 0.4em; background-color: black; color: white;
       display: inline-block; }
-      .slotSelected { background-color: red; border: 1px solid red; }
+      .slotSelected { border: 3px solid brown; }
+      .slotSelected th { background-color: brown; }
       #projectslotsManipulation { width: 99%; border: 0; border-collapse: collapse;
       margin: 0.1em auto; }
       #projectslotsManipulation td { text-align: center; }
+      .partiallyScheduled { background-color: #ffff99; }
+      .completelyScheduled { background-color: #33cc33; }
     </style>
   </head>
   <body>
