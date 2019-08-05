@@ -138,6 +138,24 @@ const calculateSunStuff = function(d) {
   return calculateSourceStuff(sp.map(rad2deg), d, 0);
 };
 
+// Remove any blocks in the block object that require cleaning.
+const cleanBlockObjects = function() {
+  var boidx = -1;
+  do {
+    boidx = -1;
+    for (var i = 0; i < blockObjects.length; i++) {
+      if (blockObjects.clean) {
+	boidx = i;
+	break;
+      }
+    }
+    
+    if (boidx >= 0) {
+      blockObjects.splice(boidx, 1);
+    }
+  } while (boidx >= 0);
+};
+
 // This function compares two dates simply looking if the date and
 // month are the same.
 const compareDates = function(d1, d2) {
@@ -237,7 +255,8 @@ const easternStandardTime = function(jsEpoch) {
 const findBlockObject = function(proj, slot) {
   for (var i = 0; i < blockObjects.length; i++) {
     if ((blockObjects[i].ident == proj.ident) &&
-	(blockObjects[i].slot == slot)) {
+	(blockObjects[i].slot == slot) &&
+	(!blockObjects[i].moving) && (!blockObjects[i].clean)) {
       return blockObjects[i];
     }
   }
@@ -756,6 +775,34 @@ const dehighlightBlock = function(proj, slot) {
   blockLayer.draw();
 };
 
+const dragConstructor = function(block) {
+  return function(pos) {
+    dragFinished(block, pos);
+  };
+};
+
+// Function that gets called when a block drag has finished.
+const dragFinished = function(block, pos) {
+  console.log("ident = " + block.ident);
+  console.log("original position = " + block.rectOpts[0].x + "," +
+	      block.rectOpts[0].y);
+  var xn = block.rectOpts[0].x + pos.currentTarget.attrs.x;
+  var yn = block.rectOpts[0].y + pos.currentTarget.attrs.y +
+      (block.rectOpts[0].height / 2);
+  var timen = posTime(xn, yn);
+  console.log(timen);
+  var scheduled = scheduleInsert(block.ident, block.slot,
+				 timen, true);
+  if (scheduled == true) {
+    // Get rid of the current block.
+    block.group.destroy();
+    block.clean = true;
+  }
+
+  scheduleUpdated();
+};
+
+
 // Function that draws a scheduled block.
 const drawBlock = function(proj, slot) {
   // Return immediately if the block isn't scheduled.
@@ -784,6 +831,7 @@ const drawBlock = function(proj, slot) {
   var blockGroup = new Konva.Group({
     draggable: true
   });
+  var blockRectOpts = [];
   var blockRects = [];
   var blockTextOpts = [];
   var blockTexts = [];
@@ -817,6 +865,7 @@ const drawBlock = function(proj, slot) {
       stroke: "black", strokeWidth: 2
     };
     var block = new Konva.Rect(blockOpts);
+    blockRectOpts.push(blockOpts);
     blockRects.push(block);
     blockGroup.add(block);
     // Draw the background colours.
@@ -895,14 +944,16 @@ const drawBlock = function(proj, slot) {
     blockGroup.add(mainTitleText);
   }
   blockLayer.add(blockGroup);
-
+  
   // Add this block to the block object array.
   var blockAddition = {
-    ident: proj.ident, slot: slot,
-    group: blockGroup, rects: blockRects,
+    ident: proj.ident, slot: slot, clean: false, moving: false,
+    group: blockGroup, rects: blockRects, rectOpts: blockRectOpts,
     textOptions: blockTextOpts, texts: blockTexts
   };
   blockObjects.push(blockAddition);
+  // Make this respond to dragging.
+  blockGroup.on("dragend", dragConstructor(blockAddition));
   
 };
 
@@ -2123,12 +2174,16 @@ const updateSemesterSummary = function() {
 // the day number, and hour down to 0.5 precision.
 const pointerTime = function(e) {
   var pp = stage.getPointerPosition();
+  return posTime(pp.x, pp.y);
+};
+
+const posTime = function(x, y) {
 
   // The day can be gotten from the y location.
-  var nDays = Math.floor((pp.y - meas.marginTop) / meas.dayHeight);
+  var nDays = Math.floor((y - meas.marginTop) / meas.dayHeight);
 
   // The hour can be gotten from the x location.
-  var nHalfHours = Math.floor((pp.x - (meas.marginLeft + meas.dayLabelWidth)) /
+  var nHalfHours = Math.floor((x - (meas.marginLeft + meas.dayLabelWidth)) /
 			      meas.halfHourWidth);
   if (nHalfHours < 0) {
     nHalfHours = 0;
@@ -2141,6 +2196,7 @@ const pointerTime = function(e) {
       (nHalfHours * 1800) - (14 * 3600);
   
   return { 'day': nDays, 'hour': (nHalfHours / 2), 'timestamp': epoch };
+
 };
 
 
@@ -2148,20 +2204,20 @@ const pointerTime = function(e) {
 // scheduled, given an indicative time (day of sched and time).
 // It works out if the slot can be scheduled within some tolerance,
 // and if so, puts it in at the optimal position given the constraints.
-const scheduleInsert = function(ident, slotNumber, time) {
+const scheduleInsert = function(ident, slotNumber, time, force) {
   // Get the project.
   var proj = getProjectByName(ident);
 
   if (proj.details == null) {
     console.log("something has gone terribly wrong");
-    return;
+    return false;
   }
 
   // Get the slot.
   var slot = proj.details.slot[slotNumber];
   if (typeof slot == "undefined") {
     console.log("nothing is going right");
-    return;
+    return false;
   }
 
   // Get the actual date for the day number.
@@ -2184,9 +2240,9 @@ const scheduleInsert = function(ident, slotNumber, time) {
       excluded = true;
     }
   }
-  if (excluded) {
+  if ((excluded) && (!force)) {
     console.log("excluded day selected, aborting");
-    return;
+    return false;
   }
 
   // Check if the array configuration is suitable.
@@ -2195,14 +2251,21 @@ const scheduleInsert = function(ident, slotNumber, time) {
   var compatible = arrayCompatible(arrayConfigured, slot.array);
   if ((!compatible) && (ident != "CONFIG")) {
     console.log("incompatible configuration requested, aborting");
-    return;
+    return false;
   }
 
   // Work out when we should start on this day.
   var hStart = null;
   var startingDate = null;
   console.log(ident);
-  if ((ident == "MAINT") || (ident == "CONFIG")) {
+  if (force) {
+    startingDate = new Date(d.getTime());
+    var h = Math.floor(time.hour);
+    var m = Math.floor((time.hour - h) * 2);
+    startingDate.setHours(h);
+    startingDate.setMinutes(m);
+    startingDate.setSeconds(0);
+  } else if ((ident == "MAINT") || (ident == "CONFIG")) {
     // This is a maintenance block, and we try to start at 8am
     // local on the day that was clicked. This doesn't
     // necessarily mean 8am AEST, given daylight savings.
@@ -2215,7 +2278,7 @@ const scheduleInsert = function(ident, slotNumber, time) {
 
   if (startingDate == null) {
     console.log("can't work out when to start this block, aborting");
-    return;
+    return false;
   } else {
     console.log("start time determined");
   }
@@ -2231,10 +2294,10 @@ const scheduleInsert = function(ident, slotNumber, time) {
     // Check if we can use this end date.
     if ((ident == "MAINT") || (ident == "CONFIG")) {
       // We need to start within office hours.
-      if ((endDate.getHours() > 15) || (endDate.getHours() <= 8)) {
+      if ((!force) && ((endDate.getHours() > 15) || (endDate.getHours() <= 8))) {
 	// This won't work.
 	console.log("can't start maintenance block out of hours, aborting");
-	return;
+	return false;
       } else {
 	startingDate = endDate;
       }
@@ -2255,29 +2318,31 @@ const scheduleInsert = function(ident, slotNumber, time) {
   if (endDate < startingDate) {
     // We've tried to start within a project; shouldn't have happened.
     console.log("we got trapped somehow, aborting");
-    return;
+    return false;
   }
   // Deal with ending dates outside acceptable ranges.
-  if (ident == "MAINT") {
-    // We want to end at or before 4pm local time.
-    if ((endDate.getHours() > 16) ||
-	(endDate.getHours() < 8)) {
-      if (endDate.getHours() < 8) {
-	// We also go back a day.
-	endDate.setTime(endDate.getTime() - 86400000);
+  if (!force) {
+    if (ident == "MAINT") {
+      // We want to end at or before 4pm local time.
+      if ((endDate.getHours() > 16) ||
+	  (endDate.getHours() < 8)) {
+	if (endDate.getHours() < 8) {
+	  // We also go back a day.
+	  endDate.setTime(endDate.getTime() - 86400000);
+	}
+	endDate.setHours() = 16;
+	endDate.setMinutes() = 0;
+	endDate.setSeconds() = 0;
       }
-      endDate.setHours() = 16;
-      endDate.setMinutes() = 0;
-      endDate.setSeconds() = 0;
-    }
-  } else if (ident == "CONFIG") {
-    // We want to end at or before 8am the next day.
-    console.log("finding end date for CONFIG");
-    if ((endDate.getHours() > 8) &&
-	((endDate.getTime() - startingDate.getTime()) > (12 * 3600000))) {
-      endDate.setHours() = 8;
-      endDate.setMinutes() = 0;
-      endDate.setSeconds() = 0;
+    } else if (ident == "CONFIG") {
+      // We want to end at or before 8am the next day.
+      console.log("finding end date for CONFIG");
+      if ((endDate.getHours() > 8) &&
+	  ((endDate.getTime() - startingDate.getTime()) > (12 * 3600000))) {
+	endDate.setHours() = 8;
+	endDate.setMinutes() = 0;
+	endDate.setSeconds() = 0;
+      }
     }
   }
 
@@ -2289,6 +2354,8 @@ const scheduleInsert = function(ident, slotNumber, time) {
 
   // Redraw everything.
   scheduleUpdated();
+
+  return true;
 };
 
 const handleCanvasClick = function(e) {
