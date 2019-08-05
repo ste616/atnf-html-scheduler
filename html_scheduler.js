@@ -677,13 +677,34 @@ const showProjectDetails = function(ident) {
       addClickHandler(tr, slotSelectorGen(i));
     }
   } else {
-    // Update the time allocated for each slot.
+    // Update the cell values only. We do this for everything in case
+    // we've been called because an input/select has been changed.
     console.log("updating table only");
     for (var i = 0; i < project.details.slot.length; i++) {
       var s = project.details.slot[i];
+      // Go through each ID in turn.
+      var arrId = "slotarray-" + project.details.ident + "-" + i;
+      emptyDomNode(arrId);
+      fillId(arrId, s.array.toUpperCase());
+
+      var bandId = "slotband-" + project.details.ident + "-" + i;
+      emptyDomNode(bandId);
+      fillId(bandId, s.bands.join(","));
+
+      var bandwidthId = "slotbandwidth-" + project.details.ident + "-" + i;
+      emptyDomNode(bandwidthId);
+      fillId(bandwidthId, s.bandwidth);
+      
       var timeId = "slottime-" + project.details.ident + "-" + i;
+      emptyDomNode(timeId);
       fillId(timeId, s.scheduled_duration + " / " +
 	     s.requested_duration);
+
+      // Ensure we colour our selection if we are.
+      if (i == previouslySelectedSlot) {
+	var tselId = "slotselected-" + project.details.ident + "-" + i;
+	fillId(tselId, "&nbsp;", "slotSelected");
+      }
     }
   }
   
@@ -810,6 +831,7 @@ const drawBlock = function(proj, slot) {
     };
     if (proj.ident == "MAINT") {
       mainTitleOpts.text = proj.title;
+      mainTitleOpts.textPattern = "full";
     } else if (proj.ident == "CONFIG") {
       mainTitleOpts.text = "Reconfigure #" + proj.slot[slot].source +
 	"/Calibration";
@@ -817,8 +839,38 @@ const drawBlock = function(proj, slot) {
     }
     blockTextOpts.push(mainTitleOpts);
     var mainTitleText = new Konva.Text(mainTitleOpts);
+
+    // Check if this text fits.
+    var tw = mainTitleText.width();
+    var fits = (tw < blockOpts.width);
+    while (!fits) {
+      // Try to shrink the text first.
+      if (mainTitleOpts.fontSize > 12) {
+	mainTitleOpts.fontSize -= 1;
+	mainTitleText.fontSize(mainTitleOpts.fontSize);
+      } else {
+	// We change the pattern.
+	mainTitleOpts.fontSize = 16;
+	mainTitleText.fontSize(mainTitleOpts.fontSize);
+	if (mainTitleOpts.textPattern == "full") {
+	  // Shrink to short.
+	  mainTitleOpts.textPattern = "short";
+	  if (proj.ident == "MAINT") {
+	    mainTitleOpts.text = "Maint";
+	  } else if (proj.ident == "CONFIG") {
+	    mainTitleOpts.text = "Reconf #" + proj.slot[slot].source;
+	  }
+	  mainTitleText.text(mainTitleOpts.text);
+	} else {
+	  break;
+	}
+      }
+      tw = mainTitleText.width();
+      fits = (tw < blockOpts.width);
+    }
     mainTitleText.offsetX(mainTitleText.width() / 2);
     mainTitleText.offsetY(mainTitleText.height() / 2);
+    
     blockTexts.push(mainTitleText);
     blockGroup.add(mainTitleText);
   }
@@ -1157,13 +1209,14 @@ const getEarliestDate = function(slotList) {
 
   var earliest = -1;
   for (var i = 0; i < slotList.length; i++) {
-    if (slotList[i].project.details.slot[slotList[i].slot].scheduled == 1) {
+    console.log(slotList[i]);
+    if (slotList[i].project.slot[slotList[i].slot].scheduled == 1) {
       if (earliest == -1) {
-	earliest = slotList[i].project.details.slot[slotList[i].slot]
+	earliest = slotList[i].project.slot[slotList[i].slot]
 	  .scheduled_start;
-      } else if (slotList[i].project.details.slot[slotList[i].slot]
+      } else if (slotList[i].project.slot[slotList[i].slot]
 		 .scheduled_start < earliest) {
-	earliest = slotList[i].project.details.slot[slotList[i].slot]
+	earliest = slotList[i].project.slot[slotList[i].slot]
 	  .scheduled_start;
       }
     }
@@ -1305,11 +1358,11 @@ const scheduledBetween = function(d1, d2) {
 	var ts1 = slots[j].scheduled_start;
 	var slotEnd = endingDate(allProjects[i], j);
 	var ts2 = slotEnd.getTime() / 1000;
-	if (((td1 >= ts1) && (td1 <= ts2)) ||
-	    ((td2 >= ts1) && (td2 <= ts2)) ||
+	if (((td1 >= ts1) && (td1 < ts2)) ||
+	    ((td2 >= ts1) && (td2 < ts2)) ||
 	    ((td1 < ts1) && (td2 > ts2))) {
 	  // This slot conflicts.
-	  projectsFound.push({ 'project': allProjects[j],
+	  projectsFound.push({ 'project': allProjects[i],
 			       'slot': j });
 	}
       }
@@ -1562,7 +1615,8 @@ const selectSlot = function(slotnumber) {
       "-" + slotnumber;
   fillId(hid, "&nbsp;", "slotSelected");
   // Dehighlight the previously selected slot.
-  if (previouslySelectedSlot != null) {
+  if ((previouslySelectedSlot != null) &&
+      (previouslySelectedSlot != slotnumber)) {
     var pid = "slotselected-" + psp.ident +
 	"-" + previouslySelectedSlot;
     fillId(pid, "&nbsp;", null, "slotSelected");
@@ -2110,6 +2164,7 @@ const scheduleInsert = function(ident, slotNumber, time) {
 
   // Check if the array configuration is suitable.
   var arrayConfigured = whichArrayConfiguration(time.day);
+  console.log("array is configured as " + arrayConfigured);
   var compatible = arrayCompatible(arrayConfigured, slot.array);
   if ((!compatible) && (ident != "CONFIG")) {
     console.log("incompatible configuration requested, aborting");
@@ -2416,7 +2471,7 @@ const whichArrayConfiguration = function(d) {
   var mindiff = dtime - slots[0].scheduled_start;
   for (var i = 1; i < slots.length; i++) {
     var cdiff = dtime - slots[i].scheduled_start;
-    if (dtime < 0) {
+    if (cdiff < 0) {
       // This is afterwards.
       continue;
     }
@@ -2932,6 +2987,7 @@ const slotChangeEventHandler = function(id, callback, type) {
   var d = document.getElementById(id);
   var _listener = function(ev) {
     // Remove the event handlers from the ID.
+    console.log("received an event");
     d.removeEventListener("change", _listener);
     d.removeEventListener("blur", _listener);
     var v;
