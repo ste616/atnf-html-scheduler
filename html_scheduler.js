@@ -140,11 +140,12 @@ const calculateSunStuff = function(d) {
 
 // Remove any blocks in the block object that require cleaning.
 const cleanBlockObjects = function() {
+  console.log("cleaning block array");
   var boidx = -1;
   do {
     boidx = -1;
     for (var i = 0; i < blockObjects.length; i++) {
-      if (blockObjects.clean) {
+      if (blockObjects[i].clean) {
 	boidx = i;
 	break;
       }
@@ -253,10 +254,13 @@ const easternStandardTime = function(jsEpoch) {
 
 // Find a block in the block object.
 const findBlockObject = function(proj, slot) {
+  console.log("finding object");
   for (var i = 0; i < blockObjects.length; i++) {
+    console.log(blockObjects[i]);
     if ((blockObjects[i].ident == proj.ident) &&
 	(blockObjects[i].slot == slot) &&
 	(!blockObjects[i].moving) && (!blockObjects[i].clean)) {
+      console.log("returning this object");
       return blockObjects[i];
     }
   }
@@ -376,8 +380,6 @@ const removeBlockObject = function(proj, slot) {
 const smallStringToDatetime = function(smstr) {
   var dels = smstr.split("/");
   var year = semesterStart.getFullYear();
-  console.log("trying " + year + "-" + parseInt(dels[1] - 1) + "-" +
-	      parseInt(dels[0]));
   var checkDate = new Date(year, parseInt(dels[1] - 1), parseInt(dels[0]));
   if (checkDate.getTime() < semesterStart.getTime()) {
     // We're probably in the next year.
@@ -772,6 +774,8 @@ const dehighlightBlock = function(proj, slot) {
     bo.rects[i].stroke("black");
     bo.rects[i].strokeWidth(2);
   }
+  // Make it impossible to drag this block.
+  bo.group.draggable(false);
   blockLayer.draw();
 };
 
@@ -791,12 +795,19 @@ const dragFinished = function(block, pos) {
       (block.rectOpts[0].height / 2);
   var timen = posTime(xn, yn);
   console.log(timen);
+  // Set the current block to moving so we don't consider it
+  // during the move.
+  block.moving = true;
   var scheduled = scheduleInsert(block.ident, block.slot,
 				 timen, true);
   if (scheduled == true) {
     // Get rid of the current block.
     block.group.destroy();
     block.clean = true;
+  } else {
+    block.moving = false;
+    // Move it back to where it was.
+    block.redrawRequired = true;
   }
 
   scheduleUpdated();
@@ -815,7 +826,14 @@ const drawBlock = function(proj, slot) {
   }
 
   // Check if this block has already been drawn.
-  if (findBlockObject(proj, slot) != null) {
+  var bo = findBlockObject(proj, slot);
+  if ((bo != null) && (!bo.redrawRequired)) {
+    return;
+  } else if ((bo != null) && (bo.redrawRequired)) {
+    // Redraw it the way it has already been specified.
+    console.log("redrawing block");
+    bo.group.absolutePosition(bo.absolutePosition);
+    bo.redrawRequired = false;
     return;
   }
   
@@ -823,13 +841,13 @@ const drawBlock = function(proj, slot) {
   // Get the day that we start on.
   var startDayIdx = calcDayNumber(
     easternStandardTime(proj.slot[slot].scheduled_start * 1000)) - 1;
-  console.log("block starts at " + startDayIdx);
+  //console.log("block starts at " + startDayIdx);
   // And the day that we end on.
   var endDayIdx = calcDayNumber(
     easternStandardTime(endingDate(proj, slot))) - 1;
 
   var blockGroup = new Konva.Group({
-    draggable: true
+    draggable: false
   });
   var blockRectOpts = [];
   var blockRects = [];
@@ -837,14 +855,11 @@ const drawBlock = function(proj, slot) {
   var blockTexts = [];
   
   for (var i = startDayIdx; i <= endDayIdx; i++) {
-    console.log("this day goes from " + (allDates[i].getTime() / 1000) + " to " +
-		(allDates[i + 1].getTime() / 1000));
     // Get the time range on this day.
     var d1 = allDates[i].getTime() / 1000;
     var d2 = allDates[i + 1].getTime() / 1000;
     var s1 = d1;
     var ts1 = easternStandardTime(proj.slot[slot].scheduled_start * 1000)
-    console.log("slot starts at " + ts1);
     if (ts1 > s1) {
       s1 = ts1;
     }
@@ -949,7 +964,8 @@ const drawBlock = function(proj, slot) {
   var blockAddition = {
     ident: proj.ident, slot: slot, clean: false, moving: false,
     group: blockGroup, rects: blockRects, rectOpts: blockRectOpts,
-    textOptions: blockTextOpts, texts: blockTexts
+    textOptions: blockTextOpts, texts: blockTexts,
+    redrawRequired: false, absolutePosition: blockGroup.absolutePosition()
   };
   blockObjects.push(blockAddition);
   // Make this respond to dragging.
@@ -958,9 +974,6 @@ const drawBlock = function(proj, slot) {
 };
 
 const drawConfiguration = function(title, start, end) {
-  console.log("drawing configuration for " + title + " from " +
-	      start + " to " + end);
-
   // Round off the start and end times.
   var nDaysSinceStart;
   if (start == scheduleFirst.getTime() / 1000) {
@@ -981,9 +994,6 @@ const drawConfiguration = function(title, start, end) {
   
   // Draw a box on the right.
   var nDays = endDaysSinceStart;// - nDaysSinceStart;//(end - start) / 86400;
-  console.log("drawing from " + nDaysSinceStart + " to " + nDays +
-	      "days");
-  
   var boxLeft = meas.marginLeft + meas.dayLabelWidth + meas.dayWidth;
   var boxTop = meas.marginTop + nDaysSinceStart * meas.dayHeight;
   var boxWidth = meas.arrayLabelWidth;
@@ -1139,6 +1149,8 @@ const highlightBlock = function(proj, slot) {
     bo.rects[i].strokeWidth(4);
   }
   bo.group.moveToTop();
+  // Make it possible to drag this block now.
+  bo.group.draggable(true);
   blockLayer.draw();
 };
 
@@ -1237,7 +1249,6 @@ const cleanjson = function(d) {
 
 // Draw all the blocks.
 const drawAllBlocks = function() {
-  console.log("drawing all the blocks on the canvas");
   var allProjects = scheduleData.program.project;
   for (var i = 0; i < allProjects.length; i++) {
     var slots = allProjects[i].slot;
@@ -1280,7 +1291,6 @@ const getEarliestDate = function(slotList) {
 
   var earliest = -1;
   for (var i = 0; i < slotList.length; i++) {
-    console.log(slotList[i]);
     if (slotList[i].project.slot[slotList[i].slot].scheduled == 1) {
       if (earliest == -1) {
 	earliest = slotList[i].project.slot[slotList[i].slot]
@@ -1398,6 +1408,13 @@ const scheduledAt = function(d) {
     var slots = allProjects[i].slot;
     for (var j = 0; j < slots.length; j++) {
       if (slots[j].scheduled == 1) {
+	// Check we aren't looking at the currently selected block.
+	if ((previouslySelectedProject != null) &&
+	    (previouslySelectedSlot != null) &&
+	    (allProjects[i].ident == previouslySelectedProject.details.ident) &&
+	    (j == previouslySelectedSlot)) {
+	  continue;
+	}
 	var tdiff;
 	if (d instanceof Date) {
 	  tdiff = (d.getTime() / 1000) - slots[j].scheduled_start;
@@ -1426,6 +1443,13 @@ const scheduledBetween = function(d1, d2) {
     var slots = allProjects[i].slot;
     for (var j = 0; j < slots.length; j++) {
       if (slots[j].scheduled == 1) {
+	// Check we aren't looking at the currently selected block.
+	if ((previouslySelectedProject != null) &&
+	    (previouslySelectedSlot != null) &&
+	    (allProjects[i].ident == previouslySelectedProject.details.ident) &&
+	    (j == previouslySelectedSlot)) {
+	  continue;
+	}
 	var ts1 = slots[j].scheduled_start;
 	var slotEnd = endingDate(allProjects[i], j);
 	var ts2 = slotEnd.getTime() / 1000;
@@ -1450,6 +1474,7 @@ const scheduleUpdated = function() {
   updateLocalSchedule();
 
   // Now redraw the canvas.
+  cleanBlockObjects();
   orderReconfigs();
   drawArrayConfigurations();
   // Delete all the current schedule blocks.
@@ -1558,7 +1583,6 @@ const summariseSemester = function() {
   
   var allProjects = scheduleData.program.project;
   for (var i = 0; i < allProjects.length; i++) {
-    //console.log(allProjects[i]);
     var slots = allProjects[i].slot;
     var isCalibration = false;
     if (allProjects[i].ident == "C007") {
@@ -2259,12 +2283,11 @@ const scheduleInsert = function(ident, slotNumber, time, force) {
   var startingDate = null;
   console.log(ident);
   if (force) {
-    startingDate = new Date(d.getTime());
-    var h = Math.floor(time.hour);
-    var m = Math.floor((time.hour - h) * 2);
-    startingDate.setHours(h);
-    startingDate.setMinutes(m);
-    startingDate.setSeconds(0);
+    startingDate = new Date(time.timestamp * 1000);
+    // Check we haven't moved outside the semester boundaries.
+    if (startingDate < semesterStart) {
+      return false;
+    }
   } else if ((ident == "MAINT") || (ident == "CONFIG")) {
     // This is a maintenance block, and we try to start at 8am
     // local on the day that was clicked. This doesn't
@@ -2281,6 +2304,7 @@ const scheduleInsert = function(ident, slotNumber, time, force) {
     return false;
   } else {
     console.log("start time determined");
+    console.log(startingDate);
   }
 
   // Check if something else is already scheduled at this time.
@@ -2600,7 +2624,6 @@ const drawArrayConfigurations = function() {
   // Go through the array configurations in the data and work out
   // how the boxes should look on the right side.
   // Get the list of configurations.
-  console.log("working out array configurations for drawing");
   var configs = getProjectByName("CONFIG");
   var slots = configs.details.slot;
 
@@ -2626,10 +2649,7 @@ const drawArrayConfigurations = function() {
       if (slots[i].scheduled == 0) {
 	continue;
       }
-      console.log("determining time difference for array " +
-		  slots[i].array);
       var tdiff = slots[i].scheduled_start - slots[currentConfig].scheduled_start;
-      console.log("time difference is " + tdiff);
       if ((tdiff > 0) && (tdiff < minDiff)) {
 	minDiff = tdiff;
 	nextConfig = i;
@@ -2799,8 +2819,6 @@ const saveScheduleToServer = function() {
     xhr.responseType = "json";
     xhr.onload = function() {
       var status = xhr.status;
-      console.log(xhr.response);
-      console.log(xhr.status);
       if (status === 200) {
 	displayModificationTimes();
       } else {
@@ -2916,7 +2934,6 @@ showLineState();
 // Our event handler for when the nighttime checkbox changes state.
 const nighttimeChange = function() {
   var nc = document.getElementById("nighttime");
-  console.log(previouslySelectedProject);
   // Are we actually looking at a project now?
   if (previouslySelectedProject == null) {
     // Nope. Set the checkbox back to unchecked.
@@ -3081,7 +3098,6 @@ const slotChangeEventHandler = function(id, callback, type) {
   var d = document.getElementById(id);
   var _listener = function(ev) {
     // Remove the event handlers from the ID.
-    console.log("received an event");
     d.removeEventListener("change", _listener);
     d.removeEventListener("blur", _listener);
     var v;
