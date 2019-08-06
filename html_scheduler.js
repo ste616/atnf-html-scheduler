@@ -244,11 +244,13 @@ const doy = function(d) {
 };
 
 // Function to compensate for Eastern Standard Time.
+// This isn't necessary any more now that I got the time stuff
+// figured out properly, but it has its use still.
 const easternStandardTime = function(jsEpoch) {
   if (jsEpoch instanceof Date) {
-    return ((jsEpoch.getTime() / 1000) + (14 * 3600));
+    return (jsEpoch.getTime() / 1000);
   } else {
-    return ((jsEpoch / 1000) + (14 * 3600));
+    return (jsEpoch / 1000);
   }
 };
 
@@ -980,16 +982,16 @@ const drawConfiguration = function(title, start, end) {
     nDaysSinceStart = 0;
   } else {
     nDaysSinceStart = Math.ceil((start - (scheduleFirst.getTime() / 1000)) /
-				86400) + 0.5;
+				86400) - 0.5;
   }
 
   var endDaysSinceStart;
   if (end == scheduleLast.getTime() / 1000) {
     endDaysSinceStart = Math.ceil(((scheduleLast.getTime() / 1000) - start) /
-				  86400) + 0.5 - 2 + nDaysSinceStart;
+				  86400) - 0.5 + nDaysSinceStart;
   } else {
     endDaysSinceStart = Math.ceil((end - (scheduleFirst.getTime() / 1000)) /
-				  86400) + 0.5;
+				  86400) - 0.5;
   }
   
   // Draw a box on the right.
@@ -1145,7 +1147,7 @@ const drawNightTimes = function(t, g) {
 const highlightBlock = function(proj, slot) {
   var bo = findBlockObject(proj, slot);
   for (var i = 0; i < bo.rects.length; i++) {
-    bo.rects[i].stroke("yellow");
+    bo.rects[i].stroke("brown");
     bo.rects[i].strokeWidth(4);
   }
   bo.group.moveToTop();
@@ -2217,7 +2219,7 @@ const posTime = function(x, y) {
 
   // Get the time stamp here.
   var epoch = (allDates[nDays].getTime() / 1000) +
-      (nHalfHours * 1800) - (14 * 3600);
+      (nHalfHours * 1800);
   
   return { 'day': nDays, 'hour': (nHalfHours / 2), 'timestamp': epoch };
 
@@ -2284,6 +2286,10 @@ const scheduleInsert = function(ident, slotNumber, time, force) {
   console.log(ident);
   if (force) {
     startingDate = new Date(time.timestamp * 1000);
+    console.log("forcing start date to be");
+    console.log(startingDate);
+    console.log("semester start is");
+    console.log(semesterStart);
     // Check we haven't moved outside the semester boundaries.
     if (startingDate < semesterStart) {
       return false;
@@ -2296,7 +2302,7 @@ const scheduleInsert = function(ident, slotNumber, time, force) {
     startingDate.setHours(8);
     startingDate.setMinutes(0);
     startingDate.setSeconds(0);
-    hStart = startingDate.getUTCHours() - 14;
+    hStart = startingDate.getUTCHours();
   }
 
   if (startingDate == null) {
@@ -2354,18 +2360,18 @@ const scheduleInsert = function(ident, slotNumber, time, force) {
 	  // We also go back a day.
 	  endDate.setTime(endDate.getTime() - 86400000);
 	}
-	endDate.setHours() = 16;
-	endDate.setMinutes() = 0;
-	endDate.setSeconds() = 0;
+	endDate.setHours(16);
+	endDate.setMinutes(0);
+	endDate.setSeconds(0);
       }
     } else if (ident == "CONFIG") {
       // We want to end at or before 8am the next day.
       console.log("finding end date for CONFIG");
       if ((endDate.getHours() > 8) &&
 	  ((endDate.getTime() - startingDate.getTime()) > (12 * 3600000))) {
-	endDate.setHours() = 8;
-	endDate.setMinutes() = 0;
-	endDate.setSeconds() = 0;
+	endDate.setHours(8);
+	endDate.setMinutes(0);
+	endDate.setSeconds(0);
       }
     }
   }
@@ -2431,7 +2437,8 @@ const setupCanvas = function(data) {
     semesterStartMonth = 10;
   }
   semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);
-  semesterStart.setHours(14);
+  semesterStart.setHours(0);
+  //semesterStart.setHours(14);
   // Subtract a few days.
   scheduleFirst = new Date();
   scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
@@ -2492,10 +2499,6 @@ const setupCanvas = function(data) {
   stage.add(backgroundLayer);
   stage.add(constraintLayer);
 
-  // And the layer for the schedule blocks.
-  blockLayer = new Konva.Layer();
-  stage.add(blockLayer);
-  
   // Make the top layer, which will be for the LST and daylight.
   var topLayer = new Konva.Layer();
   // The group here will contain all the lines for LST, and the
@@ -2527,6 +2530,11 @@ const setupCanvas = function(data) {
   topLayer.add(timeGroup);
   stage.add(topLayer);
 
+  // And the layer for the schedule blocks.
+  blockLayer = new Konva.Layer();
+  stage.add(blockLayer);
+  
+  
   // Add the side layer for the array configuration.
   arrayLayer = new Konva.Layer();
   arrayGroup = new Konva.Group({
