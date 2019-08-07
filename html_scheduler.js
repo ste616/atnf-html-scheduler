@@ -267,13 +267,13 @@ const easternStandardTime = function(jsEpoch) {
 
 // Find a block in the block object.
 const findBlockObject = function(proj, slot) {
-  console.log("finding object");
+  //console.log("finding object");
   for (var i = 0; i < blockObjects.length; i++) {
-    console.log(blockObjects[i]);
+    //console.log(blockObjects[i]);
     if ((blockObjects[i].ident == proj.ident) &&
 	(blockObjects[i].slot == slot) &&
 	(!blockObjects[i].moving) && (!blockObjects[i].clean)) {
-      console.log("returning this object");
+      //console.log("returning this object");
       return blockObjects[i];
     }
   }
@@ -640,6 +640,7 @@ const showProjectDetails = function(ident) {
     console.log(project);
     fillId("projectselectedIdent", project.details.ident);
     fillId("projectselectedPI", project.details.PI);
+    fillId("projectselectedTitle", project.details.title);
     var projectselectedTable = document.getElementById("projectselected");
     projectselectedTable.style["background-color"] = "#" + project.summary.colour;
     
@@ -936,6 +937,9 @@ const drawBlock = function(proj, slot) {
       mainTitleOpts.text = "Reconfigure #" + proj.slot[slot].source +
 	"/Calibration";
       mainTitleOpts.textPattern = "full";
+    } else if (proj.ident == "CABB") {
+      mainTitleOpts.text = "CABB";
+      mainTitleOpts.textPattern = "full";
     }
     blockTextOpts.push(mainTitleOpts);
     var mainTitleText = new Konva.Text(mainTitleOpts);
@@ -959,14 +963,38 @@ const drawBlock = function(proj, slot) {
 	    mainTitleOpts.text = "Maint";
 	  } else if (proj.ident == "CONFIG") {
 	    mainTitleOpts.text = "Reconf #" + proj.slot[slot].source;
+	  } else if (proj.ident == "CABB") {
+	    // Do nothing.
+	    mainTitleOpts.text = "CABB";
 	  }
 	  mainTitleText.text(mainTitleOpts.text);
+	} else if (mainTitleOpts.textPattern == "short") {
+	  // We move to vertical.
+	  mainTitleOpts.textPattern = "vertical";
+	  mainTitleOpts.fontSize = 16;
+	  mainTitleText.fontSize(mainTitleOpts.fontSize);
+	  if (proj.ident == "MAINT") {
+	    mainTitleOpts.text = "M/T";
+	  } else if (proj.ident == "CONFIG") {
+	    mainTitleOpts.text = "R/C";
+	  } else if (proj.ident == "CABB") {
+	    // Still the same.
+	    mainTitleOpts.text = "CABB";
+	  }
+	  mainTitleText.text(mainTitleOpts.text);
+	  mainTitleText.rotation(-90);
 	} else {
 	  break;
 	}
       }
       tw = mainTitleText.width();
-      fits = (tw < blockOpts.width);
+      if (mainTitleOpts.textPattern == "vertical") {
+	fits = (tw < blockOpts.height);
+	console.log("vertical text height is " + tw);
+	console.log("block height is " + blockOpts.height);
+      } else {
+	fits = (tw < blockOpts.width);
+      }
     }
     mainTitleText.offsetX(mainTitleText.width() / 2);
     mainTitleText.offsetY(mainTitleText.height() / 2);
@@ -1716,7 +1744,10 @@ const summariseProjects = function() {
 
   var allProjects = scheduleData.program.project;
   for (var i = 0; i < allProjects.length; i++) {
-    var s = { 'ident': allProjects[i].ident };
+    var s = { 'ident': allProjects[i].ident, isNapa: false };
+    if (/^NAPA/.test(allProjects[i].title)) {
+      s.isNapa = true;
+    }
     var slots = allProjects[i].slot;
     s.requestedSlots = slots.length;
     s.scheduledSlots = 0;
@@ -2184,16 +2215,20 @@ const updateProjectTable = function() {
       t.appendChild(r);
       tableRows[p.ident] = r;
       // The name element never changes.
-      var td = makeElement("td", p.ident);
+      var td = makeElement("td", p.ident, { 'id': "identcell-" + p.ident });
       // Check if this has a colour associated.
       if (p.hasOwnProperty("colour")) {
 	var st = document.createAttribute("style");
 	st.value = "background-color: #" + p.colour;
 	td.setAttributeNode(st);
       }
+      r.appendChild(td);
+      // Is it a NAPA?
+      if (p.isNapa) {
+	fillId("identcell-" + p.ident, null, "napaTitle");
+      }
       // We put an event handler on this to show its details.
       addClickHandler(td, projectClicker(p.ident));
-      r.appendChild(td);
       // The rating element never changes.
       td = makeElement("td", p.rating);
       r.appendChild(td);
@@ -2512,10 +2547,6 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   console.log(ident);
   if (force) {
     startingDate = new Date(time.timestamp * 1000);
-    console.log("forcing start date to be");
-    console.log(startingDate);
-    console.log("semester start is");
-    console.log(semesterStart);
     // Check we haven't moved outside the semester boundaries.
     if (startingDate < semesterStart) {
       return false;
@@ -2529,6 +2560,12 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     startingDate.setMinutes(0);
     startingDate.setSeconds(0);
     hStart = startingDate.getUTCHours();
+  } else if (ident == "CABB") {
+    // We just put this down where the user clicked.
+    startingDate = new Date(time.timestamp * 1000);
+  } else {
+    // A normal project, we have to be guided by LST.
+    
   }
 
   if (startingDate == null) {
@@ -2789,6 +2826,7 @@ const drawArrayConfigurations = function() {
 const clearSlotSelector = function() {
   fillId("projectselectedIdent", "NONE");
   fillId("projectselectedPI", "NOBODY");
+  fillId("projectselectedTitle", "NOTHING");
   var projectselectedTable = document.getElementById("projectselected");
   projectselectedTable.style["background-color"] = "white";
 
@@ -3144,6 +3182,8 @@ const unscheduleSlot = function() {
   }
 
   // Otherwise, remove it from the schedule.
+  dehighlightBlock(previouslySelectedProject.details,
+		   previouslySelectedSlot);
   undrawBlock(previouslySelectedProject.details, previouslySelectedSlot);
   previouslySelectedProject.details.slot[previouslySelectedSlot]
     .scheduled = 0;
