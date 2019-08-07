@@ -73,8 +73,8 @@ const configDescriptor = {
   'ew367': [ 12, "any", "anycompact", "ew367" ],
   'ew352': [ 13, "any", "anycompact", "ew352" ],
   'h214': [ 14, "any", "hybrid", "h214" ],
-  'h168': [ 15, "any", "hybrid", "h168" ],
-  'h75': [ 16, "any", "hybrid", "h75" ]
+  'h168': [ 15, "any", "hybrid", "h168", "h75/168" ],
+  'h75': [ 16, "any", "hybrid", "h75", "h75/168" ]
 };
 
 // An object to hold all our measurements.
@@ -126,6 +126,21 @@ const calcDayNumber = function(d) {
   } else {
     return (Math.floor((d - (scheduleFirst.getTime() / 1000)) / 86400) + 1);
   }
+};
+
+// This routine calculates the sidereal restrictions for a particular
+// source on a particular day.
+const calculateSiderealRestrictions = function(raStr, decStr, d) {
+  var ra = stringToDegrees(raStr, true);
+  var dec = stringToDegrees(decStr, false);
+  var sourceRiseSets = calculateSourceStuff([ ra, dec ], d, 12);
+  var hoursUp = sourceRiseSets[1] - sourceRiseSets[0];
+  if (hoursUp < 0) {
+    hoursUp += 24;
+  }
+  var zenithHour = hourBounds(sourceRiseSets[0] + (hoursUp / 2));
+  return { rise: sourceRiseSets[0], set: sourceRiseSets[1],
+	   zenith: zenithHour };
 };
 
 // Given some coordinates c (an array with RA, Dec in degrees),
@@ -928,7 +943,7 @@ const drawBlock = function(proj, slot) {
       y: (blockOpts.y + blockOpts.height / 2),
       text: proj.ident + " (" + proj.PI + ")",
       fontSize: 16, fill: "black",
-      type: "main"
+      type: "main", textPattern: "full"
     };
     if (proj.ident == "MAINT") {
       mainTitleOpts.text = proj.title;
@@ -949,7 +964,7 @@ const drawBlock = function(proj, slot) {
     var fits = (tw < blockOpts.width);
     while (!fits) {
       // Try to shrink the text first.
-      if (mainTitleOpts.fontSize > 12) {
+      if (mainTitleOpts.fontSize > 13) {
 	mainTitleOpts.fontSize -= 1;
 	mainTitleText.fontSize(mainTitleOpts.fontSize);
       } else {
@@ -966,6 +981,9 @@ const drawBlock = function(proj, slot) {
 	  } else if (proj.ident == "CABB") {
 	    // Do nothing.
 	    mainTitleOpts.text = "CABB";
+	  } else {
+	    // Just the project code.
+	    mainTitleOpts.text = proj.ident;
 	  }
 	  mainTitleText.text(mainTitleOpts.text);
 	} else if (mainTitleOpts.textPattern == "short") {
@@ -980,6 +998,9 @@ const drawBlock = function(proj, slot) {
 	  } else if (proj.ident == "CABB") {
 	    // Still the same.
 	    mainTitleOpts.text = "CABB";
+	  } else {
+	    // Still just the ident.
+	    mainTitleOpts.text = proj.ident;
 	  }
 	  mainTitleText.text(mainTitleOpts.text);
 	  mainTitleText.rotation(-90);
@@ -1758,6 +1779,7 @@ const summariseProjects = function() {
       s.colour = allProjects[i].colour;
     } else {
       s.colour = scheduleData.program.colours.default;
+      allProjects[i].colour = s.colour;
     }
     for (var j = 0; j < slots.length; j++) {
       if (slots[j].scheduled == 1) {
@@ -1999,14 +2021,13 @@ const selectSlot = function(slotnumber) {
   }
   // Then LST.
   var sourceTimes = allDates.forEach(function(d) {
-    var ra = stringToDegrees(psps.position.ra, true);
-    var dec = stringToDegrees(psps.position.dec, false);
-    var sourceRiseSets = calculateSourceStuff([ ra, dec ], d, 12);
     var daynum = calcDayNumber(d) - 1;
-    var tplots = [ sourceRiseSets ];
-    if (sourceRiseSets[0] > sourceRiseSets[1]) {
+    var sourceRiseSets = calculateSiderealRestrictions(
+      psps.position.ra, psps.position.dec, d);
+    var tplots = [ sourceRiseSets.rise, sourceRiseSets.set ];
+    if (sourceRiseSets.rise > sourceRiseSets.set) {
       // Backwards order.
-      tplots = [ [ sourceRiseSets[0], 24 ], [ 0, sourceRiseSets[1] ] ];
+      tplots = [ [ sourceRiseSets.rise, 24 ], [ 0, sourceRiseSets.set ] ];
     }
 
     drawDay(daynum, null, null, false, "orange", tplots, constraintBoxGroup);
@@ -2565,7 +2586,17 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     startingDate = new Date(time.timestamp * 1000);
   } else {
     // A normal project, we have to be guided by LST.
-    
+    var sidres = calculateSiderealRestrictions(
+      slot.position.ra, slot.position.dec, d);
+    // The zenith time minus half the slot length should be ideal.
+    var startHour = hourBounds(sidres.zenith - (slot.requested_duration / 2));
+    // Round it to the nearest half hour.
+    startHour = Math.round(2 * startHour) / 2;
+    if (startHour < time.hour) {
+      // We've wrapped days.
+      d = allDates[time.day + 1];
+    }
+    startingDate = new Date(d.getTime() + startHour * 3600000);
   }
 
   if (startingDate == null) {
