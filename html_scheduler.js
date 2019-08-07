@@ -30,6 +30,9 @@ var previouslySelectedSlot = null;
 var tableRows = {};
 // This contains all the block Konva objects.
 var blockObjects = [];
+// We need two transformers.
+var transformerTop = null;
+var transformerBottom = null;
 
 // Some constants we need.
 // The observatory coordinates.
@@ -41,6 +44,14 @@ const nDays = (366 / 2) + 4;
 const legacyProjects = [ "C3132", "C3145", "C3152", "C3157" ];
 const legacyLimit = 400; // Hours.
 const projectLimit = 300; // Hours
+// The colour of the border to use for the blocks, when not highlighted.
+const normalBlockColour = "black";
+// And the stroke width.
+const normalBlockStroke = 2;
+// The same things, for highlighted blocks.
+const highlightedBlockColour = "brown";
+const highlightedBlockStroke = 4;
+
 
 // An object to describe config compatibility.
 // The keys are the available configs, which we can use later to
@@ -773,11 +784,14 @@ const updateAllTables = function() {
 const dehighlightBlock = function(proj, slot) {
   var bo = findBlockObject(proj, slot);
   for (var i = 0; i < bo.rects.length; i++) {
-    bo.rects[i].stroke("black");
-    bo.rects[i].strokeWidth(2);
+    bo.rects[i].stroke(normalBlockColour);
+    bo.rects[i].strokeWidth(normalBlockStroke);
   }
   // Make it impossible to drag this block.
   bo.group.draggable(false);
+  // And detach our transformers.
+  transformerTop.detach()
+  transformerBottom.detach();
   blockLayer.draw();
 };
 
@@ -879,7 +893,7 @@ const drawBlock = function(proj, slot) {
       x: (meas.marginLeft + meas.dayLabelWidth + hh1 * meas.halfHourWidth),
       y: (meas.marginTop + i * meas.dayHeight),
       width: (hh2 - hh1) * meas.halfHourWidth, height: meas.dayHeight,
-      stroke: "black", strokeWidth: 2
+      stroke: normalBlockColour, strokeWidth: normalBlockStroke
     };
     var block = new Konva.Rect(blockOpts);
     blockRectOpts.push(blockOpts);
@@ -995,7 +1009,7 @@ const drawConfiguration = function(title, start, end) {
   }
   
   // Draw a box on the right.
-  var nDays = endDaysSinceStart;// - nDaysSinceStart;//(end - start) / 86400;
+  var nDays = endDaysSinceStart;
   var boxLeft = meas.marginLeft + meas.dayLabelWidth + meas.dayWidth;
   var boxTop = meas.marginTop + nDaysSinceStart * meas.dayHeight;
   var boxWidth = meas.arrayLabelWidth;
@@ -1142,13 +1156,37 @@ const drawNightTimes = function(t, g) {
   g.add(eveningPoly);
 };
 
+// This routine generates a transform callback.
+const genBlockTransform = function(block, rectIndex) {
+  return function() {
+    transformBlock(block, rectIndex);
+  };
+};
 
 // Highlight a selected schedule block.
 const highlightBlock = function(proj, slot) {
   var bo = findBlockObject(proj, slot);
   for (var i = 0; i < bo.rects.length; i++) {
-    bo.rects[i].stroke("brown");
-    bo.rects[i].strokeWidth(4);
+    bo.rects[i].stroke(highlightedBlockColour);
+    bo.rects[i].strokeWidth(highlightedBlockStroke);
+    // Attach the transformers.
+    if (i == 0) {
+      transformerTop.attachTo(bo.rects[i]);
+      if (i < (bo.rects.length - 1)) {
+	// There is another block after this, so we don't
+	// allow the end time to be changed.
+	transformerTop.enabledAnchors([ 'middle-left' ]);
+      } else {
+	transformerTop.enabledAnchors([ 'middle-left', 'middle-right' ]);
+      }
+      bo.rects[i].on('transformend', genBlockTransform(bo, i));
+    } else if (i == (bo.rects.length) - 1) {
+      transformerBottom.attachTo(bo.rects[i]);
+      // We never want to be able to move the start time of these
+      // type of blocks.
+      transformerBottom.enabledAnchors([ 'middle-right' ]);
+      bo.rects[i].on('transformend', genBlockTransform(bo, i));
+    }
   }
   bo.group.moveToTop();
   // Make it possible to drag this block now.
@@ -1171,6 +1209,211 @@ const lstDraw = function(n, d, l, p, g) {
   lobj.strokeWidth = 4;
   var line = new Konva.Line(lobj);
   g.add(line);
+};
+
+// Relabel all the reconfiguration blocks, according to their new
+// numbers.
+const relabelReconfigs = function() {
+  var configs = getProjectByName("CONFIG");
+  var slots = configs.details.slot;
+
+  for (var i = 1; i < slots.length; i++) {
+    if (slots[i].scheduled == 1) {
+      var bo = findBlockObject(configs.details, i);
+      if (bo != null) {
+	for (var j = 0; j < bo.textOptions.length; j++) {
+	  if (bo.textOptions[j].type == "main") {
+	    bo.textOptions[j].text = "Reconfigure #" +
+	      slots[i].source + "/Calibration";
+	    bo.texts[j].text(bo.textOptions[j].text);
+	  }
+	}
+      }
+    }
+  }
+};
+
+// Do all the things needed to create the canvas, after the schedule
+// has been loaded.
+const setupCanvas = function(data) {
+
+  // Set up the schedule.
+  var re = /^(\d\d\d\d)(\D\D\D)$/g;
+  var rmatch = re.exec(data.program.term.term);
+  var semester = rmatch[2]
+  var year = parseInt(rmatch[1]);
+
+  // Get the date for the first day of the schedule.
+  var semesterStartMonth = -1;
+  if (semester == "APR") {
+    semesterStartMonth = 4;
+  } else if (semester == "OCT") {
+    semesterStartMonth = 10;
+  }
+  semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);
+  semesterStart.setHours(0);
+  //semesterStart.setHours(14);
+  // Subtract a few days.
+  scheduleFirst = new Date();
+  scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
+  // Make all the dates.
+  var allSunDates = [];
+  for (var i = -1; i <= nDays; i++) {
+    var pdate = new Date();
+    pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
+    allSunDates.push(pdate);
+  }
+  allDates = allSunDates.slice(1, nDays);
+  scheduleLast = new Date();
+  scheduleLast.setTime(allDates[allDates.length - 1].getTime() + 86400 * 1000);
+  
+  // Set up the canvas.
+  stage = new Konva.Stage({
+    container: "schedtable",
+    width: meas.width, height: meas.height
+  });
+
+  // Make the stage respond to clicks.
+  stage.on("click", handleCanvasClick);
+  
+  var hourStage = new Konva.Stage({
+    container: "schedtabletop",
+    width: meas.width, height: meas.timeLabelHeight
+  });
+  // Make a layer for the time labels.
+  var timeLayer = new Konva.Layer();
+  // And we need a group.
+  var timeLabelGroup = new Konva.Group({
+    draggable: false
+  });
+  // Draw the hour labels at the top.
+  drawHourLabels(timeLabelGroup);
+  // Add this to the stage.
+  timeLayer.add(timeLabelGroup);
+  hourStage.add(timeLayer);
+  
+  // Make the background layer.
+  backgroundLayer = new Konva.Layer();
+  // Add to this a group which will contain all the day boxes.
+  var dayBoxGroup = new Konva.Group({
+    draggable: false
+  });
+
+  constraintLayer = new Konva.Layer();
+  constraintBoxGroup = new Konva.Group({
+    draggable: false
+  });
+  constraintLayer.add(constraintBoxGroup);
+  
+  allDates.forEach(function(d, i) {
+    drawDay(i, d, dayBoxGroup, true);
+  });
+  // Add the background groups and layer to the stage.
+  backgroundLayer.add(dayBoxGroup);
+  stage.add(backgroundLayer);
+  stage.add(constraintLayer);
+
+  // Make the top layer, which will be for the LST and daylight.
+  var topLayer = new Konva.Layer();
+  // The group here will contain all the lines for LST, and the
+  // shaded night area.
+  var timeGroup = new Konva.Group({
+    draggable: false
+  });
+  
+  // For each day draw the LST.
+  var lstLines = [ 0, 6, 12, 18 ];
+  var lstProps = [ { stroke: 'red' },
+		   { stroke: 'blue', dash: [ 24, 11 ] },
+		   { stroke: 'orange', dash: [ 24, 11 ] },
+		   { stroke: '#ee82ee', dash: [ 24, 11 ] } ];
+  for (var i = 0; i < lstLines.length; i++) {
+    allDates.forEach(function(d, j) {
+      lstDraw(j, allDates[j], lstLines[i], lstProps[i], timeGroup);
+    });
+  }
+  
+  var nightGroup = new Konva.Group({
+    draggable: false
+  });
+  // Calculate the sunrise/sunset time for each day.
+  var sunTimes = allSunDates.map(calculateSunStuff);
+  drawNightTimes(sunTimes, nightGroup);
+  
+  topLayer.add(nightGroup);
+  topLayer.add(timeGroup);
+  stage.add(topLayer);
+
+  // Add the side layer for the array configuration.
+  arrayLayer = new Konva.Layer();
+  arrayGroup = new Konva.Group({
+    draggable: false
+  });
+  arrayLayer.add(arrayGroup);
+  stage.add(arrayLayer);
+  
+  // And the layer for the schedule blocks.
+  blockLayer = new Konva.Layer();
+  // Make the transformers.
+  var transformerOptions = {
+    rotateEnabled: false,
+    borderEnabled: true,
+    borderStroke: highlightedBlockColour,
+    borderStrokeWidth: highlightedBlockStroke,
+    enabledAnchors: [ "middle-left", "middle-right" ],
+    keepRatio: false
+  };
+  transformerTop = new Konva.Transformer(transformerOptions);
+  blockLayer.add(transformerTop);
+  transformerBottom = new Konva.Transformer(transformerOptions);
+  blockLayer.add(transformerBottom);
+  stage.add(blockLayer);
+  
+  // Draw the initial array configurations.
+  orderReconfigs();
+  drawArrayConfigurations();
+
+  // Draw all the blocks we know about already.
+  drawAllBlocks();
+};
+
+// This routine gets called when a block has been transformed.
+const transformBlock = function(block, rectIndex) {
+  var rect = block.rects[rectIndex];
+  var timen = posTime(rect.x(), rect.y());
+  // Set the current block to moving so we don't consider it
+  // during the resize.
+  block.move = true;
+  var scheduled = false;
+  var hoursDuration = 0;
+  if ((rectIndex == 0) && (block.rects.length == 1)) {
+    // We're resizing the only rectangle.
+    hoursDuration = Math.round((rect.width() * rect.scaleX()) /
+			       meas.halfHourWidth) / 2;
+  } else {
+    // We have to work out how many extra hours were added or
+    // subtracted.
+    for (var i = 0; i < block.rects.length; i++) {
+      hoursDuration += Math.round((block.rects[i].width() *
+				   block.rects[i].scaleX()) /
+				  meas.halfHourWidth) / 2;
+    }
+    if (rectIndex > 0) {
+      // We're resizing the last rectangle. We have to get the start time
+      // from the first rectangle.
+      timen = posTime(block.rects[0].x(), block.rects[0].y());
+    }
+  }
+  scheduled = scheduleInsert(block.ident, block.slot, timen, true,
+			     hoursDuration);
+  if (scheduled == true) {
+    // Get rid of the current block.
+    block.group.destroy();
+    block.clean = true;
+  } else {
+    block.moving = false;
+    block.redrawRequired = true;
+  }
 };
 
 // Get rid of a block on the canvas.
@@ -1196,27 +1439,6 @@ const undrawBlock = function(proj, slot) {
   
 };
 
-// Relabel all the reconfiguration blocks, according to their new
-// numbers.
-const relabelReconfigs = function() {
-  var configs = getProjectByName("CONFIG");
-  var slots = configs.details.slot;
-
-  for (var i = 1; i < slots.length; i++) {
-    if (slots[i].scheduled == 1) {
-      var bo = findBlockObject(configs.details, i);
-      if (bo != null) {
-	for (var j = 0; j < bo.textOptions.length; j++) {
-	  if (bo.textOptions[j].type == "main") {
-	    bo.textOptions[j].text = "Reconfigure #" +
-	      slots[i].source + "/Calibration";
-	    bo.texts[j].text(bo.textOptions[j].text);
-	  }
-	}
-      }
-    }
-  }
-};
 
 
 /********************************************************************
@@ -2230,7 +2452,11 @@ const posTime = function(x, y) {
 // scheduled, given an indicative time (day of sched and time).
 // It works out if the slot can be scheduled within some tolerance,
 // and if so, puts it in at the optimal position given the constraints.
-const scheduleInsert = function(ident, slotNumber, time, force) {
+// Setting force to true will ensure that the start time is assumed correct,
+// regardless of restrictions. Specifying the duration number (in hours)
+// will over-ride the requested_duration number in the schedule (but
+// will not change the requested_duration).
+const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   // Get the project.
   var proj = getProjectByName(ident);
 
@@ -2338,8 +2564,16 @@ const scheduleInsert = function(ident, slotNumber, time, force) {
 
   // If we reach here we have a usable start date.
   // Now we determine the duration.
-  var endDate = new Date(startingDate.getTime() +
-			 (slot.requested_duration * 3600000));
+  var dur = slot.requested_duration;
+  if (slot.scheduled_duration > 0) {
+    dur = slot.scheduled_duration;
+  }
+  if ((typeof duration != "undefined") &&
+      (duration > 0)) {
+    dur = duration;
+  }
+  dur *= 3600000;
+  var endDate = new Date(startingDate.getTime() + dur);
   // Check for a conflicting project.
   var conflicts = scheduledBetween(startingDate, endDate);
   if (conflicts.length > 0) {
@@ -2419,138 +2653,6 @@ const handleCanvasClick = function(e) {
   }
 };
 
-// Do all the things needed to create the canvas, after the schedule
-// has been loaded.
-const setupCanvas = function(data) {
-
-  // Set up the schedule.
-  var re = /^(\d\d\d\d)(\D\D\D)$/g;
-  var rmatch = re.exec(data.program.term.term);
-  var semester = rmatch[2]
-  var year = parseInt(rmatch[1]);
-
-  // Get the date for the first day of the schedule.
-  var semesterStartMonth = -1;
-  if (semester == "APR") {
-    semesterStartMonth = 4;
-  } else if (semester == "OCT") {
-    semesterStartMonth = 10;
-  }
-  semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);
-  semesterStart.setHours(0);
-  //semesterStart.setHours(14);
-  // Subtract a few days.
-  scheduleFirst = new Date();
-  scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
-  // Make all the dates.
-  var allSunDates = [];
-  for (var i = -1; i <= nDays; i++) {
-    var pdate = new Date();
-    pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
-    allSunDates.push(pdate);
-  }
-  allDates = allSunDates.slice(1, nDays);
-  scheduleLast = new Date();
-  scheduleLast.setTime(allDates[allDates.length - 1].getTime() + 86400 * 1000);
-  
-  // Set up the canvas.
-  stage = new Konva.Stage({
-    container: "schedtable",
-    width: meas.width, height: meas.height
-  });
-
-  // Make the stage respond to clicks.
-  stage.on("click", handleCanvasClick);
-  
-  var hourStage = new Konva.Stage({
-    container: "schedtabletop",
-    width: meas.width, height: meas.timeLabelHeight
-  });
-  // Make a layer for the time labels.
-  var timeLayer = new Konva.Layer();
-  // And we need a group.
-  var timeLabelGroup = new Konva.Group({
-    draggable: false
-  });
-  // Draw the hour labels at the top.
-  drawHourLabels(timeLabelGroup);
-  // Add this to the stage.
-  timeLayer.add(timeLabelGroup);
-  hourStage.add(timeLayer);
-  
-  // Make the background layer.
-  backgroundLayer = new Konva.Layer();
-  // Add to this a group which will contain all the day boxes.
-  var dayBoxGroup = new Konva.Group({
-    draggable: false
-  });
-
-  constraintLayer = new Konva.Layer();
-  constraintBoxGroup = new Konva.Group({
-    draggable: false
-  });
-  constraintLayer.add(constraintBoxGroup);
-  
-  allDates.forEach(function(d, i) {
-    drawDay(i, d, dayBoxGroup, true);
-  });
-  // Add the background groups and layer to the stage.
-  backgroundLayer.add(dayBoxGroup);
-  stage.add(backgroundLayer);
-  stage.add(constraintLayer);
-
-  // Make the top layer, which will be for the LST and daylight.
-  var topLayer = new Konva.Layer();
-  // The group here will contain all the lines for LST, and the
-  // shaded night area.
-  var timeGroup = new Konva.Group({
-    draggable: false
-  });
-  
-  // For each day draw the LST.
-  var lstLines = [ 0, 6, 12, 18 ];
-  var lstProps = [ { stroke: 'red' },
-		   { stroke: 'blue', dash: [ 24, 11 ] },
-		   { stroke: 'orange', dash: [ 24, 11 ] },
-		   { stroke: '#ee82ee', dash: [ 24, 11 ] } ];
-  for (var i = 0; i < lstLines.length; i++) {
-    allDates.forEach(function(d, j) {
-      lstDraw(j, allDates[j], lstLines[i], lstProps[i], timeGroup);
-    });
-  }
-  
-  var nightGroup = new Konva.Group({
-    draggable: false
-  });
-  // Calculate the sunrise/sunset time for each day.
-  var sunTimes = allSunDates.map(calculateSunStuff);
-  drawNightTimes(sunTimes, nightGroup);
-  
-  topLayer.add(nightGroup);
-  topLayer.add(timeGroup);
-  stage.add(topLayer);
-
-  // And the layer for the schedule blocks.
-  blockLayer = new Konva.Layer();
-  stage.add(blockLayer);
-  
-  
-  // Add the side layer for the array configuration.
-  arrayLayer = new Konva.Layer();
-  arrayGroup = new Konva.Group({
-    draggable: false
-  });
-  arrayLayer.add(arrayGroup);
-  stage.add(arrayLayer);
-
-  // Draw the initial array configurations.
-  orderReconfigs();
-  drawArrayConfigurations();
-
-
-  // Draw all the blocks we know about already.
-  drawAllBlocks();
-};
 
 // Find a project by name.
 const getProjectByName = function(name) {
