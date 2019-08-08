@@ -134,13 +134,17 @@ const calculateSiderealRestrictions = function(raStr, decStr, d) {
   var ra = stringToDegrees(raStr, true);
   var dec = stringToDegrees(decStr, false);
   var sourceRiseSets = calculateSourceStuff([ ra, dec ], d, 12);
+  if (sourceRiseSets == 180) {
+    return { rise: 0, set: 0, zenith: (ra / 15), alwaysUp: true };
+  }
   var hoursUp = sourceRiseSets[1] - sourceRiseSets[0];
   if (hoursUp < 0) {
     hoursUp += 24;
   }
-  var zenithHour = hourBounds(sourceRiseSets[0] + (hoursUp / 2));
+  //var zenithHour = hourBounds(sourceRiseSets[0] + (hoursUp / 2));
+  var zenithHour = ra / 15;
   return { rise: sourceRiseSets[0], set: sourceRiseSets[1],
-	   zenith: zenithHour };
+	   zenith: zenithHour, alwaysUp: false };
 };
 
 // Given some coordinates c (an array with RA, Dec in degrees),
@@ -149,6 +153,10 @@ const calculateSiderealRestrictions = function(raStr, decStr, d) {
 const calculateSourceStuff = function(c, d, ellimit) {
   var mjd = date2mjd(d);
   var haset = haset_azel(c[1], atcaLat, ellimit);
+  if (haset == 180) {
+    // This source never sets.
+    return haset;
+  }
   var riseHour = hourBounds((c[0] - haset) / 15);
   var setHour = hourBounds((c[0] + haset) / 15);
   var zlst = 24 * mjd2lst(mjd, (atcaLong / 360.0), 0);
@@ -606,6 +614,31 @@ const makeElement = function(type, text, attrs) {
   }
 
   return e;
+};
+
+// Scroll to a timestamp in the schedule canvas.
+// The timestamp is just the epoch (the scheduled_start).
+const scrollToTimestamp = function(t) {
+  var dn = calcDayNumber(t);
+  // Check if this is already visible.
+  var e = document.getElementById("schedtable");
+  var topDay = Math.ceil((e.scrollTop - meas.marginTop) / meas.dayHeight);
+  var bottomDay = Math.floor(topDay + e.clientHeight / meas.dayHeight);
+
+  if ((dn >= topDay) && (dn <= bottomDay)) {
+    // Don't need to do anything, it's already visibile.
+    return;
+  }
+
+  // Scroll to leave a few days at the top.
+  if (dn > 4) {
+    dn -= 4;
+  } else {
+    dn = 0;
+  }
+  // Work out the position of that day.
+  var dt = meas.marginTop + dn * meas.dayHeight;
+  e.scrollTop = dt;
 };
 
 // Show the details of a particular project, and present the slot
@@ -2024,10 +2057,13 @@ const selectSlot = function(slotnumber) {
     var daynum = calcDayNumber(d) - 1;
     var sourceRiseSets = calculateSiderealRestrictions(
       psps.position.ra, psps.position.dec, d);
-    var tplots = [ sourceRiseSets.rise, sourceRiseSets.set ];
+    var tplots = [ [ sourceRiseSets.rise, sourceRiseSets.set ] ];
     if (sourceRiseSets.rise > sourceRiseSets.set) {
       // Backwards order.
       tplots = [ [ sourceRiseSets.rise, 24 ], [ 0, sourceRiseSets.set ] ];
+    }
+    if (sourceRiseSets.alwaysUp) {
+      tplots = [ [0, 24 ] ];
     }
 
     drawDay(daynum, null, null, false, "orange", tplots, constraintBoxGroup);
@@ -2045,6 +2081,7 @@ const selectSlot = function(slotnumber) {
 
   // If it has been scheduled already, highlight it on the canvas.
   if (psps.scheduled == 1) {
+    scrollToTimestamp(psps.scheduled_start);
     highlightBlock(psp, slotnumber);
   }
   
@@ -2590,6 +2627,11 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
       slot.position.ra, slot.position.dec, d);
     // The zenith time minus half the slot length should be ideal.
     var startHour = hourBounds(sidres.zenith - (slot.requested_duration / 2));
+    if ((sidres.alwaysUp) && (stringToDegrees(slot.position.dec) == -90)) {
+      // This probably means the project doesn't have a target.
+      // We now use the time that was clicked.
+      startHour = time.hour;
+    }
     // Round it to the nearest half hour.
     startHour = Math.round(2 * startHour) / 2;
     if (startHour < time.hour) {
