@@ -3118,8 +3118,10 @@ const showLineState = function() {
   var indicator = document.getElementById("onlineState");
   if (navigator.onLine) {
     indicator.innerHTML = "ONLINE";
+    return "ONLINE";
   } else {
     indicator.innerHTML = "OFFLINE";
+    return "OFFLINE";
   }
 };
 
@@ -3202,8 +3204,11 @@ const saveScheduleToServer = function() {
     xhr.onload = function() {
       var status = xhr.status;
       if (status === 200) {
+	printMessage("Schedule saved to the server.");
 	displayModificationTimes();
       } else {
+	printMessage("Failed to save schedule to the server.",
+		     "error");
 	displayModificationTimes();
       }
     }
@@ -3272,7 +3277,7 @@ const revertScheduleToServer = function() {
   
   // Tell the user what has happened.
   displayModalMessage("Schedule reverted to server version.", false);
-  
+  printMessage("Schedule reverted to server version.", "warning");
 };
 
 const revertCancel = function() {
@@ -3392,6 +3397,9 @@ const copySlot = function() {
     duplicateSlot(previouslySelectedProject.details.slot[previouslySelectedSlot])
   );
 
+  printMessage("Duplicated slot for " + previouslySelectedProject.ident +
+	       ".");
+  
   // Update the table.
   showProjectDetails(previouslySelectedProject.details.ident);
   selectSlot(previouslySelectedProject.details.slot.length - 1);
@@ -3445,6 +3453,9 @@ const deleteThatSlot = function() {
   previouslySelectedProject.details.slot.splice(
     previouslySelectedSlot, 1);
 
+  printMessage("Deleted slot from " +
+	       previouslySelectedProject.ident + ".", "warning");
+  
   // Update all the page details.
   previouslySelectedSlot = null;
   showProjectDetails(previouslySelectedProject.details.ident);
@@ -3588,7 +3599,8 @@ checkServerTime(pageInitBootstrap);
 checkLocalTime(pageInitBootstrap);
 
 const stateChange = function() {
-  showLineState();
+  var s = showLineState();
+  printMessage("Now running in " + s + " mode.", "warning");
 };
 // Set a handler for when the state changes.
 window.addEventListener("online", stateChange);
