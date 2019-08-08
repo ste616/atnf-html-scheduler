@@ -2743,14 +2743,13 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     }
   }
   if ((excluded) && (!force)) {
-    printMessage("Attempted to schedule " + prog.details.ident +
+    printMessage("Attempted to schedule " + ident +
 		 " on an unsuitable date.", "error");
     return null;
   }
 
   // Check if the array configuration is suitable.
   var arrayConfigured = whichArrayConfiguration(time.day);
-  //console.log("array is configured as " + arrayConfigured);
   var compatible = arrayCompatible(arrayConfigured, slot.array);
   if ((!compatible) && (ident != "CONFIG")) {
     printMessage("Attempted to schedule a " + proj.details.ident +
@@ -2763,7 +2762,6 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   // Work out when we should start on this day.
   var hStart = null;
   var startingDate = null;
-  console.log(ident);
   if (force) {
     startingDate = new Date(time.timestamp * 1000);
     // Check we haven't moved outside the semester boundaries.
@@ -2805,11 +2803,11 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   }
 
   if (startingDate == null) {
-    console.log("can't work out when to start this block, aborting");
+    printMessage("Unable to find a suitable time to start " +
+		 ident + " slot!", "error");
     return null;
-  } else {
-    console.log("start time determined");
-    console.log(startingDate);
+  /*} else {
+    console.log(startingDate); */
   }
 
   // Check if something else is already scheduled at this time.
@@ -2825,14 +2823,15 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
       // We need to start within office hours.
       if ((!force) && ((endDate.getHours() > 15) || (endDate.getHours() <= 8))) {
 	// This won't work.
-	console.log("can't start maintenance block out of hours, aborting");
+	printMessage("Unable to schedule " + ident +" block, as it would " +
+		     "fall out of office hours.", "error");
 	return null;
       } else {
 	startingDate = endDate;
       }
     }
-  } else {
-    console.log("no overlapping project found");
+  /*} else {
+    console.log("no overlapping project found"); */
   }
 
   // If we reach here we have a usable start date.
@@ -2854,8 +2853,10 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   }
   if (endDate < startingDate) {
     // We've tried to start within a project; shouldn't have happened.
+    printMessage("An unexpected error occured while attempting to " +
+		 "schedule " + ident + " slot.", "error");
     console.log("we got trapped somehow, aborting");
-    return false;
+    return null;
   }
   // Deal with ending dates outside acceptable ranges.
   if (!force) {
@@ -2873,7 +2874,6 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
       }
     } else if (ident == "CONFIG") {
       // We want to end at or before 8am the next day.
-      console.log("finding end date for CONFIG");
       if ((endDate.getHours() > 8) &&
 	  ((endDate.getTime() - startingDate.getTime()) > (12 * 3600000))) {
 	endDate.setHours(8);
@@ -2884,10 +2884,13 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   }
 
   // If we get here, we're good to put this in the schedule.
-  console.log("scheduling the slot");
+  //console.log("scheduling the slot");
   slot.scheduled_start = startingDate.getTime() / 1000;
   slot.scheduled_duration = (endDate.getTime() - startingDate.getTime()) / 3600000;
   slot.scheduled = 1;
+  printMessage("Scheduled " + ident + " slot for " +
+	       slot.scheduled_duration + " hours starting at " +
+	       datetimeToString(startingDate) + ".");
 
   // Redraw everything.
   scheduleUpdated();
@@ -2898,7 +2901,6 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
 const handleCanvasClick = function(e) {
   // Get the time and day that was clicked.
   var timeClicked = pointerTime(e);
-  console.log("time clicked is " + JSON.stringify(timeClicked));
   
   // Check if there is a block scheduled where the click was.
   var scheduled = scheduledAt(timeClicked.timestamp);
@@ -2908,8 +2910,6 @@ const handleCanvasClick = function(e) {
       showProjectDetails(scheduled.project.ident);
     }
     selectSlot(scheduled.slot);
-  } else {
-    console.log("no scheduled project found");
   }
   
   // Has a project and slot been selected?
