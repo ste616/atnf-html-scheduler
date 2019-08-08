@@ -94,7 +94,11 @@ var meas = {
   // The width of the array panel.
   arrayLabelWidth: 80,
   // The height of the hour label part.
-  timeLabelHeight: 66
+  timeLabelHeight: 66,
+  // The offset of all text from the edges.
+  textOffset: 2,
+  // Font size for the support text.
+  supportFontSize: 9
 };
 
 
@@ -991,7 +995,7 @@ const drawBlock = function(proj, slot) {
     }
     blockTextOpts.push(mainTitleOpts);
     var mainTitleText = new Konva.Text(mainTitleOpts);
-
+    
     // Check if this text fits.
     var tw = mainTitleText.width();
     var fits = (tw < blockOpts.width);
@@ -1050,11 +1054,116 @@ const drawBlock = function(proj, slot) {
 	fits = (tw < blockOpts.width);
       }
     }
-    mainTitleText.offsetX(mainTitleText.width() / 2);
-    mainTitleText.offsetY(mainTitleText.height() / 2);
+    mainTitleText.offsetX(mainTitleText.width() / 2 - meas.textOffset);
+    mainTitleText.offsetY(mainTitleText.height() / 2 - meas.textOffset);
     
     blockTexts.push(mainTitleText);
     blockGroup.add(mainTitleText);
+
+    // More text for the ASTRO blocks.
+    if (proj.type == "ASTRO") {
+      var sourceTextOpts = {
+	x: blockOpts.x, y: blockOpts.y,
+	text: proj.slot[slot].source,
+	fontSize: meas.supportFontSize,
+	fill: "black", type: "source"
+      };
+      var sourceText = new Konva.Text(sourceTextOpts);
+      var bandTextOpts = {
+	x: (blockOpts.x + blockOpts.width),
+	y: (blockOpts.y + blockOpts.height),
+	text: "(" + proj.slot[slot].bands.join(" ") + ")",
+	fontSize: meas.supportFontSize,
+	fill: "black", type: "band"
+      };
+      var bandText = new Konva.Text(bandTextOpts);
+      var modeTextOpts = {
+	x: (blockOpts.x + blockOpts.width),
+	y: blockOpts.y,
+	text: "(" + proj.slot[slot].bandwidth + ")",
+	fontSize: meas.supportFontSize,
+	fill: "black", type: "bandwidth"
+      };
+      var modeText = new Konva.Text(modeTextOpts);
+      var supportTextOpts = null;
+      if (legacyProjects.indexOf(proj.ident) >= 0) {
+	supportTextOpts = {
+	  x: blockOpts.x,
+	  y: (blockOpts.y + blockOpts.height),
+	  text: "LEGACY",
+	  fontSize: meas.supportFontSize,
+	  fill: "black", "type": "legacy"
+	};
+      }
+      var supportText = null;
+      if (supportTextOpts != null) {
+	supportText = new Konva.Text(supportTextOpts);
+      }
+      // Change what we display based on what fits.
+      var sw = sourceText.width();
+      var bw = bandText.width();
+      var showSource = false;
+      var showBand = false;
+      // Prioritise the source and the band.
+      if ((sw + (2 * meas.textOffset)) < blockOpts.width) {
+	showSource = true;
+      }
+      if ((bw + (2 * meas.textOffset)) < blockOpts.width) {
+	showBand = true;
+      }
+      // If possible we display the mode and the support.
+      var mw = modeText.width();
+      var showMode = false;
+      var showSupport = false;
+      var pw = 0;
+      if (supportText != null) {
+	pw = supportText.width();
+      }
+      if (showSource) {
+	if ((mw + sw + (4 * meas.textOffset)) < blockOpts.width) {
+	  showMode = true;
+	}
+      }
+      if (showBand && (pw > 0)) {
+	if ((pw + bw + (4 * meas.textOffset)) < blockOpts.width) {
+	  showSupport = true;
+	}
+      }
+
+      if (showSource) {
+	sourceText.offsetX(-1 * meas.textOffset);
+	sourceText.offsetY(-1 * meas.textOffset);
+	blockTexts.push(sourceText);
+	blockGroup.add(sourceText);
+      } else {
+	sourceText.destroy();
+      }
+      if (showMode) {
+	modeText.offsetX(mw + meas.textOffset);
+	modeText.offsetY(-1 * meas.textOffset);
+	blockTexts.push(modeText);
+	blockGroup.add(modeText);
+      } else {
+	modeText.destroy();
+      }
+      if (showBand) {
+	bandText.offsetX(bw + meas.textOffset);
+	bandText.offsetY(bandText.height() + meas.textOffset);
+	blockTexts.push(bandText);
+	blockGroup.add(bandText);
+      } else {
+	bandText.destroy();
+      }
+      if (showSupport) {
+	supportText.offsetX(pw - meas.textOffset);
+	supportText.offsetY(supportText.height() + meas.textOffset);
+	blockTexts.push(supportText);
+	blockGroup.add(supportText);
+      } else if (supportText != null) {
+	supportText.destroy();
+      }
+    }
+
   }
   blockLayer.add(blockGroup);
   
@@ -2052,23 +2161,25 @@ const selectSlot = function(slotnumber) {
     drawDay(daynum, null, null, false, "red", [ [ 0, 24 ] ],
 	    constraintBoxGroup);
   }
-  // Then LST.
-  var sourceTimes = allDates.forEach(function(d) {
-    var daynum = calcDayNumber(d) - 1;
-    var sourceRiseSets = calculateSiderealRestrictions(
-      psps.position.ra, psps.position.dec, d);
-    var tplots = [ [ sourceRiseSets.rise, sourceRiseSets.set ] ];
-    if (sourceRiseSets.rise > sourceRiseSets.set) {
-      // Backwards order.
-      tplots = [ [ sourceRiseSets.rise, 24 ], [ 0, sourceRiseSets.set ] ];
-    }
-    if (sourceRiseSets.alwaysUp) {
-      tplots = [ [0, 24 ] ];
-    }
-
-    drawDay(daynum, null, null, false, "orange", tplots, constraintBoxGroup);
-    return sourceRiseSets;
-  });
+  // Then LST, if we're dealing with an ASTRO project.
+  if (psp.type == "ASTRO") {
+    var sourceTimes = allDates.forEach(function(d) {
+      var daynum = calcDayNumber(d) - 1;
+      var sourceRiseSets = calculateSiderealRestrictions(
+	psps.position.ra, psps.position.dec, d);
+      var tplots = [ [ sourceRiseSets.rise, sourceRiseSets.set ] ];
+      if (sourceRiseSets.rise > sourceRiseSets.set) {
+	// Backwards order.
+	tplots = [ [ sourceRiseSets.rise, 24 ], [ 0, sourceRiseSets.set ] ];
+      }
+      if (sourceRiseSets.alwaysUp) {
+	tplots = [ [0, 24 ] ];
+      }
+      
+      drawDay(daynum, null, null, false, "orange", tplots, constraintBoxGroup);
+      return sourceRiseSets;
+    });
+  }
 
   constraintLayer.draw();
   
@@ -2618,7 +2729,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     startingDate.setMinutes(0);
     startingDate.setSeconds(0);
     hStart = startingDate.getUTCHours();
-  } else if (ident == "CABB") {
+  } else if ((ident == "CABB") || (ident == "VLBI")) {
     // We just put this down where the user clicked.
     startingDate = new Date(time.timestamp * 1000);
   } else {
@@ -2627,7 +2738,9 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
       slot.position.ra, slot.position.dec, d);
     // The zenith time minus half the slot length should be ideal.
     var startHour = hourBounds(sidres.zenith - (slot.requested_duration / 2));
-    if ((sidres.alwaysUp) && (stringToDegrees(slot.position.dec) == -90)) {
+    var decDeg = stringToDegrees(slot.position.dec);
+    console.log(decDeg);
+    if ((sidres.alwaysUp) && (decDeg == -90)) {
       // This probably means the project doesn't have a target.
       // We now use the time that was clicked.
       startHour = time.hour;
