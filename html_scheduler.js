@@ -178,7 +178,6 @@ const calculateSunStuff = function(d) {
 
 // Remove any blocks in the block object that require cleaning.
 const cleanBlockObjects = function() {
-  console.log("cleaning block array");
   var boidx = -1;
   do {
     boidx = -1;
@@ -303,13 +302,10 @@ const easternStandardTime = function(jsEpoch) {
 
 // Find a block in the block object.
 const findBlockObject = function(proj, slot) {
-  //console.log("finding object");
   for (var i = 0; i < blockObjects.length; i++) {
-    //console.log(blockObjects[i]);
     if ((blockObjects[i].ident == proj.ident) &&
 	(blockObjects[i].slot == slot) &&
 	(!blockObjects[i].moving) && (!blockObjects[i].clean)) {
-      //console.log("returning this object");
       return blockObjects[i];
     }
   }
@@ -741,7 +737,7 @@ const showProjectDetails = function(ident) {
     }
     
     // Display the vital statistics.
-    console.log(project);
+    //console.log(project);
     fillId("projectselectedIdent", project.details.ident);
     fillId("projectselectedPI", project.details.PI);
     fillId("projectselectedTitle", project.details.title);
@@ -2993,11 +2989,11 @@ const arrayCompatible = function(config, required) {
   if (configDescriptor.hasOwnProperty(lconfig)) {
     if (configDescriptor[lconfig].indexOf(lrequired) >= 0) {
       return true;
-    } else {
-      console.log(lrequired + " not compatible with " + lconfig);
+    /*} else {
+      console.log(lrequired + " not compatible with " + lconfig);*/
     }
-  } else {
-    console.log("Config " + lconfig + " not found!");
+  /*} else {
+    console.log("Config " + lconfig + " not found!");*/
   }
   return false;
 };
@@ -3089,6 +3085,8 @@ const clearSlotSelector = function() {
 // The page initialisation function.
 const pageInit = function(status, data) {
   if ((typeof data == "undefined") || (data == null)) {
+    printMessage("Did not receive data from the local storage or the " +
+		 "server. Unable to proceed!", "error");
     console.log("Unable to retrieve data.");
     return;
   }
@@ -3425,9 +3423,15 @@ const unscheduleSlot = function() {
     .scheduled = 0;
   previouslySelectedProject.details.slot[previouslySelectedSlot]
     .scheduled_duration = 0;
+  var od = new Date(previouslySelectedProject.details
+		    .slot[previouslySelectedSlot].scheduled_start * 1000);
   previouslySelectedProject.details.slot[previouslySelectedSlot]
     .scheduled_start = 0;
 
+  printMessage("Removed " + previouslySelectedProject.details.ident +
+	       " slot starting at " + datetimeToString(od) + " from the " +
+	       "schedule.", "warning");
+  
   // Update the page.
   scheduleUpdated();
   
