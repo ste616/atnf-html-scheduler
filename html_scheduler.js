@@ -265,6 +265,15 @@ const datetimeToSmallString = function(dts) {
   return (dt.getDate() + "/" + (dt.getMonth() + 1));
 };
 
+const datetimeToString = function(d) {
+  return d.getFullYear() + "-" +
+    zeroPadNumber((d.getMonth() + 1), 10) + "-" +
+    zeroPadNumber(d.getDate(), 10) + " " +
+    zeroPadNumber(d.getHours(), 10) + ":" +
+    zeroPadNumber(d.getMinutes(), 10) + ":" +
+    zeroPadNumber(d.getSeconds(), 10);
+};
+
 // Convert degrees to radians.
 const deg2rad = function(d) {
   return (d * Math.PI / 180);
@@ -499,7 +508,16 @@ const turnFraction = function(f) {
   return numberBounds(f, 1);
 };
 
-
+// Zero pad a number to some level.
+const zeroPadNumber = function(n, l) {
+  var ll = 10;
+  var s = "" + n;
+  while ((ll <= l) && (n < ll)){
+    s = "0" + s;
+    ll *= 10;
+  }
+  return s;
+};
 
 
 
@@ -602,12 +620,12 @@ const isElementVisible = function(el) {
 };
 
 // A helper function to make a DOM element.
-const makeElement = function(type, text, attrs) {
+const makeElement = function(type, text, attrs, classes) {
   var e = document.createElement(type);
   if ((typeof text != "undefined") && (text != null)) {
     e.innerHTML = text;
   }
-  if (typeof attrs != "undefined") {
+  if ((typeof attrs != "undefined") && (attrs != null)) {
     for (var a in attrs) {
       if (attrs.hasOwnProperty(a)) {
 	var n = document.createAttribute(a);
@@ -617,7 +635,41 @@ const makeElement = function(type, text, attrs) {
     }
   }
 
+  if ((typeof classes != "undefined") && (classes != null)) {
+    domAddClasses(e, classes);
+  }
+  
   return e;
+};
+
+// Add a message to the message window.
+const printMessage = function(msg, type) {
+  if (typeof msg == "undefined") {
+    return;
+  }
+  if (typeof type == "undefined") {
+    type = "normal";
+  }
+
+  var classes = [ ];
+  if (type == "error") {
+    classes.push("messageError");
+  } else if (type == "warning") {
+    classes.push("messageWarning");
+  }
+  // Get the date stamp.
+  var d = new Date();
+  var dstring = datetimeToString(d) + ":";
+  
+  var mel = makeElement("div")
+  var dbox = makeElement("span", dstring, null, "messageDate");
+  mel.appendChild(dbox);
+  var mbox = makeElement("span", msg, null, classes);
+  mel.appendChild(mbox);
+  var mb = document.getElementById("messagebox");
+  mb.appendChild(mel);
+  // Scroll to the bottom.
+  mb.scrollTop = mb.scrollHeight;
 };
 
 // Scroll to a timestamp in the schedule canvas.
@@ -776,7 +828,7 @@ const showProjectDetails = function(ident) {
   } else {
     // Update the cell values only. We do this for everything in case
     // we've been called because an input/select has been changed.
-    console.log("updating table only");
+    //console.log("updating table only");
     for (var i = 0; i < project.details.slot.length; i++) {
       var s = project.details.slot[i];
       // Go through each ID in turn.
@@ -856,24 +908,28 @@ const dragConstructor = function(block) {
 
 // Function that gets called when a block drag has finished.
 const dragFinished = function(block, pos) {
-  console.log("ident = " + block.ident);
-  console.log("original position = " + block.rectOpts[0].x + "," +
-	      block.rectOpts[0].y);
   var xn = block.rectOpts[0].x + pos.currentTarget.attrs.x;
   var yn = block.rectOpts[0].y + pos.currentTarget.attrs.y +
       (block.rectOpts[0].height / 2);
   var timen = posTime(xn, yn);
-  console.log(timen);
   // Set the current block to moving so we don't consider it
   // during the move.
   block.moving = true;
   var scheduled = scheduleInsert(block.ident, block.slot,
 				 timen, true);
-  if (scheduled == true) {
+  if (scheduled != null) {
+    var origTimePos = posTime(block.rectOpts[0].x, block.rectOpts[0].y);
+    var origDate = new Date(origTimePos.timestamp * 1000);
+    var newDate = new Date(scheduled.scheduled_start * 1000);
+    printMessage(block.ident + " slot moved from " +
+		 datetimeToString(origDate) + " to " +
+		 datetimeToString(newDate) + ".");
+		 
     // Get rid of the current block.
     block.group.destroy();
     block.clean = true;
   } else {
+    printMessage(block.ident + " slot move failed.", "error");
     block.moving = false;
     // Move it back to where it was.
     block.redrawRequired = true;
@@ -900,7 +956,6 @@ const drawBlock = function(proj, slot) {
     return;
   } else if ((bo != null) && (bo.redrawRequired)) {
     // Redraw it the way it has already been specified.
-    console.log("redrawing block");
     bo.group.absolutePosition(bo.absolutePosition);
     bo.redrawRequired = false;
     return;
@@ -910,7 +965,6 @@ const drawBlock = function(proj, slot) {
   // Get the day that we start on.
   var startDayIdx = calcDayNumber(
     easternStandardTime(proj.slot[slot].scheduled_start * 1000)) - 1;
-  //console.log("block starts at " + startDayIdx);
   // And the day that we end on.
   var endDayIdx = calcDayNumber(
     easternStandardTime(endingDate(proj, slot))) - 1;
@@ -997,7 +1051,7 @@ const drawBlock = function(proj, slot) {
     var mainTitleText = new Konva.Text(mainTitleOpts);
     
     // Check if this text fits.
-    var tw = mainTitleText.width();
+    var tw = (mainTitleText.width() + 2 * meas.textOffset);
     var fits = (tw < blockOpts.width);
     while (!fits) {
       // Try to shrink the text first.
@@ -1045,11 +1099,9 @@ const drawBlock = function(proj, slot) {
 	  break;
 	}
       }
-      tw = mainTitleText.width();
+      tw = (mainTitleText.width() + 2 * meas.textOffset);
       if (mainTitleOpts.textPattern == "vertical") {
 	fits = (tw < blockOpts.height);
-	console.log("vertical text height is " + tw);
-	console.log("block height is " + blockOpts.height);
       } else {
 	fits = (tw < blockOpts.width);
       }
@@ -1324,7 +1376,6 @@ const drawNightTimes = function(t, g) {
   var morningPos = [ meas.marginLeft + meas.dayLabelWidth, meas.marginTop ];
   var eveningPos = [ meas.marginLeft + meas.dayLabelWidth + 48 * meas.halfHourWidth, meas.marginTop ];
   for (i = 0; i < (t.length - 2); i++) {
-    //console.log(t[i]);
     var y = meas.marginTop + i * meas.dayHeight;
     morningPos.push(meas.marginLeft + meas.dayLabelWidth + t[i][0] * (2 * meas.halfHourWidth));
     morningPos.push(y);
@@ -1597,7 +1648,7 @@ const transformBlock = function(block, rectIndex) {
   }
   scheduled = scheduleInsert(block.ident, block.slot, timen, true,
 			     hoursDuration);
-  if (scheduled == true) {
+  if (scheduled != null) {
     // Get rid of the current block.
     block.group.destroy();
     block.clean = true;
@@ -1766,10 +1817,10 @@ const loadFile = function(callback, forceServer) {
   }
   
   if (loadLocal == true) {
-    console.log("chose to load local schedule");
+    printMessage("Loading local schedule.");
     callback(null, getLocalSchedule());
   } else if (loadLocal == false) {
-    console.log("chose to load server schedule");
+    printMessage("Loading server schedule.");
     // We get the file from a CGI script.
     var xhr = new XMLHttpRequest();
     xhr.open('GET', "/cgi-bin/scheduler.pl?request=load", true);
@@ -1785,7 +1836,7 @@ const loadFile = function(callback, forceServer) {
     xhr.send();
   } else {
     // What??
-    console.log("something unexpected happened while loading schedule");
+    printMessage("Could not load the server schedule.", "error");
   }
 };
 
@@ -1883,8 +1934,6 @@ const scheduledBetween = function(d1, d2) {
 
 // A routine to do a bunch of things if the schedule gets updated.
 const scheduleUpdated = function() {
-  console.log("updating page after schedule change");
-  
   // First, save the schedule locally.
   updateLocalSchedule();
 
@@ -2005,29 +2054,24 @@ const summariseSemester = function() {
     var slots = allProjects[i].slot;
     var isCalibration = false;
     if (allProjects[i].ident == "C007") {
-      //console.log("calibration");
       isCalibration = true;
     }
     var isLegacy = false;
     if (legacyProjects.indexOf(allProjects[i].ident) >= 0) {
-      //console.log("legacy");
       isLegacy = true;
     }
     var isVlbi = false;
     if (allProjects[i].ident == "VLBI") {
-      //console.log("VLBI");
       isVlbi = true;
     }
     var isMaintenance = false;
     if ((allProjects[i].ident == "MAINT") ||
 	(allProjects[i].ident == "CONFIG") ||
 	(allProjects[i].ident == "CABB")) {
-      //console.log("maintenance");
       isMaintenance = true;
     }
     var isNapa = false;
     if (/^NAPA/.test(allProjects[i].title)) {
-      //console.log("NAPA");
       isNapa = true;
     }
     
@@ -2665,15 +2709,17 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   var proj = getProjectByName(ident);
 
   if (proj.details == null) {
+    printMessage("Did not find the project to schedule!", "error");
     console.log("something has gone terribly wrong");
-    return false;
+    return null;
   }
 
   // Get the slot.
   var slot = proj.details.slot[slotNumber];
   if (typeof slot == "undefined") {
+    printMessage("Did not find the slot to schedule!", "error");
     console.log("nothing is going right");
-    return false;
+    return null;
   }
 
   // Get the actual date for the day number.
@@ -2697,17 +2743,21 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     }
   }
   if ((excluded) && (!force)) {
-    console.log("excluded day selected, aborting");
-    return false;
+    printMessage("Attempted to schedule " + prog.details.ident +
+		 " on an unsuitable date.", "error");
+    return null;
   }
 
   // Check if the array configuration is suitable.
   var arrayConfigured = whichArrayConfiguration(time.day);
-  console.log("array is configured as " + arrayConfigured);
+  //console.log("array is configured as " + arrayConfigured);
   var compatible = arrayCompatible(arrayConfigured, slot.array);
   if ((!compatible) && (ident != "CONFIG")) {
-    console.log("incompatible configuration requested, aborting");
-    return false;
+    printMessage("Attempted to schedule a " + proj.details.ident +
+		 " slot requiring " + slot.array.toUpperCase() + ", but configuration " +
+		 "on selected date is not compatible (" +
+		 arrayConfigured +").", "error");
+    return null;
   }
 
   // Work out when we should start on this day.
@@ -2718,7 +2768,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     startingDate = new Date(time.timestamp * 1000);
     // Check we haven't moved outside the semester boundaries.
     if (startingDate < semesterStart) {
-      return false;
+      return null;
     }
   } else if ((ident == "MAINT") || (ident == "CONFIG")) {
     // This is a maintenance block, and we try to start at 8am
@@ -2756,7 +2806,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
 
   if (startingDate == null) {
     console.log("can't work out when to start this block, aborting");
-    return false;
+    return null;
   } else {
     console.log("start time determined");
     console.log(startingDate);
@@ -2776,7 +2826,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
       if ((!force) && ((endDate.getHours() > 15) || (endDate.getHours() <= 8))) {
 	// This won't work.
 	console.log("can't start maintenance block out of hours, aborting");
-	return false;
+	return null;
       } else {
 	startingDate = endDate;
       }
@@ -2842,7 +2892,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   // Redraw everything.
   scheduleUpdated();
 
-  return true;
+  return slot;
 };
 
 const handleCanvasClick = function(e) {
@@ -3395,7 +3445,6 @@ const deleteThatSlot = function() {
   previouslySelectedSlot = null;
   showProjectDetails(previouslySelectedProject.details.ident);
   updateProjectTable();
-  // TODO: Update the canvas.
 
   // Save the local schedule.
   updateLocalSchedule();

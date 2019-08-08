@@ -10,18 +10,18 @@
       left: 0px; height: calc(100% - 68px); }
       #schedsummary { left: 840px; position: fixed; right: 99%; height: 100%;
       background-color: #ffffff; width: 40%; width: calc(99% - 840px); }
-      #projectdetails { top: 62px; bottom: 63%; position: absolute;
+      #projectdetails { top: 125px; bottom: 56%; position: absolute;
       border: 2px solid black; width: 100%; }
-      #projecttable { bottom: 29%; position: absolute; overflow: auto;
-      height: 33%; width: 100%; }
+      #projecttable { bottom: 25%; position: absolute; overflow: auto;
+      height: 31%; width: 100%; }
       #projects-table { width: 100%; border-collapse: collapse;
       border: 2px solid black; }
       #projects-table th { background-color: black; color: white;
       border: 1px solid black; }
       #projects-table td { border: 1px dotted black; text-align: center;
       padding: 0.2em 0; }
-      #semestersummary { bottom: 1%; position: absolute; overflow: auto;
-      height: 28%; width: 100%; }
+      #semestersummary { bottom: 0%; position: absolute; overflow: auto;
+      height: 25%; width: 100%; }
       #array-demand-table { width: 100%; border-collapse: collapse;
       border: 2px solid blue; }
       #array-demand-table th { background-color: blue; color: yellow;
@@ -33,10 +33,12 @@
       #semester-state-table th { background: green; color: black;
       text-align: right; }
       #semester-state-table td { text-align: center; padding: 0.2em; }
-      #appstate { top: 0%; bottom: 60px; position: absolute; width: 100%;
-      background-color: #dddddd; height: 60px; }
-      #appstate table { margin: 0; border-collapse: collapse; width: 100%; }
-      #appstate table td { text-align: center; }
+      #appstate { top: 0%; position: absolute; width: 100%;
+      background-color: #dddddd; height: 50px; }
+      #appstate table { margin: 0; border-collapse: collapse; width: 100%;
+      height: 100%; padding: 0; }
+      #appstate table td { text-align: center; height: 12px; padding: 0;
+      margin: 0; }
       #onlineState { color: green; margin: 1em; display: table; }
       #onlineState.offline { color: red; }
       #serverSaveTime,#localSaveTime { font-size: 0.7em; }
@@ -92,6 +94,13 @@
       .partiallyScheduled { background-color: #ffff99; }
       .completelyScheduled { background-color: #33cc33; }
       .napaTitle { color: #ff0066; }
+      #messagebox { height: 70px; border: 1px dotted black; width: 100%;
+      position: absolute; top: 51px; padding: 2px 6px; font-size: 0.7em;
+      overflow: auto; }
+      .messageDate { font-weight: bold; margin-right: 0.2em; }
+      #messagebox div { border-bottom: 1px dashed grey; width: 100%; }
+      .messageError { color: red; font-weight: bold; }
+      .messageWarning { color: orange; font-weight: bold; }
     </style>
   </head>
   <body>
@@ -107,6 +116,7 @@
 	  <tr><td><span id="localSaveTime">None</span></td>
 	    <td><span id="serverSaveTime">None</span></td></tr></table>
       </div>
+      <div id="messagebox"></div>
       <div id="projectdetails">
 	<div id="projectslots">
 	  <table id="projectslotsManipulation">
