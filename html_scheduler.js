@@ -138,17 +138,7 @@ const calculateSiderealRestrictions = function(raStr, decStr, d) {
   var ra = stringToDegrees(raStr, true);
   var dec = stringToDegrees(decStr, false);
   var sourceRiseSets = calculateSourceStuff([ ra, dec ], d, 12);
-  if (sourceRiseSets == 180) {
-    return { rise: 0, set: 0, zenith: (ra / 15), alwaysUp: true };
-  }
-  var hoursUp = sourceRiseSets[1] - sourceRiseSets[0];
-  if (hoursUp < 0) {
-    hoursUp += 24;
-  }
-  //var zenithHour = hourBounds(sourceRiseSets[0] + (hoursUp / 2));
-  var zenithHour = ra / 15;
-  return { rise: sourceRiseSets[0], set: sourceRiseSets[1],
-	   zenith: zenithHour, alwaysUp: false };
+  return sourceRiseSets;
 };
 
 // Given some coordinates c (an array with RA, Dec in degrees),
@@ -157,17 +147,13 @@ const calculateSiderealRestrictions = function(raStr, decStr, d) {
 const calculateSourceStuff = function(c, d, ellimit) {
   var mjd = date2mjd(d);
   var haset = haset_azel(c[1], atcaLat, ellimit);
+  var riseHour = (c[0] - haset) / 15;
+  var setHour = (c[0] + haset) / 15;
+  var r = lstToDaytime(riseHour, setHour, (c[0] / 15), d);
   if (haset == 180) {
-    // This source never sets.
-    return haset;
+    r.alwaysUp = true;
   }
-  var riseHour = hourBounds((c[0] - haset) / 15);
-  var setHour = hourBounds((c[0] + haset) / 15);
-  var zlst = 24 * mjd2lst(mjd, (atcaLong / 360.0), 0);
-  var riseDayHour = hoursUntilLst(zlst, riseHour);
-  var setDayHour = hoursUntilLst(zlst, setHour);
-
-  return [ riseDayHour, setDayHour ];
+  return r;
 };
 
 const calculateSunStuff = function(d) {
@@ -189,6 +175,9 @@ const cleanBlockObjects = function() {
     }
     
     if (boidx >= 0) {
+      if (blockObjects[boidx].group != null) {
+	blockObjects[boidx].group.destroy();
+      }
       blockObjects.splice(boidx, 1);
     }
   } while (boidx >= 0);
@@ -362,6 +351,24 @@ const hoursUntilLst = function(zlst, dlst) {
   return ((dlst - zlst) / 1.002737909350795);
 };
 
+// Work out the hours for a given LST rise and set.
+const lstToDaytime = function(lstRise, lstSet, ra, d) {
+  var mjd = date2mjd(d);
+  var riseHour = hourBounds(lstRise);
+  var setHour = hourBounds(lstSet);
+  var midHour;
+  if (ra == null) {
+    midHour = hourBounds((lstRise + (lstSet - lstRise) / 2));
+  } else {
+    midHour = ra;
+  }
+  var zlst = 24 * mjd2lst(mjd, (atcaLong / 360.0), 0);
+  var riseDayHour = hoursUntilLst(zlst, riseHour);
+  var setDayHour = hoursUntilLst(zlst, setHour);
+  var midDayHour = hoursUntilLst(zlst, midHour);
+  return { rise: riseDayHour, set: setDayHour, zenith: midDayHour };
+};
+
 // Calculate the sidereal time at some longitude on the Earth.
 const mjd2lst = function(mjd, longitude, dUT1) {
   var lst = turnFraction(gst(mjd, dUT1) + longitude);
@@ -454,10 +461,15 @@ const stringToDegrees = function(s, inHours) {
   if (/^\-/.test(sels[0])) {
     isNeg = true;
   }
-
-  var d = Math.abs(parseInt(sels[0]));
-  var m = parseInt(sels[1]);
-  var s = parseFloat(sels[2]);
+  var d = 0, m = 0, s = 0;
+  
+  d = Math.abs(parseInt(sels[0]));
+  if (sels.length > 1) {
+    m = parseInt(sels[1]);
+  }
+  if (sels.length > 2) {
+    var s = parseFloat(sels[2]);
+  }
   var n = d + m / 60.0 + s / 3600.0;
   if (isNeg) {
     n *= -1.0;
@@ -759,7 +771,9 @@ const showProjectDetails = function(ident) {
     addDoubleClickHandler(td, cabbSelectorGen(ident, sn,
 					      bandwidthId));
     tr.appendChild(td);
-    td = makeElement("td", sd.source);
+    var sourceId = "slotsource-" + ident + "-" + sn;
+    td = makeElement("td", sd.source, { 'id': sourceId });
+    addDoubleClickHandler(td, sourceSelectorGen(ident, sn, sourceId));
     tr.appendChild(td);
     var timeId = "slottime-" + ident + "-" + sn;
     td = makeElement("td", sd.scheduled_duration + " / " +
@@ -837,25 +851,29 @@ const showProjectDetails = function(ident) {
 	makeRow(i, s, slotTable);
       }
       // Go through each ID in turn.
-      var arrId = "slotarray-" + project.details.ident + "-" + i;
+      var arrId = "slotarray-" + ident + "-" + i;
       emptyDomNode(arrId);
       fillId(arrId, s.array.toUpperCase());
 
-      var bandId = "slotband-" + project.details.ident + "-" + i;
+      var bandId = "slotband-" + ident + "-" + i;
       emptyDomNode(bandId);
       fillId(bandId, s.bands.join(","));
 
-      var bandwidthId = "slotbandwidth-" + project.details.ident + "-" + i;
+      var bandwidthId = "slotbandwidth-" + ident + "-" + i;
       emptyDomNode(bandwidthId);
       fillId(bandwidthId, s.bandwidth);
+
+      var sourceId = "slotsource-" + ident + "-" + i;
+      emptyDomNode(sourceId);
+      fillId(sourceId, s.source);
       
-      var timeId = "slottime-" + project.details.ident + "-" + i;
+      var timeId = "slottime-" + ident + "-" + i;
       emptyDomNode(timeId);
       fillId(timeId, s.scheduled_duration + " / " +
 	     s.requested_duration);
 
       // Ensure we colour our selection if we are.
-      var tselId = "slotrow-" + project.details.ident + "-" + i;
+      var tselId = "slotrow-" + ident + "-" + i;
       if (i == previouslySelectedSlot) {
 	fillId(tselId, null, "slotSelected");
       }
@@ -1379,12 +1397,15 @@ const drawHourLabels = function(g) {
 // Draw a polygon to show when it's night times.
 const drawNightTimes = function(t, g) {
   var morningPos = [ meas.marginLeft + meas.dayLabelWidth, meas.marginTop ];
-  var eveningPos = [ meas.marginLeft + meas.dayLabelWidth + 48 * meas.halfHourWidth, meas.marginTop ];
+  var eveningPos = [ meas.marginLeft + meas.dayLabelWidth +
+		     48 * meas.halfHourWidth, meas.marginTop ];
   for (i = 0; i < (t.length - 2); i++) {
     var y = meas.marginTop + i * meas.dayHeight;
-    morningPos.push(meas.marginLeft + meas.dayLabelWidth + t[i][0] * (2 * meas.halfHourWidth));
+    morningPos.push(meas.marginLeft + meas.dayLabelWidth +
+		    t[i].rise * (2 * meas.halfHourWidth));
     morningPos.push(y);
-    eveningPos.push(meas.marginLeft + meas.dayLabelWidth + t[i][1] * (2 * meas.halfHourWidth));
+    eveningPos.push(meas.marginLeft + meas.dayLabelWidth +
+		    t[i].set * (2 * meas.halfHourWidth));
     eveningPos.push(y);
   }
   morningPos.push(meas.marginLeft + meas.dayLabelWidth);
@@ -1470,8 +1491,12 @@ const relabelReconfigs = function() {
       if (bo != null) {
 	for (var j = 0; j < bo.textOptions.length; j++) {
 	  if (bo.textOptions[j].type == "main") {
-	    bo.textOptions[j].text = "Reconfigure #" +
-	      slots[i].source + "/Calibration";
+	    if (bo.textOptions[j].textPattern == "full") {
+	      bo.textOptions[j].text = "Reconfigure #" +
+		slots[i].source + "/Calibration";
+	    } else if (bo.textOptions[j].textPattern == "short") {
+	      bo.textOptions[j].text = "Reconf #" + slots[i].source;
+	    }
 	    bo.texts[j].text(bo.textOptions[j].text);
 	  }
 	}
@@ -1871,6 +1896,49 @@ const orderReconfigs = function() {
   relabelReconfigs();
 };
 
+// This function gets called if the user changes the state of the
+// LST restrictions check box or text inputs.
+const lstRestrictionsChange = function() {
+  // Check if we have a project and slot selected.
+  var ul = document.getElementById("sourceUseLST");
+  var riseInp = document.getElementById("sourceLSTRise");
+  var setInp = document.getElementById("sourceLSTSet");
+  if ((previouslySelectedProject == null) ||
+      (previouslySelectedSlot == null)) {
+    // Deselect the box.
+    ul.checked = false;
+    // Clear the inputs.
+    riseInp.value = "";
+    setInp.value = "";
+    return;
+  }
+
+  // Get the current state.
+  var lc = (ul.checked) ? 1 : 0;
+  var rise = riseInp.value;
+  var set = setInp.value;
+  // Check for changes.
+  var psps = previouslySelectedProject.details.slot[previouslySelectedSlot];
+  if ((psps.lst_limits_used != lc) ||
+      (psps.lst_start != rise) ||
+      (psps.lst_end != set)) {
+    // Change the things that need changing.
+    if (psps.lst_limits_used != lc) {
+      psps.lst_limits_used = lc;
+    }
+    if (psps.lst_start != rise) {
+      psps.lst_start = rise;
+    }
+    if (psps.lst_end != set) {
+      psps.lst_end = set;
+    }
+    updateLocalSchedule();
+    // Reselect this slot to redraw the constraints.
+    selectSlot(previouslySelectedSlot);
+  }
+  
+};
+
 // Return the project and slot scheduled at a specified time, or
 // null if nothing is.
 const scheduledAt = function(d) {
@@ -1946,8 +2014,6 @@ const scheduleUpdated = function() {
   cleanBlockObjects();
   orderReconfigs();
   drawArrayConfigurations();
-  // Delete all the current schedule blocks.
-  //blockLayer.destroyChildren();
   // Draw all the blocks again.
   drawAllBlocks();
   
@@ -2214,8 +2280,16 @@ const selectSlot = function(slotnumber) {
   if (psp.type == "ASTRO") {
     var sourceTimes = allDates.forEach(function(d) {
       var daynum = calcDayNumber(d) - 1;
-      var sourceRiseSets = calculateSiderealRestrictions(
-	psps.position.ra, psps.position.dec, d);
+      var sourceRiseSets = null;
+      if (psps.lst_limits_used == 1) {
+	var lstRise = stringToDegrees(psps.lst_start, true) / 15;
+	var lstSet = stringToDegrees(psps.lst_end, true) / 15;
+	var ra = stringToDegrees(psps.position.ra, true) / 15;
+	sourceRiseSets = lstToDaytime(lstRise, lstSet, ra, d);
+      } else {
+	sourceRiseSets = calculateSiderealRestrictions(
+	  psps.position.ra, psps.position.dec, d);
+      }
       var tplots = [ [ sourceRiseSets.rise, sourceRiseSets.set ] ];
       if (sourceRiseSets.rise > sourceRiseSets.set) {
 	// Backwards order.
@@ -2296,8 +2370,18 @@ const bandsSelectorGen = function(ident, slotnum, tdid) {
   };
 };
 
+const sourceSelectorGen = function(ident, slotnum, tdid) {
+  return function() {
+    slotChangeDisplay(tdid, null, {
+      'callback': slotChangeFulfillment,
+      'payload': { 'ident': ident, 'slotnum': slotnum,
+		   'type': "source" }
+    }, "input");
+  };
+};
+
 const matchTime = function(v) {
-  var m = /^(\d+)\s+\/\s+(\d+)$/.exec(v);
+  var m = /^(\d+)\s+\/\s+([\d\.]+)$/.exec(v);
   return m[2];
 };
 
@@ -2321,11 +2405,16 @@ const slotChangeFulfillment = function(proj, value) {
     var nv = value.toLowerCase();
     if (slot.array != nv) {
       changed = true;
+      printMessage("Changed array for " + proj.ident + " slot from " +
+		   slot.array.toUpperCase() + " to " +
+		   nv.toUpperCase() + ".", "warning");
       slot.array = nv;
     }
   } else if (proj.type == "bandwidth") {
     if (slot.bandwidth != value) {
       changed = true;
+      printMessage("Changed bandwidth for " + proj.ident + " slot from " +
+		   slot.bandwidth + " to " + value + ".", "warning");
       slot.bandwidth = value;
     }
   } else if (proj.type == "band") {
@@ -2334,21 +2423,41 @@ const slotChangeFulfillment = function(proj, value) {
     var same = compareStringArrays(bands, slot.bands);
     if (!same) {
       changed = true;
+      printMessage("Changed bands for " + proj.ident + " slot from " +
+		   slot.bands.join(",") + " to " +
+		   bands.join(",") + ".", "warning");
       slot.bands = bands;
     }
   } else if (proj.type == "time") {
     var time = parseFloat(value);
     if (time != slot.requested_duration) {
       changed = true;
+      printMessage("Changed requested duration for " + proj.ident +
+		   " slot from " + slot.requested_duration + " hrs to " +
+		   time + " hrs.", "warning");
       slot.requested_duration = time;
+    }
+  } else if (proj.type == "source") {
+    if (value != slot.source) {
+      changed = true;
+      printMessage("Changed source name for " + proj.ident + " slot from " +
+		   slot.source + " to " + value + ".", "warning");
+      slot.source = value;
     }
   }
 
+  var bo = findBlockObject(proj, proj.slotnum);
+  if (bo != null) {
+    // Force this to be remade.
+    bo.clean = true;
+  }
+  
   if (changed) {
-    updateLocalSchedule();
+    scheduleUpdated();
   }
 
   showProjectDetails(proj.ident);
+
 };
 
 const emptyDomNode = function(id) {
@@ -2792,7 +2901,6 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     // The zenith time minus half the slot length should be ideal.
     var startHour = hourBounds(sidres.zenith - (slot.requested_duration / 2));
     var decDeg = stringToDegrees(slot.position.dec);
-    console.log(decDeg);
     if ((sidres.alwaysUp) && (decDeg == -90)) {
       // This probably means the project doesn't have a target.
       // We now use the time that was clicked.
@@ -3543,6 +3651,7 @@ const slotChangeDisplay = function(id, options, callback, type) {
   inp.setAttribute("id", selid);
   if (type == "input") {
     inp.setAttribute("type", "text");
+    inp.setAttribute("size", "10");
     inp.setAttribute("value", cv);
   } else if (type == "select") {
     options.forEach(function(v) {
@@ -3570,6 +3679,16 @@ const staticEventHandlers = function() {
   var nc = document.getElementById("nighttime");
   nc.addEventListener("change", nighttimeChange);
 
+  // Enable the check box and inputs for LST restrictions.
+  var ul = document.getElementById("sourceUseLST");
+  ul.addEventListener("change", lstRestrictionsChange);
+  var riseInp = document.getElementById("sourceLSTRise");
+  riseInp.addEventListener("change", lstRestrictionsChange);
+  riseInp.addEventListener("blur", lstRestrictionsChange);
+  var setInp = document.getElementById("sourceLSTSet");
+  setInp.addEventListener("change", lstRestrictionsChange);
+  setInp.addEventListener("blur", lstRestrictionsChange);
+  
   // Enable the save button.
   var sb = document.getElementById("savebutton");
   addClickHandler(sb, saveScheduleToServer);
