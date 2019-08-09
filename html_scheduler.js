@@ -832,7 +832,18 @@ const showProjectDetails = function(ident) {
     } else {
       fillInput("gooddates", "");
     }
-  
+
+    // Blank out the RA/Dec/LST inputs.
+    fillInput("sourceRightAscension", "");
+    fillInput("sourceDeclination", "");
+    fillInput("sourceLSTRise", "");
+    fillInput("sourceLSTSet", "");
+    var ul = document.getElementById("sourceUseLST");
+    ul.checked = false;
+    // Get rid of any restrictions plotted.
+    constraintBoxGroup.destroyChildren();
+    constraintLayer.draw();
+    
     // Make a table with each of the slots.
     // Empty the current table.
     for (var i = 0; i < project.details.slot.length; i++) {
