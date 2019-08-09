@@ -726,6 +726,54 @@ const showProjectDetails = function(ident) {
     tableRedrawRequired = false;
   }
 
+  var makeRow = function(sn, sd, tab) {
+    var rid = "slotrow-" + ident + "-" + sn;
+    var tr = makeElement("tr", null, {
+      'id': rid
+    });
+    tab.appendChild(tr);
+    if (sd.scheduled_duration >= sd.requested_duration) {
+      fillId(rid, null, "completelyScheduled");
+    } else if (sd.scheduled_duration > 0) {
+      fillId(rid, null, "partiallyScheduled");
+    }
+    var tsel = makeElement("th", "&nbsp;", {
+      'id': "slotselected-" + ident + "-" + sn
+    });
+    tr.appendChild(tsel);
+    var arrId = "slotarray-" + ident + "-" + sn;
+    var td = makeElement("td", sd.array.toUpperCase(), {
+      'id': arrId
+    });
+    // Add a double-click handler on the array.
+    addDoubleClickHandler(td,
+			  arraySelectorGen(ident, sn, arrId));
+    tr.appendChild(td);
+    var bandId = "slotband-" + ident + "-" + sn;
+    td = makeElement("td", sd.bands.join(","), { 'id': bandId });
+    addDoubleClickHandler(td,
+			  bandsSelectorGen(ident, sn, bandId));
+    tr.appendChild(td);
+    var bandwidthId = "slotbandwidth-" + ident + "-" + sn;
+    td = makeElement("td", sd.bandwidth, { 'id': bandwidthId });
+    addDoubleClickHandler(td, cabbSelectorGen(ident, sn,
+					      bandwidthId));
+    tr.appendChild(td);
+    td = makeElement("td", sd.source);
+    tr.appendChild(td);
+    var timeId = "slottime-" + ident + "-" + sn;
+    td = makeElement("td", sd.scheduled_duration + " / " +
+		     sd.requested_duration, { 'id': timeId });
+    addDoubleClickHandler(td,
+			  timeSelectorGen(ident, i, timeId));
+    tr.appendChild(td);
+      
+    // Add a click handler on this row.
+    addClickHandler(tr, slotSelectorGen(sn));
+  };
+
+  var slotTable = emptyDomNode("projectslotsSelectionBody");
+  
   if (tableRedrawRequired) {
     // Select the row in the table.
     previouslySelectedProject = project;
@@ -773,53 +821,9 @@ const showProjectDetails = function(ident) {
   
     // Make a table with each of the slots.
     // Empty the current table.
-    var slotTable = emptyDomNode("projectslotsSelectionBody");
     for (var i = 0; i < project.details.slot.length; i++) {
       var s = project.details.slot[i];
-      var rid = "slotrow-" + project.details.ident + "-" + i;
-      var tr = makeElement("tr", null, {
-	'id': rid
-      });
-      slotTable.appendChild(tr);
-      if (s.scheduled_duration >= s.requested_duration) {
-	fillId(rid, null, "completelyScheduled");
-      } else if (s.scheduled_duration > 0) {
-	fillId(rid, null, "partiallyScheduled");
-      }
-      var tsel = makeElement("th", "&nbsp;", {
-	'id': "slotselected-" + project.details.ident + "-" + i
-      });
-      tr.appendChild(tsel);
-      var arrId = "slotarray-" + project.details.ident + "-" + i;
-      var td = makeElement("td", s.array.toUpperCase(), {
-	'id': arrId
-      });
-      // Add a double-click handler on the array.
-      addDoubleClickHandler(td,
-			    arraySelectorGen(project.details.ident, i, arrId));
-      tr.appendChild(td);
-      var bandId = "slotband-" + project.details.ident + "-" + i;
-      td = makeElement("td", s.bands.join(","), { 'id': bandId });
-      addDoubleClickHandler(td,
-			    bandsSelectorGen(project.details.ident, i, bandId));
-      tr.appendChild(td);
-      var bandwidthId = "slotbandwidth-" + project.details.ident + "-" + i;
-      td = makeElement("td", s.bandwidth, { 'id': bandwidthId });
-      addDoubleClickHandler(td, cabbSelectorGen(project.details.ident, i,
-						bandwidthId));
-      tr.appendChild(td);
-      td = makeElement("td", s.source);
-      tr.appendChild(td);
-      var timeId = "slottime-" + project.details.ident + "-" + i;
-      td = makeElement("td", s.scheduled_duration + " / " +
-		       s.requested_duration, { 'id': timeId });
-      addDoubleClickHandler(td,
-			    timeSelectorGen(project.details.ident, i,
-					    timeId));
-      tr.appendChild(td);
-      
-      // Add a click handler on this row.
-      addClickHandler(tr, slotSelectorGen(i));
+      makeRow(i, s, slotTable);
     }
   } else {
     // Update the cell values only. We do this for everything in case
@@ -827,6 +831,11 @@ const showProjectDetails = function(ident) {
     //console.log("updating table only");
     for (var i = 0; i < project.details.slot.length; i++) {
       var s = project.details.slot[i];
+      // Check the row exists, or make it if not.
+      var r = document.getElementById("slotrow-" + ident + "-" + i);
+      if (!r) {
+	makeRow(i, s, slotTable);
+      }
       // Go through each ID in turn.
       var arrId = "slotarray-" + project.details.ident + "-" + i;
       emptyDomNode(arrId);
@@ -3397,8 +3406,8 @@ const copySlot = function() {
     duplicateSlot(previouslySelectedProject.details.slot[previouslySelectedSlot])
   );
 
-  printMessage("Duplicated slot for " + previouslySelectedProject.ident +
-	       ".");
+  printMessage("Duplicated slot for " +
+	       previouslySelectedProject.details.ident + ".");
   
   // Update the table.
   showProjectDetails(previouslySelectedProject.details.ident);
