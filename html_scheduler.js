@@ -3582,7 +3582,7 @@ const deleteThatSlot = function() {
     previouslySelectedSlot, 1);
 
   printMessage("Deleted slot from " +
-	       previouslySelectedProject.ident + ".", "warning");
+	       previouslySelectedProject.details.ident + ".", "warning");
   
   // Update all the page details.
   previouslySelectedSlot = null;
