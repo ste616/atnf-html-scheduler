@@ -1241,7 +1241,7 @@ const drawBlock = function(proj, slot) {
 	bandText.destroy();
       }
       if (showSupport) {
-	supportText.offsetX(pw - meas.textOffset);
+	supportText.offsetX(-1 * meas.textOffset);
 	supportText.offsetY(supportText.height() + meas.textOffset);
 	blockTexts.push(supportText);
 	blockGroup.add(supportText);
@@ -2912,7 +2912,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     // The zenith time minus half the slot length should be ideal.
     var startHour = hourBounds(sidres.zenith - (slot.requested_duration / 2));
     var decDeg = stringToDegrees(slot.position.dec);
-    if ((sidres.alwaysUp) && (decDeg == -90)) {
+    if ((sidres.alwaysUp) && (Math.abs(decDeg + 90) < 0.001)) {
       // This probably means the project doesn't have a target.
       // We now use the time that was clicked.
       startHour = time.hour;
