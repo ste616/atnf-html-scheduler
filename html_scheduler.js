@@ -363,7 +363,6 @@ const lstToDaytime = function(lstRise, lstSet, ra, d) {
     midHour = ra;
   }
   var zlst = 24 * mjd2lst(mjd, (atcaLong / 360.0), 0);
-  console.log(zlst);
   var riseDayHour = hoursUntilLst(zlst, riseHour);
   var setDayHour = hoursUntilLst(zlst, setHour);
   var midDayHour = hoursUntilLst(zlst, midHour);
@@ -2850,7 +2849,6 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
 
   // Get the actual date for the day number.
   var d = allDates[time.day];
-  console.log(d);
   // Check if this is on the excluded days list.
   var excluded = false;
   if (proj.details.excluded_dates instanceof Array) {
@@ -2909,15 +2907,11 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     startingDate = new Date(time.timestamp * 1000);
   } else {
     // A normal project, we have to be guided by LST.
-    console.log(d);
     var sidres = calculateSiderealRestrictions(
       slot.position.ra, slot.position.dec, d);
-    console.log(sidres);
     // The zenith time minus half the slot length should be ideal.
     var startHour = hourBounds(sidres.zenith - (slot.requested_duration / 2));
-    console.log(startHour);
     var decDeg = stringToDegrees(slot.position.dec);
-    console.log(decDeg);
     if ((sidres.alwaysUp) && (Math.abs(decDeg + 90) < 0.001)) {
       // This probably means the project doesn't have a target.
       // We now use the time that was clicked.
@@ -2926,13 +2920,13 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     // Round it to the nearest half hour.
     startHour = Math.round(2 * startHour) / 2;
     // Work out if it's closer to go back or forwards.
-    if (Math.abs(startHour - time.hour) > (slot.requested_duration / 2)) {
+    if ((Math.abs(startHour - time.hour) > (slot.requested_duration / 2)) &&
+	(startHour < time.hour)) {
       // We've wrapped days.
       d = allDates[time.day + 1];
     }
     startingDate = new Date(d.getTime() + startHour * 3600000);
   }
-  console.log(startingDate);
   if (startingDate == null) {
     printMessage("Unable to find a suitable time to start " +
 		 ident + " slot!", "error");
@@ -2960,6 +2954,8 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
       } else {
 	startingDate = endDate;
       }
+    } else {
+      startingDate = endDate;
     }
   /*} else {
     console.log("no overlapping project found"); */
