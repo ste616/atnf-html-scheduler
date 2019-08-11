@@ -1089,7 +1089,7 @@ const drawBlock = function(proj, slot) {
     var fits = (tw < blockOpts.width);
     while (!fits) {
       // Try to shrink the text first.
-      if (mainTitleOpts.fontSize > 13) {
+      if (mainTitleOpts.fontSize > 12) {
 	mainTitleOpts.fontSize -= 1;
 	mainTitleText.fontSize(mainTitleOpts.fontSize);
       } else {
