@@ -39,7 +39,7 @@ var transformerBottom = null;
 const atcaLong = 149.5501388;
 const atcaLat = -30.3128846;
 // The number of days to display (basically half a leap year, plus a few.
-const nDays = (366 / 2) + 4;
+const nDays = (366 / 2) + 7;
 // Time limits for certain projects.
 const legacyProjects = [ "C3132", "C3145", "C3152", "C3157" ];
 const legacyLimit = 400; // Hours.
@@ -1029,6 +1029,11 @@ const drawBlock = function(proj, slot) {
     // Now the start and end half hours.
     var hh1 = (s1 - d1) / 1800;
     var hh2 = (s2 - d1) / 1800;
+    if ((hh2 - hh1) == 0) {
+      // This is zero time (probably finished at midnight).
+      // We don't draw this.
+      continue;
+    }
     // And let's draw the block.
     var blockOpts = {
       x: (meas.marginLeft + meas.dayLabelWidth + hh1 * meas.halfHourWidth),
@@ -1306,7 +1311,8 @@ const drawConfiguration = function(title, start, end) {
     var labelHeight = (boxHeight > limitHeight) ? limitHeight : boxHeight;
     var arrayLabelString = new Konva.Text({
       x: boxLeft, y: boxTop + totalHeight, width: boxWidth, height: labelHeight,
-      align: "center", verticalAlign: "middle", text: title, fontSize: 20
+      align: "center", verticalAlign: "middle", text: title.toUpperCase(),
+      fontSize: 20
     });
     totalHeight += labelHeight;
     boxHeight -= labelHeight;
@@ -1459,6 +1465,10 @@ const highlightBlock = function(proj, slot) {
 	transformerTop.enabledAnchors([ 'middle-left', 'middle-right' ]);
       }
       bo.rects[i].on('transformend', genBlockTransform(bo, i));
+      if (bo.rects.length == 1) {
+	// Ensure the bottom transformer has been detached.
+	transformerBottom.detach();
+      }
     } else if (i == (bo.rects.length) - 1) {
       transformerBottom.attachTo(bo.rects[i]);
       // We never want to be able to move the start time of these
@@ -2139,7 +2149,7 @@ const summariseSemester = function() {
       isCalibration = true;
     }
     var isLegacy = false;
-    if (legacyProjects.indexOf(allProjects[i].ident) >= 0) {
+    if (legacyProjects.indexOf(allProjects[i].ident.toUpperCase()) >= 0) {
       isLegacy = true;
     }
     var isVlbi = false;
@@ -2159,10 +2169,6 @@ const summariseSemester = function() {
     
     var projectTotalTime = 0;
     for (var j = 0; j < slots.length; j++) {
-      if ((!isLegacy && (projectTotalTime >= projectLimit)) ||
-	  (isLegacy && (projectTotalTime >= legacyLimit))) {
-	break;
-      }
       if (!isCalibration && !isLegacy && !isMaintenance && !isVlbi && !isNapa) {
 	r.timeSummary.requested += slots[j].requested_duration;
 	r.timeSummary.scheduled += slots[j].scheduled_duration;
@@ -2184,6 +2190,11 @@ const summariseSemester = function() {
 	}
       }
 
+      if ((!isLegacy && (projectTotalTime >= projectLimit)) ||
+	  (isLegacy && (projectTotalTime >= legacyLimit))) {
+	continue;
+      }
+      
       // Add to the correct array.
       if (!isMaintenance && !isVlbi && !isNapa) {
 	for (var sarr = 0; sarr < r.arrays.length; sarr++) {
@@ -3616,6 +3627,14 @@ const deleteSlot = function() {
       (previouslySelectedSlot == 0)) {
     // Can't delete this one.
     displayModalMessage("ERROR: Unable to delete first config.", false);
+    return;
+  }
+  // Check if we're trying to delete a scheduled block.
+  if (previouslySelectedProject.details.slot[previouslySelectedSlot]
+      .scheduled == 1) {
+    // Can't delete it before it is unscheduled.
+    displayModalMessage("ERROR: Cannot delete a scheduled slot. Please " +
+			"unschedule it before deleting it.", false);
     return;
   }
   
