@@ -69,15 +69,48 @@ if ($infile =~ /\.json$/) {
 	    print O "SidTimStart=".$lstStart."\n";
 	    print O "SidTimEnd=".$lstEnd."\n";
 	    my @edStrings;
-	    if (($proj->{'excluded_dates'} ne "") &&
-		($proj->{'excluded_dates'} ne "N/A")) {
+	    if (ref($proj->{'excluded_dates'}) eq "ARRAY") {
 		my @ed = @{$proj->{'excluded_dates'}};
 		for (my $k = 0; $k <= $#ed; $k++) {
-		    my $es = &epoch2timeString($ed[$k], 0);
+		    my $es = &epoch2timeString($ed[$k], 1);
 		    push @edStrings, $es."-".$es;
 		}
 	    }
 	    print O "ExcludedDates=".join(", ", @edStrings)."\n";
+	    my @pdStrings;
+	    if (ref($proj->{'preferred_dates'}) eq "ARRAY") {
+		my @pd = @{$proj->{'preferred_dates'}};
+		for (my $k = 0; $k <= $#pd; $k++) {
+		    my $ps = &epoch2timeString($pd[$k], 1);
+		    push @pdStrings, $ps."-".$ps;
+		}
+	    }
+	    print O "PreferredDates=".join(", ", @pdStrings)."\n";
+	    print O "RequiredDates=\n";
+	    print O "ReqDuration=".($slot->{'requested_duration'} *
+				    3600000)."\n";
+	    print O "AllDuration=0\n";
+	    print O "SchDuration1=".($slot->{'scheduled_duration'} *
+				     3600000)."\n";
+	    print O "SchDuration2=0\n";
+	    print O "Rating=".$slot->{'rating'}."\n";
+	    print O "EarlyStart=2000/01/02 00:00:00\n";
+	    my $isscheduled = ($slot->{'scheduled'} == 1) ? "true" : "false";
+	    my $ss = "2000/01/02 00:00:00";
+	    if ($isscheduled eq "true") {
+		$ss = &epoch2timeString($slot->{'scheduled_start'}, 0);
+	    }
+	    print O "Start1=".$ss."\n";
+	    print O "Start2=2000/01/02 00:00:00\n";
+	    print O "Scheduled=".$isscheduled."\n";
+	    print O "Locked=false\n";
+	    my $c = &commentWriter($proj->{'comments'});
+	    print O "NumComments=".$c->{'nlines'}."\n";
+	    if ($c->{'nlines'} > 0) {
+		print O $c->{'string'}."\n";
+	    }
+	    print O "TACNote=\n";
+	    print O "ScheduleNote=\n";
 	    print O "</Slot>\n";
 	}
 	print O "</Project>\n";
@@ -85,6 +118,42 @@ if ($infile =~ /\.json$/) {
     
     print O "</Program>\n";
     close(O);
+}
+
+sub commentWriter($) {
+    my $istring = shift;
+    # Take a comment string, format it to have only a certain number of
+    # characters per line, then return the string and the number of
+    # lines.
+    my $rval = { 'string' => "", 'nlines' => 0 };
+    $istring =~ s/^\s+//g;
+    if ($istring eq "") {
+	return $rval;
+    }
+    
+    my $max = 70;
+
+    while ($istring) {
+	if (length $istring <= $max) {
+	    $rval->{'string'} .= $istring;
+	    $rval->{'nlines'} += 1;
+	    last;
+	}
+	my $prefix = substr $istring, 0, $max;
+	my $loc = rindex $prefix, " ";
+
+	if ($loc == -1) {
+	    $rval->{'string'} .= $prefix."-\n";
+	    $rval->{'nlines'} += 1;
+	} else {
+	    my $str = substr $istring, 0, $loc, "";
+	    $rval->{'string'} .= $str."\n";
+	    $rval->{'nlines'} += 1;
+	    substr $istring, 0, 1, "";
+	}
+    }
+
+    return $rval;
 }
 
 sub lstConverter($) {
@@ -111,6 +180,8 @@ sub epoch2timeString($$) {
     my $fmt = "%Y/%m/%d";
     if ($dateonly == 0) {
 	$fmt .= " %H:%M:%S";
+    } else {
+	$dt->set_time_zone("Australia/Sydney");
     }
     return $dt->strftime($fmt);
 }
