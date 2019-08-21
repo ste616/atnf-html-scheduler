@@ -110,10 +110,12 @@
       <div id="appstate">
 	<table>
 	  <tr><td rowspan="2"><span id="onlineState"></span></td>
+	    <th>Version</th>
 	    <th>Local Save</th><th>Server Save</th>
 	    <td rowspan="2"><button id="savebutton">Save</button></td>
 	    <td rowspan="2"><button id="revertbutton">Revert</button></td></tr>
-	  <tr><td><span id="localSaveTime">None</span></td>
+	  <tr><td><input type="text" size="3" id="scheduleVersion"></td>
+	    <td><span id="localSaveTime">None</span></td>
 	    <td><span id="serverSaveTime">None</span></td></tr></table>
       </div>
       <div id="messagebox"></div>

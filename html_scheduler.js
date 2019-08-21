@@ -2241,7 +2241,14 @@ const summariseSemester = function() {
   return r;
 };
 
+const versionChanged = function() {
+  // Get the new version.
+  var vn = document.getElementById("scheduleVersion");
+  var versionNumber = parseInt(vn.value);
 
+  scheduleData.program.term.version = versionNumber;
+  updateLocalSchedule();
+};
 
 
 
@@ -3242,6 +3249,9 @@ const pageInit = function(status, data) {
   // Display some times.
   checkLocalTime(displayModificationTimes);
 
+  // Display the schedule version.
+  fillInput("scheduleVersion", scheduleData.program.term.version);
+  
   // Work out the semester time details.
   semesterStart = new Date(scheduleData.program.term.start);
   semesterEnd = new Date(scheduleData.program.term.end);
@@ -3748,6 +3758,9 @@ const staticEventHandlers = function() {
 
   var ds = document.getElementById("deleteslotbutton");
   addClickHandler(ds, deleteSlot);
+
+  var vn = document.getElementById("scheduleVersion");
+  addChangeHandler(vn, versionChanged);
 };
 staticEventHandlers();
 
