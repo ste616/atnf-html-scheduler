@@ -72,11 +72,12 @@ GetOptions(
 
 # Set some default colours.
 my %colours = (
-    'default' => "bbbbbb",
-    'unscheduled' => "33cc33",
-    'MAINT' => "6699ff",
-    'CONFIG' => "ffff99",
-    'CABB' => "ff9999"
+    'default' => "cdcdcd",
+    'unscheduled' => "9ae68d",
+    'MAINT' => "cdcdff",
+    'CONFIG' => "ffff8d",
+    'CABB' => "ffcdcd",
+    'BL' => "ffcdff"
     );
 # Assign any colours we've been given.
 for (my $i = 0; $i <= $#colour_specs; $i++) {

@@ -1337,7 +1337,7 @@ const drawDay = function(n, d, g, dd, c, t, g2) {
     };
     // Colour the weekends differently.
     if ((d.getDay() == 0) || (d.getDay() == 6)) {
-      dayLabelOpts.fill = "#fa8072";
+      dayLabelOpts.fill = "#ff9a8d";
     }
     var dayLabelBox = new Konva.Rect(dayLabelOpts);
     // Make the string to go into this box.
