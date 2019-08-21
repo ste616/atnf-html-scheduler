@@ -12,6 +12,12 @@ my $json = JSON->new->allow_nonref;
 
 my $infile = $ARGV[0];
 
+my $obs = "";
+my $obsName = {
+    'ATCA' => "Australia Telescope Compact Array",
+    'PK' => "Parkes Radiotelescope"
+};
+
 # Do something based on the file extension.
 if ($infile =~ /\.json$/) {
     # We've been given a JSON, we change to SCD.
@@ -27,6 +33,7 @@ if ($infile =~ /\.json$/) {
     print O "<Observatory>\nObservatory=".
 	uc($prog->{'observatory'}->{'observatory'})."\n".
 	"</Observatory>\n";
+    $obs = uc($prog->{'observatory'}->{'observatory'});
     print O "<Term>\n";
     print O "Term=".$prog->{'term'}->{'term'}.
 	$prog->{'term'}->{'version'}."\n";
@@ -126,7 +133,7 @@ if ($infile =~ /\.json$/) {
     my $dur = $te->epoch() - $t->epoch();
     my $days = 14;
     my $totalDays = $dur / 86400;
-    my $numberOfPages = $totalDays / $days + 1;
+    my $numberOfPages = ($totalDays + 1) / $days;
     
     my $outps = $infile;
     $outps =~ s/\.json$/.ps/;
@@ -136,8 +143,7 @@ if ($infile =~ /\.json$/) {
 	print P $_;
     }
     close(A);
-    print P "/tel (".uc($prog->{'observatory'}->{'observatory'}).
-	") def\n";
+    print P "/tel (".$obsName->{$obs}.") def\n";
     open(U, "prepage.ps");
     my $preUrl = do { local $/; <U> };
     close(U);
@@ -384,17 +390,42 @@ sub ps_sch_box($$$) {
 	$tstring = sprintf "%.1f", $d10;
 	substr($line, 22, length($tstring)) = $tstring;
 	if ($proj->{'ident'} eq "CONFIG") {
-	    $tstring = sprintf " (%s) cfg_box", $slot->{'source'};
-	    substr($line, 30, length($tstring)) = $tstring;
+	    if ($obs eq "PK") {
+		$tstring = sprintf " (%s) rx_box", $slot->{'source'};
+	    } else {
+		$tstring = sprintf " (%s) cfg_box", $slot->{'source'};
+	    }
 	} elsif ($proj->{'ident'} eq "MAINT") {
 	    $tstring = " () mnt_box";
-	    substr($line, 30, length($tstring)) = $tstring;
+	} elsif ($proj->{'ident'} eq "CABB") {
+	    $tstring = sprintf " (%s) () () () () () nasa_box", $slot->{'source'};
+	} elsif ($proj->{'ident'} eq "BL") {
+	    if ($slot->{'source'} =~ /^\!/) {
+		my $sstring = $slot->{'source'} =~ s/^\!//;
+		$tstring = sprintf " (%s) () () () () () bl_box";
+	    } else {
+		$tstring = sprintf " (BL) () ((%s)) ((%s)) () (%s) bl_box",
+		join(" ", @{$slot->{'bands'}}), $slot->{'bandwidth'},
+		$slot->{'source'};
+	    }
+	} elsif ($proj->{'ident'} =~ /^PX/) {
+	    $tstring = sprintf " (%s) ((%s)) ((%s)) ((%s)) () (%s) fast_box",
+	    $proj->{'ident'}, $proj->{'PI'}, join(" ", @{$slot->{'bands'}}),
+	    $slot->{'bandwidth'}, $slot->{'source'};
 	} else {
+	    # Check for Legacy projects.
+	    my $supp = "";
+	    if (($proj->{'ident'} eq "C3132") ||
+		($proj->{'ident'} eq "C3145") ||
+		($proj->{'ident'} eq "C3152") ||
+		($proj->{'ident'} eq "C3157")) {
+		$supp = "LEGACY";
+	    }
 	    $tstring = sprintf " (%s) ((%s)) ((%s)) ((%s)) (%s) (%s) sch_box",
 	    $proj->{'ident'}, $proj->{'PI'}, join(" ", @{$slot->{'bands'}}),
-	    $slot->{'bandwidth'}, "", $slot->{'source'};
-	    substr($line, 30, length($tstring)) = $tstring;
+	    $slot->{'bandwidth'}, $supp, $slot->{'source'};
 	}
+	substr($line, 30, length($tstring)) = $tstring;
 	$rstring .= $line."\n";
     }
     

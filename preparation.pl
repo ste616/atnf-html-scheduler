@@ -77,7 +77,8 @@ my %colours = (
     'MAINT' => "cdcdff",
     'CONFIG' => "ffff8d",
     'CABB' => "ffcdcd",
-    'BL' => "ffcdff"
+    'BL' => "ffcdff",
+    'FAST' => "ffc000"
     );
 # Assign any colours we've been given.
 for (my $i = 0; $i <= $#colour_specs; $i++) {
