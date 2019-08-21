@@ -1,0 +1,844 @@
+%!PS-Adobe-3.0
+%%Pages: 9
+%%For: Postscript file to print a schedule page.
+%%Creator: D McConnell
+%%CreationDate: 4 October 1999
+%%EndComments
+%end part A scheduleA.ps
+
+
+%start of Part C - scheduleC.ps
+/version (schedule.ps v.4 Oct 1999) def
+
+/RM {rmoveto} def
+/RL {rlineto} def
+/M {moveto} def
+/L {lineto} def
+/CP {currentpoint} def
+/RGB {setrgbcolor} def
+/SF {findfont exch scalefont setfont} def
+/fh (Helvetica) def
+/fhb (Helvetica-Bold) def
+
+/mm {2.83465 mul} def
+
+
+% Set up sizes, A4 : 296 x 209 mm
+/wid 209 mm def
+/ht 296 mm def
+/leftmar 5 mm def
+/rightmar 5 mm def
+/topmar 5 mm def
+/botmar 7 mm def
+
+% define useable page
+/dwid wid leftmar sub rightmar sub def
+/dht ht topmar sub botmar sub def
+
+
+/doy		% Given day, mon, year returns day-of-year on stack
+{ /doy_year exch def
+ /doy_mon exch def
+ /doy_dd exch def
+ 
+ 
+ doy_year 4 mod 0 eq
+  {/doy_arr [0 31 60 91 121 152 182 213 244 274 305 335] def} 
+  {/doy_arr [0 31 59 90 120 151 181 212 243 273 304 334] def} ifelse
+ doy_arr doy_mon 1 sub get doy_dd add
+ 
+} def
+
+/daymon		% Given doy, year returns day, month on stack
+{ /dm_year exch def
+ /dm_doy exch def
+ 
+ dm_year 4 mod 0 eq
+  {/dm_arr [31 29 31 30 31 30 31 31 30 31 30 31] def} 
+  {/dm_arr [31 28 31 30 31 30 31 31 30 31 30 31] def} ifelse
+ /dm_mon 1 def
+ /dm_dd dm_doy def
+ dm_arr {dm_dd ge {exit}
+     {/dm_dd dm_dd dm_arr dm_mon 1 sub get sub def
+     /dm_mon dm_mon 1 add def
+     } ifelse
+   } forall
+ dm_mon dm_dd
+} def
+
+/daysinmon		% Given month, year returns length of month on stack
+{ /dim_year exch def
+ /dim_mon exch def
+ 
+ dim_year 4 mod 0 eq
+  {/dim_arr [31 29 31 30 31 30 31 31 30 31 30 31] def} 
+  {/dim_arr [31 28 31 30 31 30 31 31 30 31 30 31] def} ifelse
+ dim_arr dim_mon 1 sub get
+} def
+
+/dayofWeek		% Given day, month, year returns day name 
+{
+ /dow_year exch def
+ /dow_mon exch def
+ /dow_dd exch def
+
+ /dow_a
+ {dow_year 1996 sub 1 sub 4 idiv dow_year 1996 sub add  
+ dow_dd dow_mon dow_year doy add 7 mod} def
+ [(Mon) (Tue) (Wed) (Thu) (Fri) (Sat) (Sun)] dow_a get
+} def
+
+/ndayofWeek		% Given day, month, year returns day-of-week (Mon=1)
+{
+ /ndw_year exch def
+ /ndw_mon exch def
+ /ndw_dd exch def
+
+ ndw_year 1996 sub ndw_year 1992 sub add 4 idiv 
+ ndw_dd ndw_mon ndw_year doy add 1 add 7 mod 1 add
+ 
+} def
+
+/month
+{
+  /mmon exch def
+[(Jan) (Feb) (Mar) (Apr) (May) (Jun) (Jul) (Aug)
+ (Sep) (Oct) (Nov) (Dec)] mmon 1 sub get
+} def
+
+/dop {doy dd mon year doy sub 1 add dup 0 lt {31 12 year doy add} if } def
+
+/psH 16 def
+/psL 12 def
+/psB 11 def
+/psb 8 def
+/psF 6 def
+
+%%EndProlog
+
+/y1 13 mm def
+/y2 y1 54 mm add def
+/y3 y2 13 mm add def
+/y4 y3 153 mm add def
+/y5 y4 2 mm add def
+/y6 y4 23 mm add def
+/y7 y6 7 mm add def
+/ya y2 12 sub def
+
+/x1 17 mm def
+/x2 x1 25 mm add def
+/x3 x2 122 mm add def
+/x4 x3 14 mm add def
+
+/ds y4 y3 sub 14 div def
+/hr {x3 x2 sub 24 div mul} def
+/ds3 {ds 3 div} def
+/ds23 {ds3 2 mul} def
+
+/rect
+{
+ /r_dy exch def
+ /r_dx exch def
+ r_dx 0 ne {r_dx 0 RL 0 r_dy RL r_dx neg 0 RL closepath} if
+ } def
+ 
+/fr
+{/fr_dy exch def
+ /fr_dx exch def
+ fr_dx 0 RL 0 fr_dy RL fr_dx neg 0 RL 0 fr_dy neg RL fill
+ } def
+ 
+/putcen	% dx dy (string) font fontsize putcen
+{ /pc_pts exch def
+ /pc_fnt exch def
+ /pc_str exch def
+ /pc_dy exch def
+ /pc_dx exch def
+ CP % remember where we are
+ pc_pts pc_fnt SF
+ pc_str stringwidth pop neg pc_dx add 2 div pc_dy pc_pts sub 2 div RM
+ pc_str show
+ 
+ M %return to original point
+} def
+
+/putleft	% dx dy (string) font fontsize putleft
+{ /pc_pts exch def
+ /pc_fnt exch def
+ /pc_str exch def
+ /pc_dy exch def
+ /pc_dx exch def
+ CP % remember where we are
+ pc_pts pc_fnt SF
+ (x) stringwidth pop pc_dy pc_pts sub 2 div RM
+ pc_str show
+ M %return to original point
+} def
+
+/putright	% dx dy (string) font fontsize putright
+{ /pc_pts exch def
+ /pc_fnt exch def
+ /pc_str exch def
+ /pc_dy exch def
+ /pc_dx exch def
+ CP % remember where we are
+ pc_pts pc_fnt SF
+ pc_str stringwidth pop neg pc_dx add 1 mm sub pc_dy pc_pts sub 2 div RM
+ pc_str show
+ M %return to original point
+} def
+
+/putvert	% dx dy (string) font fontsize putvert
+ {/pv_pts exch def
+ /pv_fnt exch def
+ /pv_str exch def
+ /pv_dy exch def
+ /pv_dx exch def
+ CP % remember where we are
+ gsave
+ pv_dx 0 RM
+ CP translate
+ 90 rotate
+ pv_dy pv_dx pv_str pv_fnt pv_pts putcen
+ grestore 
+ M %return to original point
+} def
+
+/puttr
+{ /pt_pts exch def
+ /pt_fnt exch def
+ /pt_str exch def
+ /pt_dy exch def
+ /pt_dx exch def
+ 
+ CP % remember where we are
+ pt_pts pt_fnt SF
+ pt_dx pt_dy RM
+ pt_str stringwidth pop neg 1 mm sub pt_pts neg RM
+ pt_str show
+ M %return to original point
+} def
+
+/puttl
+{ /pt_pts exch def
+ /pt_fnt exch def
+ /pt_str exch def
+ /pt_dy exch def
+ /pt_dx exch def
+ 
+ CP % remember where we are
+ pt_pts pt_fnt SF
+ 0 pt_dy RM
+ 1 mm pt_pts neg RM
+ pt_str show
+ M %return to original point
+} def
+
+/concat
+ {/c_s2 exch def
+ /c_s1 exch def
+ 
+ /c_out c_s1 length c_s2 length add string def
+ c_out 0 c_s1 putinterval c_out c_s1 length c_s2 putinterval
+ c_out
+ } def
+ 
+/sch_box
+ {/sb_s6 exch def
+ /sb_s5 exch def
+ /sb_s4 exch def
+ /sb_s3 exch def
+ /sb_s2 exch def
+ /sb_s1 exch def
+ /sb_dh exch def
+ /sb_h0 exch def
+ /sb_d exch def
+
+ x2 sb_h0 hr add y4 sb_d ds mul sub M CP
+
+ 0.8 setgray
+ /x sb_h0 cvi def
+ x 2 mod 0 eq {/a x 1 sub def /b x 1 sub def}
+    {/a sb_h0 def /b x 1 add def} ifelse
+ /x sb_h0 sb_dh add cvi def
+ x 2 mod 0 eq {/d x def /c x 1 sub def}
+    {/d sb_h0 sb_dh add def /c x def} ifelse
+
+ x2 a hr add y4 sb_d ds mul sub M
+ a b ne {b a sub hr ds rect
+   b a sub 1 sub hr 0 RM} if
+ c b gt {c b sub 1 sub 2 idiv {2 hr 0 RM
+     1 hr ds rect
+     } repeat
+ c d ne {2 hr 0 RM
+   d c sub hr ds rect} if } if
+ fill
+ 0 setgray 
+
+ M CP
+ psB fh SF
+ /tst 0 def
+ sb_s1 sb_s2 concat stringwidth pop sb_dh hr lt
+ {sb_dh hr ds sb_s1 sb_s2 concat fh psB putcen}
+ {psb fh SF
+  sb_s1 sb_s2 concat stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 sb_s2 concat fh psb putcen}
+  {psB fh SF
+  sb_s1 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 fh psB putcen}
+  {/tst 1 def sb_dh hr ds sb_s1 fh psB putvert} ifelse } ifelse } ifelse
+
+ psF fh SF
+ tst 0 eq {
+ sb_s3 sb_s5 concat stringwidth pop 2 mm add sb_dh hr lt
+ {sb_dh hr ds3 sb_s3 fh psF putright
+  sb_dh hr ds3 sb_s5 fh psF putleft}
+ {sb_s3 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds3 sb_s3 fh psF putright} if } ifelse
+ sb_s4 sb_s6 concat stringwidth pop 2 mm add sb_dh hr lt
+   {M CP
+    sb_dh hr ds sb_s6 fh psF puttl
+    M CP
+    sb_dh hr ds sb_s4 fh psF puttr} if
+ sb_s6 stringwidth pop 2 mm add sb_dh hr lt
+   {M CP
+    sb_dh hr ds sb_s6 fh psF puttl}
+   {M CP
+    sb_dh hr ds sb_s4 fh psF puttr} ifelse } if
+ M CP
+ 0 ds RL stroke
+ M sb_dh hr 0 RM 0 ds RL stroke
+ } def
+ 
+ /fast_box
+ {/sb_s6 exch def
+ /sb_s5 exch def
+ /sb_s4 exch def
+ /sb_s3 exch def
+ /sb_s2 exch def
+ /sb_s1 exch def
+ /sb_dh exch def
+ /sb_h0 exch def
+ /sb_d exch def
+
+ x2 sb_h0 hr add y4 sb_d ds mul sub M CP
+
+ 1.0 0.75 0.0 setrgbcolor
+ /x sb_h0 cvi def
+ x 2 mod 0 eq {/a x 1 sub def /b x 1 sub def}
+    {/a sb_h0 def /b x 1 add def} ifelse
+ /x sb_h0 sb_dh add cvi def
+ x 2 mod 0 eq {/d x def /c x 1 sub def}
+    {/d sb_h0 sb_dh add def /c x def} ifelse
+
+ x2 a hr add y4 sb_d ds mul sub M
+ a b ne {b a sub hr ds rect
+   b a sub 1 sub hr 0 RM} if
+ c b gt {c b sub 1 sub 2 idiv {2 hr 0 RM
+     1 hr ds rect
+     } repeat
+ c d ne {2 hr 0 RM
+   d c sub hr ds rect} if } if
+ fill
+ 0 setgray 
+
+ M CP
+ psB fh SF
+ /tst 0 def
+ sb_s1 sb_s2 concat stringwidth pop sb_dh hr lt
+ {sb_dh hr ds sb_s1 sb_s2 concat fh psB putcen}
+ {psb fh SF
+  sb_s1 sb_s2 concat stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 sb_s2 concat fh psb putcen}
+  {psB fh SF
+  sb_s1 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 fh psB putcen}
+  {/tst 1 def sb_dh hr ds sb_s1 fh psB putvert} ifelse } ifelse } ifelse
+
+ psF fh SF
+ tst 0 eq {
+ sb_s3 sb_s5 concat stringwidth pop 2 mm add sb_dh hr lt
+ {sb_dh hr ds3 sb_s3 fh psF putright
+  sb_dh hr ds3 sb_s5 fh psF putleft}
+ {sb_s3 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds3 sb_s3 fh psF putright} if } ifelse
+ sb_s4 sb_s6 concat stringwidth pop 2 mm add sb_dh hr lt
+   {M CP
+    sb_dh hr ds sb_s6 fh psF puttl
+    M CP
+    sb_dh hr ds sb_s4 fh psF puttr} if
+ sb_s6 stringwidth pop 2 mm add sb_dh hr lt
+   {M CP
+    sb_dh hr ds sb_s6 fh psF puttl}
+   {M CP
+    sb_dh hr ds sb_s4 fh psF puttr} ifelse } if
+ M CP
+ 0 ds RL stroke
+ M sb_dh hr 0 RM 0 ds RL stroke
+ } def
+ 
+/cfg_box
+ {/sb_s2 exch def
+ /sb_dh exch def
+ /sb_h0 exch def
+ /sb_d exch def
+
+ x2 sb_h0 hr add y4 sb_d ds mul sub M CP
+
+ 1.0 1.0 0.55 setrgbcolor
+ /x sb_h0 cvi def
+ x 2 mod 0 eq {/a x 1 sub def /b x 1 sub def}
+    {/a sb_h0 def /b x 1 add def} ifelse
+ /x sb_h0 sb_dh add cvi def
+ x 2 mod 0 eq {/d x def /c x 1 sub def}
+    {/d sb_h0 sb_dh add def /c x def} ifelse
+
+ x2 a hr add y4 sb_d ds mul sub M
+ a b ne {b a sub hr ds rect
+   b a sub 1 sub hr 0 RM} if
+ c b gt {c b sub 1 sub 2 idiv {2 hr 0 RM
+     1 hr ds rect
+     } repeat
+ c d ne {2 hr 0 RM
+   d c sub hr ds rect} if } if
+ fill
+ 0 setgray 
+
+ M CP
+ psB fh SF
+ /sb_s1 (Reconfigure #) def
+ /sb_s3 (/Calibration) def
+ /sb_s4 (R/C) def
+ /tst 0 def
+ sb_s1 sb_s2 concat sb_s3 concat stringwidth pop sb_dh hr lt
+ {sb_dh hr ds sb_s1 sb_s2 concat sb_s3 concat fh psB putcen}
+ {psb fh SF
+  sb_s1 sb_s2 concat sb_s3 concat stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 sb_s2 concat sb_s3 concat fh psb putcen}
+  {psB fh SF
+  sb_s1 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 fh psB putcen}
+  {/tst 1 def sb_dh hr ds sb_s4 fh psB putvert} ifelse } ifelse } ifelse
+
+ M CP
+ 0 ds RL stroke
+ M sb_dh hr 0 RM 0 ds RL stroke
+ } def
+ 
+ /rx_box
+ {/sb_s2 exch def
+ /sb_dh exch def
+ /sb_h0 exch def
+ /sb_d exch def
+
+ x2 sb_h0 hr add y4 sb_d ds mul sub M CP
+
+ 1.0 1.0 0.55 setrgbcolor
+ /x sb_h0 cvi def
+ x 2 mod 0 eq {/a x 1 sub def /b x 1 sub def}
+    {/a sb_h0 def /b x 1 add def} ifelse
+ /x sb_h0 sb_dh add cvi def
+ x 2 mod 0 eq {/d x def /c x 1 sub def}
+    {/d sb_h0 sb_dh add def /c x def} ifelse
+
+ x2 a hr add y4 sb_d ds mul sub M
+ a b ne {b a sub hr ds rect
+   b a sub 1 sub hr 0 RM} if
+ c b gt {c b sub 1 sub 2 idiv {2 hr 0 RM
+     1 hr ds rect
+     } repeat
+ c d ne {2 hr 0 RM
+   d c sub hr ds rect} if } if
+ fill
+ 0 setgray 
+
+ M CP
+ psB fh SF
+ /sb_s1 (Receiver) def
+ /sb_s3 (Change) def
+ /sb_s4 (R/C) def
+ /tst 0 def
+ sb_s1 sb_s3 concat stringwidth pop sb_dh hr lt
+ {sb_dh hr ds sb_s1 sb_s3 concat fh psB putcen}
+ {psb fh SF
+  sb_s1 sb_s3 concat stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 sb_s3 concat fh psb putcen}
+  {psB fh SF
+  sb_s1 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 fh psB putcen}
+  {/tst 1 def sb_dh hr ds sb_s4 fh psB putvert} ifelse } ifelse } ifelse
+
+ M CP
+ 0 ds RL stroke
+ M sb_dh hr 0 RM 0 ds RL stroke
+ } def
+ 
+/mnt_box
+ {/sb_s exch def
+ /sb_dh exch def
+ /sb_h0 exch def
+ /sb_d exch def
+
+ x2 sb_h0 hr add y4 sb_d ds mul sub M CP
+
+ 0.8 0.8 1.0 setrgbcolor
+ /x sb_h0 cvi def
+ x 2 mod 0 eq {/a x 1 sub def /b x 1 sub def}
+    {/a sb_h0 def /b x 1 add def} ifelse
+ /x sb_h0 sb_dh add cvi def
+ x 2 mod 0 eq {/d x def /c x 1 sub def}
+    {/d sb_h0 sb_dh add def /c x def} ifelse
+
+ x2 a hr add y4 sb_d ds mul sub M
+ a b ne {b a sub hr ds rect
+   b a sub 1 sub hr 0 RM} if
+ c b gt {c b sub 1 sub 2 idiv {2 hr 0 RM
+     1 hr ds rect
+     } repeat
+ c d ne {2 hr 0 RM
+   d c sub hr ds rect} if } if
+ fill
+ 0 setgray 
+
+ M CP
+ psB fh SF
+ /tst 0 def
+ (Maintenance/Test) stringwidth pop sb_dh hr lt
+ {sb_dh hr ds (Maintenance/Test) fh psB putcen}
+ {psb fh SF
+  (Maintenance/Test) stringwidth pop sb_dh hr lt
+  {sb_dh hr ds (Maintenance/Test) fh psb putcen}
+  {psB fh SF
+  (Maint) stringwidth pop sb_dh hr lt
+  {sb_dh hr ds (Maint) fh psB putcen}
+  {/tst 1 def sb_dh hr ds (M/T) fh psB putvert} ifelse } ifelse } ifelse
+ M CP
+ psF fh SF
+ tst 0 eq {
+ sb_s stringwidth pop 2 mm add sb_dh hr lt
+ {sb_dh hr ds3 sb_s fh psF putleft} if } if
+ M CP
+ 0 ds RL stroke
+ M sb_dh hr 0 RM 0 ds RL stroke
+ } def
+ 
+/nasa_box
+ {/sb_s6 exch def
+ /sb_s5 exch def
+ /sb_s4 exch def
+ /sb_s3 exch def
+ /sb_s2 exch def
+ /sb_s1 exch def
+ /sb_dh exch def
+ /sb_h0 exch def
+ /sb_d exch def
+
+ x2 sb_h0 hr add y4 sb_d ds mul sub M CP
+ 
+ 1.0 0.8 0.8 setrgbcolor
+ /x sb_h0 cvi def
+
+ x 2 mod 0 eq {/a x 1 sub def /b x 1 sub def}
+    {/a sb_h0 def /b x 1 add def} ifelse
+ /x sb_h0 sb_dh add cvi def
+ x 2 mod 0 eq {/d x def /c x 1 sub def}
+    {/d sb_h0 sb_dh add def /c x def} ifelse
+
+ x2 a hr add y4 sb_d ds mul sub M
+ a b ne {b a sub hr ds rect
+   b a sub 1 sub hr 0 RM} if
+ c b gt {c b sub 1 sub 2 idiv {2 hr 0 RM
+     1 hr ds rect
+     } repeat
+ c d ne {2 hr 0 RM
+   d c sub hr ds rect} if } if
+ fill
+ 0 setgray 
+
+ M CP
+ psB fh SF
+ /tst 0 def
+ sb_s1 sb_s2 concat stringwidth pop sb_dh hr lt
+ {sb_dh hr ds sb_s1 sb_s2 concat fh psB putcen}
+ {psb fh SF
+  sb_s1 sb_s2 concat stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 sb_s2 concat fh psb putcen}
+  {psB fh SF
+  sb_s1 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 fh psB putcen}
+  {/tst 1 def sb_dh hr ds sb_s1 fh psB putvert} ifelse } ifelse } ifelse
+
+ psF fh SF
+ tst 0 eq {
+ sb_s3 sb_s5 concat stringwidth pop 2 mm add sb_dh hr lt
+ {sb_dh hr ds3 sb_s3 fh psF putright
+  sb_dh hr ds3 sb_s5 fh psF putleft}
+ {sb_s3 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds3 sb_s3 fh psF putright} if } ifelse
+ sb_s4 sb_s6 concat stringwidth pop 2 mm add sb_dh hr lt
+   {M CP
+    sb_dh hr ds sb_s6 fh psF puttl
+    M CP
+    sb_dh hr ds sb_s4 fh psF puttr} if
+ sb_s6 stringwidth pop 2 mm add sb_dh hr lt
+   {M CP
+    sb_dh hr ds sb_s6 fh psF puttl}
+   {M CP
+    sb_dh hr ds sb_s4 fh psF puttr} ifelse } if
+ M CP
+ 0 ds RL stroke
+ M sb_dh hr 0 RM 0 ds RL stroke
+ } def 
+
+/bl_box
+ {/sb_s6 exch def
+ /sb_s5 exch def
+ /sb_s4 exch def
+ /sb_s3 exch def
+ /sb_s2 exch def
+ /sb_s1 exch def
+ /sb_dh exch def
+ /sb_h0 exch def
+ /sb_d exch def
+
+ x2 sb_h0 hr add y4 sb_d ds mul sub M CP
+ 
+ 1.0 0.8 1.0 setrgbcolor
+ /x sb_h0 cvi def
+
+ x 2 mod 0 eq {/a x 1 sub def /b x 1 sub def}
+    {/a sb_h0 def /b x 1 add def} ifelse
+ /x sb_h0 sb_dh add cvi def
+ x 2 mod 0 eq {/d x def /c x 1 sub def}
+    {/d sb_h0 sb_dh add def /c x def} ifelse
+
+ x2 a hr add y4 sb_d ds mul sub M
+ a b ne {b a sub hr ds rect
+   b a sub 1 sub hr 0 RM} if
+ c b gt {c b sub 1 sub 2 idiv {2 hr 0 RM
+     1 hr ds rect
+     } repeat
+ c d ne {2 hr 0 RM
+   d c sub hr ds rect} if } if
+ fill
+ 0 setgray 
+
+ M CP
+ psB fh SF
+ /tst 0 def
+ sb_s1 sb_s2 concat stringwidth pop sb_dh hr lt
+ {sb_dh hr ds sb_s1 sb_s2 concat fh psB putcen}
+ {psb fh SF
+  sb_s1 sb_s2 concat stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 sb_s2 concat fh psb putcen}
+  {psB fh SF
+  sb_s1 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s1 fh psB putcen}
+  {/tst 1 def sb_dh hr ds sb_s1 fh psB putvert} ifelse } ifelse } ifelse
+
+ psF fh SF
+ tst 0 eq {
+ sb_s3 sb_s5 concat stringwidth pop 2 mm add sb_dh hr lt
+ {sb_dh hr ds3 sb_s3 fh psF putright
+  sb_dh hr ds3 sb_s5 fh psF putleft}
+ {sb_s3 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds3 sb_s3 fh psF putright} if } ifelse
+ sb_s4 sb_s6 concat stringwidth pop 2 mm add sb_dh hr lt
+   {M CP
+    sb_dh hr ds sb_s6 fh psF puttl
+    M CP
+    sb_dh hr ds sb_s4 fh psF puttr} if
+ sb_s6 stringwidth pop 2 mm add sb_dh hr lt
+   {M CP
+    sb_dh hr ds sb_s6 fh psF puttl}
+   {M CP
+    sb_dh hr ds sb_s4 fh psF puttr} ifelse } if
+ M CP
+ 0 ds RL stroke
+ M sb_dh hr 0 RM 0 ds RL stroke
+ } def 
+
+/config{
+ /car exch def
+ /cd2 exch def
+ /cd1 exch def
+ /cd1ds { 0 cd1  lt {cd1 ds mul ds 2 div sub} {cd1 ds mul} ifelse } def
+ /cd2ds { cd2 14 lt {cd2 ds mul ds 2 div sub} {cd2 ds mul} ifelse } def
+ x3 y4 cd2ds sub M
+ CP x4 x3 sub 0 RL M
+ 14 fh SF car stringwidth pop x4 x3 sub lt 
+   { x4 x3 sub cd2ds cd1ds sub car fh 14 putcen }
+   { 12 fh SF car stringwidth pop x4 x3 sub lt
+   	{ x4 x3 sub cd2ds cd1ds sub car fh 12 putcen }
+   	{ x4 x3 sub cd2ds cd1ds sub car fh 10 putcen } ifelse 
+   } ifelse
+ stroke
+} def
+/array{
+ /a3 exch def
+ /a2 exch def
+ /a1 exch def
+ psb fh SF
+ newpath
+ x1 ya M CP a1 show M CP 25 0 RM a2 show M 170 0 RM a3 show
+ /ya ya 12 sub def
+} def
+/page{
+ /p3 exch def
+ /p2 exch def
+ /p1 exch def
+ psB fh SF
+ x1 y1 M (Page ) show p1 show ( - Version ) show p2 show (  ) show p3 show
+} def
+/postpage{
+newpath
+x1 y3 M x1 y4 L
+x2 y3 M x2 y4 L
+x3 y3 M x3 y4 L
+x4 y3 M x4 y4 L
+x1 y3 M x4 y3 L
+x1 y4 M x4 y4 L
+x1 y3 M
+13 {0 ds RM CP
+ x3 x1 sub 0 RL
+ M
+ } repeat
+stroke
+
+/s_date 6 string def
+s_date 0 (      ) putinterval
+dd 10 s_date cvrs
+/s_month mon month def
+s_date 3 s_month putinterval
+/start (Schedule:- ) s_date concat ( - ) concat def
+
+newpath
+x1 y4 ds sub M
+
+14 {s_date 0 (      ) putinterval
+ dd 10 s_date cvrs
+ /s_month mon month def
+ s_date 3 s_month putinterval
+ /s_day {dd mon year dayofWeek} def
+ 
+ x2 x1 sub ds s_day fh psB putleft
+ x2 x1 sub ds s_date fh psB putright
+ 0 ds neg RM
+
+ /s_doy dd 1 add mon year doy def
+ s_doy year daymon
+ /dd exch def
+ /mon exch def
+ mon 13 eq {/mon 1 def
+    /year year 1 add def} if
+ } repeat
+newpath
+x1 y6 M
+x4 x1 sub 0 start s_date concat fh psH putcen
+
+% Now label time axes
+% AEST first
+x1 y5 M 0 12 (AEST) fh psL putleft
+/s_hh 1 string def
+/hh 0 def
+newpath
+x2 y5 M
+5 {hh 10 s_hh cvrs
+ 0 12 s_hh fh psL putcen
+ 2 hr 0 RM
+ /hh hh 2 add def
+ } repeat
+/s_hh 2 string def
+8 {hh 10 s_hh cvrs
+ 0 12 s_hh fh psL putcen
+ 2 hr 0 RM
+ /hh hh 2 add def
+ } repeat
+
+% followed by UT
+x1 y5 12 1.2 mul add M 0 12 (UT) fh psL putleft
+/s_hh 2 string def
+/hh 14 def
+newpath
+x2 y5 12 1.2 mul add M
+5 {hh 10 s_hh cvrs
+ 0 12 s_hh fh psL putcen
+ 2 hr 0 RM
+ /hh hh 2 add def
+ } repeat
+/s_hh 1 string def
+/hh 0 def
+5 {hh 10 s_hh cvrs
+ 0 12 s_hh fh psL putcen
+ 2 hr 0 RM
+ /hh hh 2 add def
+ } repeat
+/s_hh 2 string def
+3 {hh 10 s_hh cvrs
+ 0 12 s_hh fh psL putcen
+ 2 hr 0 RM
+ /hh hh 2 add def
+ } repeat
+
+% and finally LST
+x1 y3 12 1.2 mul sub M 0 12 (LST) fh psL putleft
+0.1 mm setlinewidth
+/s_hh 2 string def
+/l_doy {dd mon year doy} def
+/lst2 {6.66667 l_doy 0.06571 mul add} def
+/lst1 {6.66667 l_doy 14 sub 0.06571 mul add} def
+/h0t 24 lst1 sub def
+/h0b 24 lst2 sub def
+
+newpath
+4 {h0t 24 gt {/h0t h0t 24 sub def} if
+ h0b 24 gt {/h0b h0b 24 sub def} if
+ h0t 0 lt {/h0t h0t 24 add def} if
+ h0b 0 lt {/h0b h0b 24 add def} if
+ h0t h0b lt {/yy {y4 y3 sub h0t mul h0t h0b 24 sub sub div} def
+    x2 h0t hr add y4 M x2 y4 yy sub L
+    x3 x2 sub 0 RM x2 h0b hr add y3 L
+    0 1 mm neg RL}
+    {x2 h0t hr add y4 M 
+    x2 h0b hr add y3 L 0 1 mm neg RL} ifelse
+ 0 1 mm 12 1.2 mul sub RM CP
+ /h0t h0t 6 add def
+ /h0b h0b 6 add def
+ stroke
+ [2 4] 0 setdash
+ } repeat
+[] 0 setdash
+M 0 12 (18) fh psL putcen
+M 0 12 (12) fh psL putcen
+M 0 12 (6) fh psL putcen
+M 0 12 (0) fh psL putcen
+stroke
+
+newpath
+x1 y7 M
+x4 x1 sub 0 tel fhb psH putcen
+psb fh SF
+% don't print station summary if there are no recognized arrays
+y2 12 sub ya ne {
+x1 y2 M CP 65 0 RL (Stations) show M 270 0 RL (Baselines (m)) show } if
+showpage
+} def
+/prepage {
+leftmar botmar translate
+/ya y2 12 sub def
+0.6 0.9 0.55 RGB
+newpath
+x2 1 hr sub y3 M
+12 {2 hr 0 RM 1 hr 0 RL 0 y4 y3 sub RL 1 hr neg 0 RL closepath
+ } repeat
+ fill
+0 setgray
+1.0 0.6 0.55 RGB
+newpath
+x1 y4 ds 5 mul sub M x2 x1 sub ds neg fr
+x1 y4 ds 6 mul sub M x2 x1 sub ds neg fr
+x1 y4 ds 12 mul sub M x2 x1 sub ds neg fr
+x1 y4 ds 13 mul sub M x2 x1 sub ds neg fr
+0 setgray
+} def
+%------------- End of SCHEDULEA.PS -----------------------
