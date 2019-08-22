@@ -33,6 +33,7 @@ my $last_project = "C007";
 my $big_count = 200;
 # The maintenance_days is a list of how many
 # 4-day, 3-day, 2-day and 1-day maintenance blocks to include.
+my $maintenance_periods = "4,3,2,1";
 my $maintenance_days = "4,5,4,37";
 # The VLBI days is a list of how many
 # 168h, 96h, 72h, 48h, 24h, 8h VLBI blocks to include.
@@ -56,6 +57,7 @@ GetOptions(
     "clean" => \$clean,
     "obs=s" => \$obs,
     "legacy=s" => \@legacy,
+    "maintdays" => \$maintenance_periods,
     "maintenance=i" => \$maint_time,
     "vlbi=i" => \$vlbi_time,
     "calibration=i" => \$calibration_time,
@@ -148,13 +150,15 @@ my $summary = &semesterTimeSummary(\@projects, \@legacy, $last_project, $big_cou
 });
 
 # Prepare to output all our files.
-# Arrange the arrays.
-my @available_arrays = split(/\,/, $arrays);
-for (my $i = 0; $i <= $#available_arrays; $i++) {
-    if (($available_arrays[$i] eq $first_array) &&
-	($i != 0)) {
-	splice @available_arrays, $i, 1;
-	unshift @available_arrays, $first_array;
+if ($obs eq "atca") {
+    # Arrange the arrays.
+    my @available_arrays = split(/\,/, $arrays);
+    for (my $i = 0; $i <= $#available_arrays; $i++) {
+	if (($available_arrays[$i] eq $first_array) &&
+	    ($i != 0)) {
+	    splice @available_arrays, $i, 1;
+	    unshift @available_arrays, $first_array;
+	}
     }
 }
 # Split up the maintenance frequency string.
@@ -163,11 +167,18 @@ my @n_maint = split(/\,/, $maintenance_days);
 my @n_vlbi = split(/\,/, $vlbi_days);
 my @l_vlbi = split(/\,/, $vlbi_length);
 # Output the text schedule summary.
-my $summary_file = sprintf "ca-prep-%s.txt", $semname;
+my $summary_file = "";
+my $summary_json = "";
+if ($obs eq "atca") {
+    $summary_file = sprintf "ca-prep-%s.txt", $semname;
+    $summary_json = sprintf "ca-%s.json", $semname;
+} elsif ($obs eq "parkes") {
+    $summary_file = sprintf "pk-prep-%s.txt", $semname;
+    $summary_json = sprintf "pk-%s.json", $semname;
+}
 &printFileTextSummary($summary_file, $obs, $semname, \@available_arrays, 
 		      \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
 		      \@projects, $projectScores);
-my $summary_json = sprintf "ca-%s.json", $semname;
 &printFileJson($summary_json, $obs, $semname, \@available_arrays,
 	       \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
 	       \@projects, $semesterDetails, $projectScores,
@@ -1169,7 +1180,8 @@ sub codeToNumber($) {
     return ($code * 1);
 }
 
-sub semesterTimeSummary($$$) {
+sub semesterTimeSummary($$$$) {
+    my $obs = shift;
     my $projects = shift;
     my $exprojects = shift;
     my $lp = shift;
@@ -1178,6 +1190,7 @@ sub semesterTimeSummary($$$) {
     # Make a summary of amount of time requested as a function of array,
     # band, and type.
     my %array_requests;
+    
     my %otype = ( "total" => 0, "normal" => 0, "napa" => 0, "large" => 0,
 		  "weird" => 0, "excluded" => 0,
 		  "continuum" => 0, "1zoom" => 0, "64zoom" => 0,
