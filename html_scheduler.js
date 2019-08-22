@@ -38,8 +38,11 @@ var transformerBottom = null;
 
 // Some constants we need.
 // The observatory coordinates.
-const atcaLong = 149.5501388;
-const atcaLat = -30.3128846;
+const coordinates = {
+  'atca': { 'longitude': 149.5501388, 'latitude': -30.3128846 },
+  'parkes': { 'longitude': 148.2635101, 'latitude': -32.9984064 }
+};
+const elLimit = { 'atca': 12, 'parkes': 30 };
 // The number of days to display (basically half a leap year, plus a few.
 const nDays = (366 / 2) + 7;
 // Time limits for certain projects.
@@ -143,7 +146,8 @@ const calcDayNumber = function(d) {
 const calculateSiderealRestrictions = function(raStr, decStr, d) {
   var ra = stringToDegrees(raStr, true);
   var dec = stringToDegrees(decStr, false);
-  var sourceRiseSets = calculateSourceStuff([ ra, dec ], d, 12);
+  var sourceRiseSets = calculateSourceStuff([ ra, dec ], d,
+					   elLimit[obs]);
   return sourceRiseSets;
 };
 
@@ -152,7 +156,7 @@ const calculateSiderealRestrictions = function(raStr, decStr, d) {
 // Use the elevation limit ellimit.
 const calculateSourceStuff = function(c, d, ellimit) {
   var mjd = date2mjd(d);
-  var haset = haset_azel(c[1], atcaLat, ellimit);
+  var haset = haset_azel(c[1], coordinates[obs].latitude, ellimit);
   var riseHour = (c[0] - haset) / 15;
   var setHour = (c[0] + haset) / 15;
   var r = lstToDaytime(riseHour, setHour, (c[0] / 15), d);
@@ -368,7 +372,7 @@ const lstToDaytime = function(lstRise, lstSet, ra, d) {
   } else {
     midHour = ra;
   }
-  var zlst = 24 * mjd2lst(mjd, (atcaLong / 360.0), 0);
+  var zlst = 24 * mjd2lst(mjd, (coordinates[obs].longitude / 360.0), 0);
   var riseDayHour = hoursUntilLst(zlst, riseHour);
   var setDayHour = hoursUntilLst(zlst, setHour);
   var midDayHour = hoursUntilLst(zlst, midHour);
@@ -3524,7 +3528,9 @@ const saveScheduleToServer = function() {
     }
     //xhr.send({ "request": "save",
     //	       "schedule": JSON.stringify(scheduleData) });
-    xhr.send("request=save&schedule=" + JSON.stringify(scheduleData));
+    var sstring = "request=save&observatory=" + obs +
+	"&term=" + semester + "&schedule=" + JSON.stringify(scheduleData);
+    xhr.send(sstring);
   }
 };
 
