@@ -26,6 +26,8 @@ var allDates = null;
 var stage = null;
 var previouslySelectedProject = null;
 var previouslySelectedSlot = null;
+var obs = null;
+var semester = null;
 // This contains all the nodes for each project in the table.
 var tableRows = {};
 // This contains all the block Konva objects.
@@ -51,7 +53,11 @@ const normalBlockStroke = 2;
 // The same things, for highlighted blocks.
 const highlightedBlockColour = "brown";
 const highlightedBlockStroke = 4;
-
+const localKey = "atnfSchedule";
+const observatoryKey = "atnfObservatory";
+const semesterKey = "atnfSemester";
+const spath = "/cgi-bin/scheduler.pl";
+const obsNames = { 'atca': "ATCA", 'pk': "Parkes" };
 
 // An object to describe config compatibility.
 // The keys are the available configs, which we can use later to
@@ -607,6 +613,87 @@ const fillInput = function(id, text) {
   }
 };
 
+// Determine the selected observatory.
+const getObservatory = function() {
+  var oe = document.getElementById("observatory");
+  var cobs = oe.options[oe.selectedIndex].value;
+  var sobs = window.localStorage.getItem(observatoryKey);
+  console.log("obs is " + obs);
+  console.log("sobs is " + sobs);
+  if (obs == null) {
+    // We've likely just been loaded.
+    console.log("loading page now");
+    if ((sobs == null) || (sobs == "null")) {
+      // Use the page observatory, because no cache value has been found.
+      console.log("setting observatory to " + cobs);
+      obs = cobs;
+    } else {
+      // Use the one the user used previously.
+      obs = sobs;
+    }
+  } else {
+    // Has this been changed?
+    if (cobs != obs) {
+      // The user wants a different observatory.
+      obs = cobs;
+      localChecked = false;
+      localModificationTime = null;
+      serverModificationTime = null;
+      checkServerTime(pageInitBootstrap);
+      checkLocalTime(pageInitBootstrap);
+    }
+  }
+  // Store this value.
+  window.localStorage.setItem(observatoryKey, obs);
+};
+
+// Determine the semester to show.
+const getSemester = function() {
+  var ts = document.getElementById("termSelected");
+  var csem = null;
+  console.log(ts.options);
+  console.log(ts.selectedIndex);
+  if (ts.selectedIndex != -1) {
+    csem = ts.options[ts.selectedIndex].value;
+  }
+  var ssem = window.localStorage.getItem(semesterKey);
+  var n = new Date();
+  if (semester == null) {
+    // We've likely just been loaded.
+    // Check if the saved semester is valid.
+    console.log(ssem);
+    if ((typeof ssem != "undefined") && (ssem != "undefined") &&
+	(ssem != null)) {
+      // Something has been cached, so we check if the cache has
+      // expired.
+      var jssem = JSON.parse(ssem);
+      var o = new Date(jssem.time);
+      if ((n.getTime() - o.getTime()) < (5 * 86400 * 1000)) {
+	// This was set less than 5 days ago, so this is valid.
+	semester = jssem.semester;
+      }
+    }
+  } else {
+    // Has the semester been changed.
+    if (csem != semester) {
+      // The user wants a different term.
+      semester = csem;
+      localChecked = false;
+      localModificationTime = null;
+      serverModificationTime = null;
+      checkServerTime(pageInitBootstrap);
+      checkLocalTime(pageInitBootstrap);
+    }
+  }
+
+  // Store this value.
+  if (semester != null) {
+    window.localStorage.setItem(semesterKey, JSON.stringify({
+      'time': n.getTime(), 'semester': semester
+    }));
+  }
+};
+
 const isElementVisible = function(el) {
     var rect     = el.getBoundingClientRect(),
         vWidth   = window.innerWidth || doc.documentElement.clientWidth,
@@ -703,6 +790,56 @@ const scrollToTimestamp = function(t) {
   // Work out the position of that day.
   var dt = meas.marginTop + dn * meas.dayHeight;
   e.scrollTop = dt;
+};
+
+// Set the observatory.
+const setObservatory = function(sobs) {
+  var oe = document.getElementById("observatory");
+  window.localStorage.setItem(observatoryKey, sobs);
+  for (var i = 0; i < oe.options.length; i++) {
+    if (oe.options[i].value == sobs) {
+      oe.options[i].setAttribute("selected", "selected");
+    } else {
+      oe.options[i].removeAttribute("selected");
+    }
+  }
+
+};
+
+// Set the semester.
+const setSemester = function(ssem) {
+  var n = new Date();
+  var ts = document.getElementById("termSelected");
+  window.localStorage.setItem(semesterKey, JSON.stringify({
+    'time': n.getTime(), 'semester': ssem
+  }));
+  // Go to the server and ask for the list of possible semesters.
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', spath + "?request=listsemesters&" +
+	   "observatory=" + obs, true);
+  xhr.responseType = "json";
+  xhr.onload = function() {
+    var status = xhr.status;
+    if (status == 200) {
+      emptyDomNode("termSelected");
+      var asem = xhr.response.semesters;
+      asem.sort();
+      asem.reverse();
+      for (var i = 0; i < asem.length; i++) {
+	var o = document.createElement("option");
+	o.setAttribute("value", asem[i]);
+	o.innerHTML = asem[i];
+	if (asem[i] == ssem) {
+	  o.setAttribute("selected", "selected");
+	}
+	ts.appendChild(o);
+      }
+    } else {
+      console.log("failure while getting list of semesters");
+    }
+  };
+  xhr.send();
+  
 };
 
 // Show the details of a particular project, and present the slot
@@ -1871,10 +2008,16 @@ const loadFile = function(callback, forceServer) {
     printMessage("Loading local schedule.");
     callback(null, getLocalSchedule());
   } else if (loadLocal == false) {
-    printMessage("Loading server schedule.");
+    var msg = "Loading server schedule for " + obsNames[obs];
     // We get the file from a CGI script.
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', "/cgi-bin/scheduler.pl?request=load", true);
+    var gstring = "?request=load&observatory=" + obs;
+    if (semester != null) {
+      gstring += "&term=" + semester;
+      msg += " " + semester;
+    }
+    printMessage(msg + ".");
+    xhr.open('GET', spath + gstring, true);
     xhr.responseType = "json";
     xhr.onload = function() {
       var status = xhr.status;
@@ -3244,6 +3387,12 @@ const pageInit = function(status, data) {
   console.log(data);
   scheduleData = data;
 
+  // Save the telescope and semester names.
+  obs = scheduleData.program.observatory.observatory;
+  setObservatory(obs);
+  semester = scheduleData.program.term.term;
+  setSemester(semester);
+  
   // Save the data locally.
   saveLocalSchedule();
   // Display some times.
@@ -3282,7 +3431,11 @@ const checkServerTime = function(callback) {
   if (navigator.onLine) {
     // We need to be online of course.
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', "/cgi-bin/scheduler.pl?request=loadtime", true);
+    var gstring = "?request=loadtime&observatory=" + obs;
+    if (semester != null) {
+      gstring += "&term=" + semester;
+    }
+    xhr.open('GET', spath + gstring, true);
     xhr.responseType = "json";
     xhr.onload = function() {
       var status = xhr.status;
@@ -3317,11 +3470,15 @@ const displayModificationTimes = function() {
   }
 };
 
-const localKey = "atnfSchedule";
 
 const getLocalSchedule = function() {
   // Try to get the schedule from our local storage.
-  var localSchedule = window.localStorage.getItem(localKey);
+  if ((obs == null) || (semester == null)) {
+    // We haven't saved anything yet if this is the case.
+    return null;
+  }
+  var keyName = localKey + "-" + obs + "-" + semester;
+  var localSchedule = window.localStorage.getItem(keyName);
   if ((typeof localSchedule != "undefined") &&
       (localSchedule != "undefined")) {
     return JSON.parse(localSchedule);
@@ -3342,7 +3499,8 @@ const updateLocalSchedule = function() {
 const saveLocalSchedule = function() {
   if (scheduleData != null) {
     localModificationTime = scheduleData.modificationTime;
-    window.localStorage.setItem(localKey, JSON.stringify(scheduleData));
+    var keyName = localKey + "-" + obs + "-" + semester;
+    window.localStorage.setItem(keyName, JSON.stringify(scheduleData));
   }
   displayModificationTimes();
 };
@@ -3350,7 +3508,7 @@ const saveLocalSchedule = function() {
 const saveScheduleToServer = function() {
   if (scheduleData != null) {
     var xhr = new XMLHttpRequest();
-    xhr.open("POST", "/cgi-bin/scheduler.pl", true)
+    xhr.open("POST", spath, true)
     xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
     xhr.responseType = "json";
     xhr.onload = function() {
@@ -3761,6 +3919,12 @@ const staticEventHandlers = function() {
 
   var vn = document.getElementById("scheduleVersion");
   addChangeHandler(vn, versionChanged);
+
+  var ov = document.getElementById("observatory");
+  addChangeHandler(ov, getObservatory);
+
+  var ts = document.getElementById("termSelected");
+  addChangeHandler(ts, getSemester);
 };
 staticEventHandlers();
 
@@ -3769,6 +3933,9 @@ staticEventHandlers();
 const pageInitBootstrap = function() {
   return loadFile(pageInit, false);
 };
+
+getObservatory();
+getSemester();
 checkServerTime(pageInitBootstrap);
 checkLocalTime(pageInitBootstrap);
 

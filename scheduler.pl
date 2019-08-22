@@ -18,12 +18,16 @@ print $q->header(
 
 my $reqtype = $q->param('request');
 my $schedstring = $q->param('schedule');
-
+my $obs = $q->param('observatory');
+my $term = $q->param('term');
+if (!defined $term) {
+    $term = "";
+}
 
 if ($reqtype eq "load") {
-    print &loadLatest()."\n";
+    print &loadLatest($obs, $term)."\n";
 } elsif ($reqtype eq "loadtime") {
-    my $jstring = &loadLatest();
+    my $jstring = &loadLatest($obs, $term);
     my $j = from_json($jstring);
     my $oj = { 'modificationTime' => $j->{'modificationTime'} };
     my $ojstring = to_json($oj);
@@ -33,7 +37,7 @@ if ($reqtype eq "load") {
     if (!defined $schedstring) {
 	$retjson->{'error'} = "No schedule given.";
     } else {
-	my $rv = &saveSchedule($schedstring);
+	my $rv = &saveSchedule($obs, $term, $schedstring);
 	if ($rv == 1) {
 	    $retjson->{"error"} = "Unable to save.";
 	} else {
@@ -41,17 +45,60 @@ if ($reqtype eq "load") {
 	}
     }
     print to_json($retjson)."\n";
+} elsif ($reqtype eq "listsemesters") {
+    my $retjson = { 'action' => 'listsemesters', 'obs' => $obs };
+    my @semesters = &listSemesters($obs);
+    $retjson->{'semesters'} = \@semesters;
+    print to_json($retjson)."\n";
 }
 
-sub loadLatest() {
+sub loadLatest($$) {
+    my $obs = shift;
+    my $term = shift;
+
+    my $pattern = "schedule-$obs";
+    if ($term ne "") {
+	$pattern .= "-$term";
+    }
+    $pattern .= "*.json";
     # Load the latest JSON file we have.
-    my @files = `ls -t schedule*.json | head -n 1`;
+    my @files = `ls -t $pattern | head -n 1`;
     chomp(my $jsonfile = $files[0]);
     my $json_content = read_file($jsonfile);
     return $json_content;
 }
 
-sub saveSchedule($) {
+sub listSemesters($) {
+    my $obs = shift;
+    
+    # Return a list of the semesters that we have schedules for.
+    my @semesters;
+    open(L, "-|") || exec "ls -t schedule-$obs*.json";
+    while(<L>) {
+	chomp;
+	my $line = $_;
+	if ($line =~ /^schedule\-$obs\-(.*)\-.*\.json$/) {
+	    my $s = $1;
+	    my $sf = 0;
+	    for (my $i = 0; $i <= $#semesters; $i++) {
+		if ($semesters[$i] eq $s) {
+		    $sf = 1;
+		    last;
+		}
+	    }
+	    if ($sf == 0) {
+		push @semesters, $s;
+	    }
+	}
+    }
+    close(L);
+
+    return @semesters;
+}
+
+sub saveSchedule($$$) {
+    my $obs = shift;
+    my $term = shift;
     my $schedstring = shift;
 
     # Check that what we have is actually a schedule.
@@ -61,6 +108,10 @@ sub saveSchedule($) {
 	(!defined $cjson->{'program'}->{'term'}->{'term'})) {
 	# Bad schedule.
 	print "bad schedule\n";
+	return 1;
+    } elsif (($obs ne $cjson->{'program'}->{'observatory'}) ||
+	     ($term ne $cjson->{'program'}->{'term'}->{'term'})) {
+	print "unmatched schedule\n";
 	return 1;
     }
     
