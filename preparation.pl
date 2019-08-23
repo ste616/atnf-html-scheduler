@@ -142,7 +142,8 @@ printf "II Found %d projects.\n", ($#projects + 1);
 #for (my $i = 0; $i <= $#projects; $i++) {
 #    printf "II Project %d: Code %s\n", ($i + 1), $projects[$i]->{'project'};
 #}
-my $summary = &semesterTimeSummary(\@projects, \@legacy, $last_project, $big_count);
+my $summary = &semesterTimeSummary($obs, \@projects, \@legacy, 
+				   $last_project, $big_count);
 &printSummary($summary, {
     'name' => $semname, 'length' => $semesterDetails->{'nDays'},
     'maintenance' => $maint_time, 'calibration' => $calibration_time,
@@ -150,9 +151,9 @@ my $summary = &semesterTimeSummary(\@projects, \@legacy, $last_project, $big_cou
 });
 
 # Prepare to output all our files.
+# Arrange the arrays.
+my @available_arrays = split(/\,/, $arrays);
 if ($obs eq "atca") {
-    # Arrange the arrays.
-    my @available_arrays = split(/\,/, $arrays);
     for (my $i = 0; $i <= $#available_arrays; $i++) {
 	if (($available_arrays[$i] eq $first_array) &&
 	    ($i != 0)) {
@@ -750,7 +751,7 @@ sub getObs($$$) {
 		}
 	    }
 	} elsif ($obs eq "parkes") {
-	    push @arrays, "any";
+	    #push @arrays, "any";
 	    my $fs = $obsarr->[$i]->{'frequencies'};
 	    if (ref($fs) eq "HASH") {
 		push @bands, $fs->{'string'};
@@ -770,6 +771,16 @@ sub getObs($$$) {
 		    last;
 		}
 	    }
+	    my $recvs = $insentry->{'receivers'}->{'org.apache.commons.collections.set.ListOrderedSet'}->{'default'}->{'setOrder'}->{'string'};
+	    if (ref($recvs) ne "ARRAY") {
+		my $h = $recvs;
+		$recvs = [ $h ];
+	    }
+	    my @arrs;
+	    for (my $j = 0; $j <= $#{$recvs}; $j++) {
+		push @arrs, &stripSpacing($recvs->[$j]->{'content'});
+	    }
+	    push @arrays, \@arrs;
 	    my $backends = $insentry->{'backEndSystem'}->{'org.apache.commons.collections.set.ListOrderedSet'}->{'default'}->{'setOrder'}->{'string'};
 	    if (ref($backends) ne "ARRAY") {
 		my $h = $backends;
@@ -1160,12 +1171,20 @@ sub xmlParse($$) {
     return @outproj;
 }
 
-sub allBands {
-    return ( '16cm', '4cm', '15mm', '7mm', '3mm' );
+sub allBands($) {
+    my $obs = shift;
+    if ($obs eq "atca") {
+	return ( '16cm', '4cm', '15mm', '7mm', '3mm' );
+    } elsif ($obs eq "parkes") {
+	return ( 'uwl', '1050cm', 'multi', 'h-oh',
+		 'galileo', 'at-s', 'at-c', 'at-x',
+		 'methanol', 'mars', 'ku-band', '13mm' );
+    }
 }
 
-sub initBandRef {
-    my @bands = &allBands();
+sub initBandRef($) {
+    my $obs = shift;
+    my @bands = &allBands($obs);
     my $t = {};
     for (my $i = 0; $i <= $#bands; $i++) {
 	$t->{$bands[$i]} = 0;
@@ -1190,27 +1209,37 @@ sub semesterTimeSummary($$$$) {
     # Make a summary of amount of time requested as a function of array,
     # band, and type.
     my %array_requests;
-    
-    my %otype = ( "total" => 0, "normal" => 0, "napa" => 0, "large" => 0,
-		  "weird" => 0, "excluded" => 0,
-		  "continuum" => 0, "1zoom" => 0, "64zoom" => 0,
-		  "pulsar" => 0, "vlbi" => 0, "new" => 0, "big" => 0 );
-    my %omap = ( "CFB1M" => "continuum", "CFB1M-0.5k" => "1zoom",
-		 "CFB64M-32k" => "64zoom", "CFB1M-pulsar" => "pulsar",
-		 "CFB1-64M" => "hybrid" );
-    my %amap = ( "6a" => "6km", "6b" => "6km", "6c" => "6km", "6d" => "6km",
-		 "any6" => "6km", "1.5a" => "1.5km", "1.5b" => "1.5km",
-		 "1.5c" => "1.5km", "1.5d" => "1.5km", "any1.5" => "1.5km",
-		 "750a" => "750m", "750b" => "750m", "750c" => "750m",
-		 "750d" => "750m", "any750" => "750m", "ew367" => "compact",
-		 "anycompact" => "compact", "ew352" => "compact",
-		 "h75/168" => [ "h75", "h168" ],
-		 "any 750 or greater" => [ "750m", "1.5km", "6km" ],
-		 "any" => "any" );
-    my $band_totals = &initBandRef();
-    my %ttotal = ( "normal" => 0, "large" => 0, "napa" => 0, "continuum" => 0,
-		   "1zoom" => 0, "64zoom" => 0, "pulsar" => 0, "vlbi" => 0,
-		   "new" => 0, "hybrid" => 0 );
+    my (%otype, %omap, %amap, %ttotal);
+    my $band_totals = &initBandRef($obs);
+    if ($obs eq "atca") {
+	%otype = ( "total" => 0, "normal" => 0, "napa" => 0, "large" => 0,
+		   "weird" => 0, "excluded" => 0,
+		   "continuum" => 0, "1zoom" => 0, "64zoom" => 0,
+		   "pulsar" => 0, "vlbi" => 0, "new" => 0, "big" => 0 );
+	%omap = ( "CFB1M" => "continuum", "CFB1M-0.5k" => "1zoom",
+		  "CFB64M-32k" => "64zoom", "CFB1M-pulsar" => "pulsar",
+		  "CFB1-64M" => "hybrid" );
+	%amap = ( "6a" => "6km", "6b" => "6km", "6c" => "6km", "6d" => "6km",
+		  "any6" => "6km", "1.5a" => "1.5km", "1.5b" => "1.5km",
+		  "1.5c" => "1.5km", "1.5d" => "1.5km", "any1.5" => "1.5km",
+		  "750a" => "750m", "750b" => "750m", "750c" => "750m",
+		  "750d" => "750m", "any750" => "750m", "ew367" => "compact",
+		  "anycompact" => "compact", "ew352" => "compact",
+		  "h75/168" => [ "h75", "h168" ],
+		  "any 750 or greater" => [ "750m", "1.5km", "6km" ],
+		  "any" => "any" );
+	%ttotal = ( "normal" => 0, "large" => 0, "napa" => 0, "continuum" => 0,
+		    "1zoom" => 0, "64zoom" => 0, "pulsar" => 0, "vlbi" => 0,
+		    "new" => 0, "hybrid" => 0 );
+    } elsif ($obs eq "parkes") {
+	%otype = ( "total" => 0, "normal" => 0, "napa" => 0, "large" => 0,
+		   "weird" => 0, "excluded" => 0,
+		   "dfb4" => 0, "caspsr" => 0, "medusa" => 0, "hipsr" => 0,
+		   "unspecified" => 0, "other" => 0, "new" => 0, "big" => 0 );
+	%ttotal = ( "normal" => 0, "large" => 0, "napa" => 0,
+		    "dfb4" => 0, "caspsr" => 0, "medusa" => 0, "hipsr" => 0,
+		    "unspecified" => 0, "other" => 0, "vlbi" => 0, "new" => 0 );
+    }
     
     my $newcut = &codeToNumber($lp);
     
@@ -1252,65 +1281,70 @@ sub semesterTimeSummary($$$$) {
 	my $o = $p->{'observations'};
 	my $rw = {};
 	my $ptotaltime = 0;
-	for (my $j = 0; $j <= $#{$o->{'requested_arrays'}}; $j++) {
-	    #printf "DD  %s\n", $o->{'requested_arrays'}->[$j];
-	    my $a = lc($o->{'requested_arrays'}->[$j]);
-	    if (defined $amap{$a}) {
-		$a = $amap{$a};
-	    }
-	    if (ref $a ne 'ARRAY') {
-		# Turn it into an array ref.
-		$a = [ $a ];
-	    }
-	    for (my $k = 0; $k <= $#{$a}; $k++) {
-		my $ta = $a->[$k];
-		#printf "DD found array request %s\n", $ta;
-		
-		if (!defined $array_requests{$ta}) {
-		    $array_requests{$ta} = &initBandRef();
+	if ($obs eq "atca") {
+	    for (my $j = 0; $j <= $#{$o->{'requested_arrays'}}; $j++) {
+		#printf "DD  %s\n", $o->{'requested_arrays'}->[$j];
+		my $a = lc($o->{'requested_arrays'}->[$j]);
+		if (defined $amap{$a}) {
+		    $a = $amap{$a};
 		}
-		my $bstring = $o->{'requested_bands'}->[$j];
-		$bstring =~ s/and//g;
-		$bstring =~ s/\,/ /g;
-		my @bands = split(/\s+/, $bstring);
-		my $dt = $o->{'requested_times'}->[$j] / (($#bands + 1) * ($#{$a} + 1));
-		$dt *= $o->{'nrepeats'}->[$j];
-		for (my $l = 0; $l <= $#bands; $l++) {
-		    # Get rid of punctuation.
-		    $bands[$l] =~ s/[\.\,\s]//g;
-		    $ptotaltime += $dt;
-		    if (defined $array_requests{$ta}->{$bands[$l]}) {
-			#printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
-			$array_requests{$ta}->{$bands[$l]} += $dt;
-			$band_totals->{$bands[$l]} += $dt;
-			$ttotal{$et} += $dt;
-			if ($np == 1) {
-			    $ttotal{'new'} += $dt;
-			}
-		    } else {
-			printf "WW Didn't find matching band %s (%s).\n", $bands[$k], $p->{'project'};
+		if (ref $a ne 'ARRAY') {
+		    # Turn it into an array ref.
+		    $a = [ $a ];
+		}
+		for (my $k = 0; $k <= $#{$a}; $k++) {
+		    my $ta = $a->[$k];
+		    #printf "DD found array request %s\n", $ta;
+		    
+		    if (!defined $array_requests{$ta}) {
+			$array_requests{$ta} = &initBandRef();
 		    }
+		    my $bstring = $o->{'requested_bands'}->[$j];
+		    $bstring =~ s/and//g;
+		    $bstring =~ s/\,/ /g;
+		    my @bands = split(/\s+/, $bstring);
+		    my $dt = $o->{'requested_times'}->[$j] / (($#bands + 1) * ($#{$a} + 1));
+		    $dt *= $o->{'nrepeats'}->[$j];
+		    for (my $l = 0; $l <= $#bands; $l++) {
+			# Get rid of punctuation.
+			$bands[$l] =~ s/[\.\,\s]//g;
+			$ptotaltime += $dt;
+			if (defined $array_requests{$ta}->{$bands[$l]}) {
+			    #printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
+			    $array_requests{$ta}->{$bands[$l]} += $dt;
+			    $band_totals->{$bands[$l]} += $dt;
+			    $ttotal{$et} += $dt;
+			    if ($np == 1) {
+				$ttotal{'new'} += $dt;
+			    }
+			} else {
+			    printf "WW Didn't find matching band %s (%s).\n", $bands[$k], $p->{'project'};
+			}
+		    }
+		    #printf "DD bands in array: %s\n", $o->{'requested_bands'}->[$j];
+		    #printf "DD time in array: %d\n", $o->{'requested_times'}->[$j];
+		    #printf "DD number of repeats: %d\n", $o->{'nrepeats'}->[$j];
+		    my $w = $o->{'requested_bandwidths'}->[$j];
+		    #printf "project %s requests bandwidth %s\n", $p->{'project'}, $o->{'requested_bandwidths'}->[$j];
+		    if (!defined $rw->{$w}) {
+			$rw->{$w} = 0;
+		    }
+		    $rw->{$w} += $dt * ($#bands + 1);
 		}
-		#printf "DD bands in array: %s\n", $o->{'requested_bands'}->[$j];
-		#printf "DD time in array: %d\n", $o->{'requested_times'}->[$j];
-		#printf "DD number of repeats: %d\n", $o->{'nrepeats'}->[$j];
-		my $w = $o->{'requested_bandwidths'}->[$j];
-		#printf "project %s requests bandwidth %s\n", $p->{'project'}, $o->{'requested_bandwidths'}->[$j];
-		if (!defined $rw->{$w}) {
-		    $rw->{$w} = 0;
-		}
-		$rw->{$w} += $dt * ($#bands + 1);
 	    }
+	    foreach my $t (keys %{$rw}) {
+		#printf "II Identified %s (%s) request.\n", $omap{$t}, $t;
+		$otype{$omap{$t}} += 1;
+		$ttotal{$omap{$t}} += $rw->{$t};
+	    }
+	    if ($ptotaltime > $biglimit) {
+		$otype{'big'} += 1;
+	    }
+	} elsif ($obs eq "parkes") {
+	    # Allocate by bandwidth.
+	    
 	}
-	foreach my $t (keys %{$rw}) {
-	    #printf "II Identified %s (%s) request.\n", $omap{$t}, $t;
-	    $otype{$omap{$t}} += 1;
-	    $ttotal{$omap{$t}} += $rw->{$t};
-	}
-	if ($ptotaltime > $biglimit) {
-	    $otype{'big'} += 1;
-	}
-    }
+    }	
 
     my @arrs = keys %array_requests;
     my $array_totals = {};
@@ -1331,6 +1365,7 @@ sub semesterTimeSummary($$$$) {
 	'types' => \%otype,
 	'total_times' => \%ttotal
     };
+
     
 }
 
