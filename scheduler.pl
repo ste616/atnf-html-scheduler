@@ -23,6 +23,7 @@ my $term = $q->param('term');
 if (!defined $term) {
     $term = "";
 }
+my $errstring = "";
 
 if ($reqtype eq "load") {
     print &loadLatest($obs, $term)."\n";
@@ -39,7 +40,7 @@ if ($reqtype eq "load") {
     } else {
 	my $rv = &saveSchedule($obs, $term, $schedstring);
 	if ($rv == 1) {
-	    $retjson->{"error"} = "Unable to save.";
+	    $retjson->{"error"} = "Unable to save: ".$errstring;
 	} else {
 	    $retjson->{"status"} = "Success.";
 	}
@@ -104,14 +105,21 @@ sub saveSchedule($$$) {
     # Check that what we have is actually a schedule.
     my $cjson = from_json($schedstring);
     #print Dumper $cjson;
-    if ((!defined $cjson->{'program'}->{'observatory'}) ||
+    if ((!defined $cjson->{'program'}->{'observatory'}->{'observatory'}) ||
 	(!defined $cjson->{'program'}->{'term'}->{'term'})) {
 	# Bad schedule.
-	print "bad schedule\n";
+	$errstring = "bad schedule\n";
 	return 1;
-    } elsif (($obs ne $cjson->{'program'}->{'observatory'}) ||
+    } elsif (($obs ne $cjson->{'program'}->{'observatory'}->{'observatory'}) ||
 	     ($term ne $cjson->{'program'}->{'term'}->{'term'})) {
-	print "unmatched schedule\n";
+	if ($obs ne $cjson->{'program'}->{'observatory'}) {
+	    $errstring = "unmatched observatory ".$obs." cf ".
+		$cjson->{'program'}->{'observatory'}->{'observatory'};
+	} else {
+	    $errstring = "unmatched semester ".$term." cf ".
+		$cjson->{'program'}->{'term'}->{'term'};
+	}
+	#$errstring = "unmatched schedule\n";
 	return 1;
     }
     

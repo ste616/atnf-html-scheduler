@@ -645,7 +645,12 @@ sub getObs($$$) {
     my %lat = ( 'atca' => -30.31288, 'parkes' => -32.99841 );
     
     # Go through the observation XML hash and get useful information.
-
+    my %receiver_mappings = ( 'UWL' => [ "UWL" ],
+			      'MB' => [ "20cm multi-beam" ],
+			      '10/50' => [ "10/50cm concentric" ],
+			      'KU' => [ "12GHz methanol", "Ku-band" ],
+			      'MARS' => [ "3cm Mars" ],
+			      'K' => [ "13mm" ] );
     my @requested_times;
     my @repeats;
     my @arrays;
@@ -780,7 +785,24 @@ sub getObs($$$) {
 	    for (my $j = 0; $j <= $#{$recvs}; $j++) {
 		push @arrs, &stripSpacing($recvs->[$j]->{'content'});
 	    }
-	    push @arrays, \@arrs;
+	    # Rename the receivers if necessary.
+	    for (my $j = 0; $j <= $#arrs; $j++) {
+		foreach my $r (keys %receiver_mappings) {
+		    my $f = 0;
+		    for (my $k = 0; $k <= $#{$receiver_mappings{$r}}; $k++) {
+			if ($receiver_mappings{$r}->[$k] eq $arrs[$j]) {
+			    $arrs[$j] = $r;
+			    $f = 1;
+			    last;
+			}
+		    }
+		    if ($f == 1) {
+			last;
+		    }
+		}
+	    }
+	    my @uarrs = &uniq(@arrs);
+	    push @arrays, \@uarrs;
 	    my $backends = $insentry->{'backEndSystem'}->{'org.apache.commons.collections.set.ListOrderedSet'}->{'default'}->{'setOrder'}->{'string'};
 	    if (ref($backends) ne "ARRAY") {
 		my $h = $backends;
@@ -1150,11 +1172,14 @@ sub xmlParse($$) {
 	my $obstable = XMLin(
 	    $obstablestring, keyattr => [],
 	    forcearray => [ 'au.csiro.atnf.opal.domain.AtcaObservation' ] );
+	my $cmnts = &zapper($cover->{'specialRequirements'}->{'content'})." ".
+	    &zapper($cover->{'preferredDates'}->{'content'})." ".
+	    &zapper($cover->{'impossibleDates'}->{'content'});
 	my $a = { "project" => $proj, "title" => &getTitle($cover),
-		  "preferred" => &zapper($cover->{'preferredDates'}->{'content'}),
-		  "impossible" => &zapper($cover->{'impossibleDates'}->{'content'}),
+		  "preferred" => "",
+		  "impossible" => "",
 		  "service" => &zapper($cover->{'serviceObserving'}->{'content'}),
-		  "comments" => &zapper($cover->{'specialRequirements'}->{'content'}),
+		  "comments" => $cmnts,
 		  "other" => &zapper($cover->{'otherInformation'}->{'content'}),
 		  "proptype" => &zapper($cover->{'type'}->{'content'})
 	};
@@ -1737,3 +1762,9 @@ sub datehash2epochs($) {
 
     return \@dates;
 }
+
+sub uniq (@) {
+    my %seen = ();
+    grep { not $seen{$_}++ } @_;
+}
+
