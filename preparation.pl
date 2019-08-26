@@ -1402,8 +1402,7 @@ sub semesterTimeSummary($$$$) {
 		    if (defined $amap{$b}) {
 			$b = $amap{$b};
 		    }
-		    my $dt = $o->{'requested_times'}->[$j] / 
-			($#{$o->{'requested_arrays'}} + 1);
+		    my $dt = $o->{'requested_times'}->[$j] / ($#{$a} + 1);
 		    $dt *= $o->{'nrepeats'}->[$j];
 		    $ptotaltime += $dt;
 		    if (defined $array_requests{$b}) {
