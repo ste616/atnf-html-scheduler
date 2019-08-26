@@ -1,0 +1,2 @@
+./preparation.pl --semester 2019OCT --zip 2019OCTS-proposals.zip --map propmap_2019oct.html --obs parkes --clean --last P1019 --first "K+6.7" --grades TACgrades2019oct.html --add "BL,Siemon,5,85,10,uwl,1400,DFB4/CASPSR/MEDUSA/HIPSR,new discoveries,00:00:00,00:00:00" --funded PX500 --funded PX501 --funded BL --maintenance 640 --calibration 125
+

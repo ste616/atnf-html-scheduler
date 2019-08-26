@@ -40,7 +40,10 @@ my $maintenance_days = "4,5,4,37";
 my $vlbi_days = "2,3,1,3,3,7";
 my $vlbi_length = "168,96,72,48,24,8";
 my $grades_file = "";
+my $breakthrough_time = 1000;
+my $fast_time = 450;
 my @legacy;
+my @funded;
 # You can add projects on the command line.
 # For example, to add C1726 in the summer semester:
 # --add C1726,Hollow,5,1,72,any,4cm,CFB1M,many,00:00:00,-90:00:00
@@ -69,7 +72,10 @@ GetOptions(
     "big=i" => \$big_count,
     "grades=s" => \$grades_file,
     "add=s" => \@added_projects,
-    "colour=s" => \@colour_specs
+    "colour=s" => \@colour_specs,
+    "breakthrough=i" => \$breakthrough_time,
+    "fast=i" => \$fast_time,
+    "funded=s" => \@funded
     ) or die "Error in command line arguments.\n";
 
 # Set some default colours.
@@ -80,7 +86,8 @@ my %colours = (
     'CONFIG' => "ffff8d",
     'CABB' => "ffcdcd",
     'BL' => "ffcdff",
-    'FAST' => "ffc000"
+    'FAST' => "ffc000",
+    'outside' => "ffcdcd"
     );
 # Assign any colours we've been given.
 for (my $i = 0; $i <= $#colour_specs; $i++) {
@@ -142,12 +149,17 @@ printf "II Found %d projects.\n", ($#projects + 1);
 #for (my $i = 0; $i <= $#projects; $i++) {
 #    printf "II Project %d: Code %s\n", ($i + 1), $projects[$i]->{'project'};
 #}
+if ($obs eq "parkes") {
+    @legacy = @funded;
+}
 my $summary = &semesterTimeSummary($obs, \@projects, \@legacy, 
 				   $last_project, $big_count);
 &printSummary($summary, {
     'name' => $semname, 'length' => $semesterDetails->{'nDays'},
     'maintenance' => $maint_time, 'calibration' => $calibration_time,
-    'legacy' => $legacy_time, 'vlbi' => $vlbi_time
+    'legacy' => $legacy_time, 'vlbi' => $vlbi_time,
+    'breakthrough' => $breakthrough_time, 'fast' => $fast_time,
+    'observatory' => $obs
 });
 
 # Prepare to output all our files.
@@ -164,6 +176,7 @@ if ($obs eq "atca") {
 }
 # Split up the maintenance frequency string.
 my @n_maint = split(/\,/, $maintenance_days);
+my @l_maint = split(/\,/, $maintenance_periods);
 # Split up the VLBI frequency string.
 my @n_vlbi = split(/\,/, $vlbi_days);
 my @l_vlbi = split(/\,/, $vlbi_length);
@@ -178,10 +191,10 @@ if ($obs eq "atca") {
     $summary_json = sprintf "pk-%s.json", $semname;
 }
 &printFileTextSummary($summary_file, $obs, $semname, \@available_arrays, 
-		      \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
-		      \@projects, $projectScores);
+		      \@n_maint, \@l_maint, \@n_vlbi, \@l_vlbi, 
+		      $semesterHolidays, \@projects, $projectScores);
 &printFileJson($summary_json, $obs, $semname, \@available_arrays,
-	       \@n_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
+	       \@n_maint, \@l_maint, \@n_vlbi, \@l_vlbi, $semesterHolidays,
 	       \@projects, $semesterDetails, $projectScores,
 	       $first_array_reconfignum, \%colours);
 
@@ -1264,11 +1277,17 @@ sub semesterTimeSummary($$$$) {
 	%ttotal = ( "normal" => 0, "large" => 0, "napa" => 0,
 		    "dfb4" => 0, "caspsr" => 0, "medusa" => 0, "hipsr" => 0,
 		    "unspecified" => 0, "other" => 0, "vlbi" => 0, "new" => 0 );
+	%amap = ( "10/50" => "1050cm", "mb" => "multi", "ku" => "ku-band",
+		  "k" => "13mm" );
     }
     
     my $newcut = &codeToNumber($lp);
     
     printf "== Summarising time requests.\n";
+    if ($obs eq "parkes") {
+	my $tr = &initBandRef($obs);
+	%array_requests = %{$tr};
+    }
     for (my $i = 0; $i <= $#{$projects}; $i++) {
 	$otype{'total'} += 1;
 	my $exclude = 0;
@@ -1296,10 +1315,17 @@ sub semesterTimeSummary($$$$) {
 	if ($p->{'proptype'} eq "NAPA") {
 	    $et = "napa";
 	} elsif ($p->{'proptype'} eq "Standard") {
-	    $et = "normal";
+	    if ($p->{'project'} =~ /^PX/) {
+		$et = "funded";
+	    } else {
+		$et = "normal";
+	    }
 	} elsif ($p->{'proptype'} eq "Large Project") {
 	    $et = "large";
+	} elsif ($p->{'project'} eq "BL") {
+	    $et = "funded";
 	}
+
 	$otype{$et} += 1;
 	
 	#printf "DD requests arrays:\n";
@@ -1322,7 +1348,7 @@ sub semesterTimeSummary($$$$) {
 		    #printf "DD found array request %s\n", $ta;
 		    
 		    if (!defined $array_requests{$ta}) {
-			$array_requests{$ta} = &initBandRef();
+			$array_requests{$ta} = &initBandRef($obs);
 		    }
 		    my $bstring = $o->{'requested_bands'}->[$j];
 		    $bstring =~ s/and//g;
@@ -1343,7 +1369,7 @@ sub semesterTimeSummary($$$$) {
 				$ttotal{'new'} += $dt;
 			    }
 			} else {
-			    printf "WW Didn't find matching band %s (%s).\n", $bands[$k], $p->{'project'};
+			    printf "WW Didn't find matching band %s (%s).\n", $bands[$l], $p->{'project'};
 			}
 		    }
 		    #printf "DD bands in array: %s\n", $o->{'requested_bands'}->[$j];
@@ -1366,7 +1392,34 @@ sub semesterTimeSummary($$$$) {
 		$otype{'big'} += 1;
 	    }
 	} elsif ($obs eq "parkes") {
-	    # Allocate by bandwidth.
+	    for (my $j = 0; $j <= $#{$o->{'requested_arrays'}}; $j++) {
+		my $a = $o->{'requested_arrays'}->[$j];
+		if (ref $a ne 'ARRAY') {
+		    $a = [ $a ];
+		}
+		for (my $k = 0; $k <= $#{$a}; $k++) {
+		    my $b = lc($a->[$k]);
+		    if (defined $amap{$b}) {
+			$b = $amap{$b};
+		    }
+		    my $dt = $o->{'requested_times'}->[$j] / 
+			($#{$o->{'requested_arrays'}} + 1);
+		    $dt *= $o->{'nrepeats'}->[$j];
+		    $ptotaltime += $dt;
+		    if (defined $array_requests{$b}) {
+			$array_requests{$b} += $dt;
+			$band_totals->{$b} += $dt;
+			$ttotal{$et} += $dt;
+			if ($np == 1) {
+			    $ttotal{'new'} += $dt;
+			}
+		    } else {
+			printf "WW Didn't find matching band %s (%s).\n",
+			$b, $p->{'project'};
+		    }
+		}
+		
+	    }
 	    
 	}
     }	
@@ -1376,8 +1429,13 @@ sub semesterTimeSummary($$$$) {
     my $gtotal = 0;
     for (my $i = 0; $i <= $#arrs; $i++) {
 	my $t = $array_requests{$arrs[$i]};
-	$array_totals->{$arrs[$i]} = ($t->{'16cm'} + $t->{'4cm'} +
-				      $t->{'15mm'} + $t->{'7mm'} + $t->{'3mm'});
+	if ($obs eq "atca") {
+	    $array_totals->{$arrs[$i]} = ($t->{'16cm'} + $t->{'4cm'} +
+					  $t->{'15mm'} + $t->{'7mm'} + 
+					  $t->{'3mm'});
+	} elsif ($obs eq "parkes") {
+	    $array_totals->{$arrs[$i]} = $t;
+	}
 	$gtotal += $array_totals->{$arrs[$i]};
     }
     
@@ -1400,42 +1458,76 @@ sub printSummary($$) {
     my $s = shift;
     my $p = shift;
 
-    # Print out the time totals.
-    printf "II %10s %10s %10s %10s %10s %10s %10s\n", "Array", "16cm", "4cm",
-    "15mm", "7mm", "3mm", "Total";
+    my $obs = $p->{'observatory'};
     
-    my @array_order = ( "h75", "h168", "h214", "compact", "750m", "1.5km", 
-			"6km", "any" );
-    my @arrs = @{$s->{'arrays'}};
-
-    my $j = 0;
-    while (1) {
-	for (my $i = 0; $i <= $#arrs; $i++) {
-	    my $t = $s->{'requested'}->{$arrs[$i]};
-	    if ((($j <= $#array_order) && ($arrs[$i] eq $array_order[$j])) ||
-		($j > $#array_order)) {
-		printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n",
-		$arrs[$i], $t->{'16cm'}, $t->{'4cm'}, $t->{'15mm'}, $t->{'7mm'}, 
-		$t->{'3mm'}, $s->{'array_totals'}->{$arrs[$i]};
+    # Print out the time totals.
+    if ($obs eq "atca") {
+	printf "II %10s %10s %10s %10s %10s %10s %10s\n", "Array", "16cm", "4cm",
+	"15mm", "7mm", "3mm", "Total";
+    
+	my @array_order = ( "h75", "h168", "h214", "compact", "750m", "1.5km", 
+			    "6km", "any" );
+	my @arrs = @{$s->{'arrays'}};
+	
+	my $j = 0;
+	while (1) {
+	    for (my $i = 0; $i <= $#arrs; $i++) {
+		my $t = $s->{'requested'}->{$arrs[$i]};
+		if ((($j <= $#array_order) && ($arrs[$i] eq $array_order[$j])) ||
+		    ($j > $#array_order)) {
+		    printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n",
+		    $arrs[$i], $t->{'16cm'}, $t->{'4cm'}, $t->{'15mm'}, 
+		    $t->{'7mm'}, $t->{'3mm'}, $s->{'array_totals'}->{$arrs[$i]};
+		    last;
+		}
+	    }
+	    $j++;
+	    if ($j > $#array_order) {
 		last;
 	    }
 	}
-	$j++;
-	if ($j > $#array_order) {
-	    last;
+	my $b = $s->{'band_totals'};
+	printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n", "Total",
+	$b->{'16cm'}, $b->{'4cm'}, $b->{'15mm'},
+	$b->{'7mm'}, $b->{'3mm'}, $s->{'total'};
+    } elsif ($obs eq "parkes") {
+	printf "II %10s %10s\n", "Receiver", "64m";
+	my @array_order = ( "uwl", "multi", "1050cm", "meth", "mars",
+			    "h-oh", "ku-band", "13mm" );
+	my @arrs = @{$s->{'arrays'}};
+	my $j = 0;
+	while (1) {
+	    for (my $i = 0; $i <= $#arrs; $i++) {
+		my $t = $s->{'requested'}->{$arrs[$i]};
+		if ((($j <= $#array_order) && ($arrs[$i] eq $array_order[$j])) ||
+		    ($j > $#array_order)) {
+		    printf "II %10s %10.1f\n", $arrs[$i], $t;
+		}
+	    }
+	    $j++;
+	    if ($j > $#array_order) {
+		last;
+	    }
 	}
-    }
-    my $b = $s->{'band_totals'};
-    printf "II %10s %10.1f %10.1f %10.1f %10.1f %10.1f %10.1f\n", "Total",
-    $b->{'16cm'}, $b->{'4cm'}, $b->{'15mm'},
-    $b->{'7mm'}, $b->{'3mm'}, $s->{'total'};
 
-    my @reqtypes = ( "total", "new", "normal", "napa", "large", "excluded", "weird",
-		     "continuum", "1zoom", "64zoom", "hybrid", "pulsar", "vlbi", "big" );
-    my @reqtitles = ( "All", "New", "Normal", "NAPA", "Large Projects", 
-		      "Legacy Projects", "Weird Projects", "Continuum",
-		      "1 MHz zooms", "64 MHz zooms", "1/64 MHz hybrid",
-		      "Pulsar Binning", "VLBI", "Big Ask" );
+    }
+
+    my @reqtypes;
+    my @reqtitles;
+
+    if ($obs eq "atca") {
+	@reqtypes = ( "total", "new", "normal", "napa", "large", "excluded", 
+		      "weird", "continuum", "1zoom", "64zoom", "hybrid", 
+		      "pulsar", "vlbi", "big" );
+	@reqtitles = ( "All", "New", "Normal", "NAPA", "Large Projects", 
+		       "Legacy Projects", "Weird Projects", "Continuum",
+		       "1 MHz zooms", "64 MHz zooms", "1/64 MHz hybrid",
+		       "Pulsar Binning", "VLBI", "Big Ask" );
+    } elsif ($obs eq "parkes") {
+	@reqtypes = ( "total", "new", "normal", "napa", "large", "excluded" );
+	@reqtitles = ( "All", "New", "Normal", "NAPA", "Large Projects",
+		       "Funded Projects" );
+    }
     
     printf "II Request types:\n";
     printf "II %30s %4s %7s %10s\n", "Experiment Type", "#", "(%)", "Time (h)";
@@ -1456,11 +1548,21 @@ sub printSummary($$) {
     my $thours = $p->{'length'} * 24;
     printf "II %30s %10d h\n", "Total term length", $thours;
     my $ahours = $thours - ($p->{'maintenance'} + $p->{'vlbi'} +
-			    $p->{'calibration'} + $p->{'legacy'});
+			    $p->{'calibration'});
+    if ($obs eq "atca") {
+	$ahours -= $p->{'legacy'};
+    } elsif ($obs eq "parkes") {
+	$ahours -= ($p->{'breakthrough'} + $p->{'fast'});
+    }
     printf "II %30s %10d h\n", "Maintenance time", $p->{'maintenance'};
     printf "II %30s %10d h\n", "VLBI", $p->{'vlbi'};
     printf "II %30s %10d h\n", "Calibration time", $p->{'calibration'};
-    printf "II %30s %10d h\n", "Legacy Projects", $p->{'legacy'};
+    if ($obs eq "atca") {
+	printf "II %30s %10d h\n", "Legacy Projects", $p->{'legacy'};
+    } elsif ($obs eq "parkes") {
+	printf "II %30s %10d h\n", "Breakthrough Listen", $p->{'breakthrough'};
+	printf "II %30s %10d h\n", "FAST", $p->{'fast'};
+    }
     printf "II %30s %10d h\n", "Available time", $ahours;
     my $shours = $ahours * 0.9;
     printf "II %30s %10d h\n", "Schedulable time", $shours;
@@ -1479,6 +1581,7 @@ sub printFileTextSummary($$$$$$$$$) {
     my $sem = shift;
     my $arrays = shift;
     my $maint = shift;
+    my $lmaint = shift;
     my $vlbi = shift;
     my $lvlbi = shift;
     my $holidays = shift;
@@ -1494,7 +1597,7 @@ sub printFileTextSummary($$$$$$$$$) {
     printf O "Term: %sS\n", $sem;
     printf O "Maintenance:";
     for (my $i = 0; $i <= $#{$maint}; $i++) {
-	my $n = 4 - $i;
+	my $n = $lmaint->[$i];
 	for (my $j = 0; $j < $maint->[$i]; $j++) {
 	    printf O " %d-day;", $n;
 	}
@@ -1568,6 +1671,7 @@ sub printFileJson($$$$$$$$$$$) {
     my $sem = shift;
     my $arrays = shift;
     my $maint = shift;
+    my $lmaint = shift;
     my $vlbi = shift;
     my $lvlbi = shift;
     my $holidays = shift;
@@ -1583,7 +1687,8 @@ sub printFileJson($$$$$$$$$$$) {
 	'program' => {
 	    'observatory' => { 'observatory' => $obs },
 	    'colours' => { 'default' => $colours->{'default'},
-			   'unscheduled' => $colours->{'unscheduled'} },
+			   'unscheduled' => $colours->{'unscheduled'},
+			   'outsideSemester' => $colours->{'outside'} },
 	    'term' => { 'term' => $semname, 'version' => 1,
 			'configs' => $arrays, 
 			'start' => $details->{"startString"},
@@ -1621,14 +1726,20 @@ sub printFileJson($$$$$$$$$$$) {
 	push @{$u->{'project'}}, $proj;
     }
     # Put the maintenance time in.
-    my $proj = &createProject("MAINT", "MAINT", "Mirtschin/Wilson",
+    my $maint_pi = "";
+    if ($obs eq "atca") {
+	$maint_pi = "Mirtschin/Wilson";
+    } elsif ($obs eq "parkes") {
+	$maint_pi = "Smith/Priesig";
+    }
+    my $proj = &createProject("MAINT", "MAINT", $maint_pi,
 			      "", "Maintenance/Test", $holidays, "",
 			      $colours);
     push @{$u->{'project'}}, $proj;
     my $s = $proj->{'slot'};
     for (my $i = 0; $i <= $#{$maint}; $i++) {
 	for (my $j = 0; $j < $maint->[$i]; $j++) {
-	    my $sname = sprintf "%d-day", (4 - $i);
+	    my $sname = sprintf "%d-day", (1 *$lmaint->[$i]);
 	    my $rdur = 8;
 	    if ($i == 0) {
 		$rdur = 103;
@@ -1655,7 +1766,13 @@ sub printFileJson($$$$$$$$$$$) {
 	}
     }
     # And the reconfigurations.
-    $proj = &createProject("CONFIG", "CONFIG", "Stevens", "", "Reconfig",
+    my $config_pi = "";
+    if ($obs eq "atca") {
+	$config_pi = "Stevens";
+    } elsif ($obs eq "parkes") {
+	$config_pi = "Reeves";
+    }
+    $proj = &createProject("CONFIG", "CONFIG", $config_pi, "", "Reconfig",
 			   $holidays, "", $colours);
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
@@ -1664,15 +1781,17 @@ sub printFileJson($$$$$$$$$$$) {
 	    $arrays->[$i], "", "", "100", "00:00:00,-90:00:00",
 	    24, 6, 0, "00:00", "23:59");
     }
-    # And some CABB reconfigurations.
-    $proj = &createProject("CABB", "NASA", "Stevens", "", "CABB", "", "",
-			   $colours);
-    push @{$u->{'project'}}, $proj;
-    $s = $proj->{'slot'};
-    for (my $i = 0; $i < 30; $i++) {
-	push @{$s}, &createSlot(
-	    "any", "", "", "CABB", "00:00:00,-90:00:00", 
-	    1, 6, 0, "00:00", "23:59");
+    if ($obs eq "atca") {
+	# And some CABB reconfigurations.
+	$proj = &createProject("CABB", "NASA", "Stevens", "", "CABB", "", "",
+			       $colours);
+	push @{$u->{'project'}}, $proj;
+	$s = $proj->{'slot'};
+	for (my $i = 0; $i < 30; $i++) {
+	    push @{$s}, &createSlot(
+		"any", "", "", "CABB", "00:00:00,-90:00:00", 
+		1, 6, 0, "00:00", "23:59");
+	}
     }
 
     # Write out the JSON.
@@ -1720,6 +1839,8 @@ sub createProject($$$$$$$$) {
 
     if (defined $colours->{$ident}) {
 	$rob->{'colour'} = $colours->{$ident};
+    } elsif ($ident =~ /^PX/) {
+	$rob->{'colour'} = $colours->{'FAST'};
     }
     
     return $rob;
