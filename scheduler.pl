@@ -78,7 +78,8 @@ sub listSemesters($) {
     while(<L>) {
 	chomp;
 	my $line = $_;
-	if ($line =~ /^schedule\-$obs\-(.*)\-.*\.json$/) {
+	if (($line =~ /^schedule\-$obs\-(.*)\-.*\.json$/) ||
+	    ($line =~ /^schedule\-$obs\-([^-]*)\.json$/)) {
 	    my $s = $1;
 	    my $sf = 0;
 	    for (my $i = 0; $i <= $#semesters; $i++) {
