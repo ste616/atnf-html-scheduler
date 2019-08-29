@@ -1280,8 +1280,12 @@ const drawBlock = function(proj, slot) {
       mainTitleOpts.text = proj.title;
       mainTitleOpts.textPattern = "full";
     } else if (proj.ident == "CONFIG") {
-      mainTitleOpts.text = "Reconfigure #" + proj.slot[slot].source +
-	"/Calibration";
+      if (obs == "atca") {
+	mainTitleOpts.text = "Reconfigure #" + proj.slot[slot].source +
+	  "/Calibration";
+      } else if (obs == "parkes") {
+	mainTitleOpts.text = "ReceiverChange";
+      }
       mainTitleOpts.textPattern = "full";
     } else if (proj.ident == "CABB") {
       mainTitleOpts.text = "CABB";
@@ -1308,7 +1312,11 @@ const drawBlock = function(proj, slot) {
 	  if (proj.ident == "MAINT") {
 	    mainTitleOpts.text = "Maint";
 	  } else if (proj.ident == "CONFIG") {
-	    mainTitleOpts.text = "Reconf #" + proj.slot[slot].source;
+	    if (obs == "atca") {
+	      mainTitleOpts.text = "Reconf #" + proj.slot[slot].source;
+	    } else if (obs == "parkes") {
+	      mainTitleOpts.text = "RecvChg";
+	    }
 	  } else if (proj.ident == "CABB") {
 	    // Do nothing.
 	    mainTitleOpts.text = "CABB";
@@ -1714,10 +1722,18 @@ const relabelReconfigs = function() {
 	for (var j = 0; j < bo.textOptions.length; j++) {
 	  if (bo.textOptions[j].type == "main") {
 	    if (bo.textOptions[j].textPattern == "full") {
-	      bo.textOptions[j].text = "Reconfigure #" +
-		slots[i].source + "/Calibration";
+	      if (obs == "atca") {
+		bo.textOptions[j].text = "Reconfigure #" +
+		  slots[i].source + "/Calibration";
+	      } else if (obs == "parkes") {
+		bo.textOptions[j].text = "ReceiverChange";
+	      }
 	    } else if (bo.textOptions[j].textPattern == "short") {
-	      bo.textOptions[j].text = "Reconf #" + slots[i].source;
+	      if (obs == "atca") {
+		bo.textOptions[j].text = "Reconf #" + slots[i].source;
+	      } else if (obs == "parkes") {
+		bo.textOptions[j].text = "RecvChg";
+	      }
 	    }
 	    bo.texts[j].text(bo.textOptions[j].text);
 	  }
@@ -3204,15 +3220,23 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     return null;
   }
 
-  // Check if the array configuration is suitable.
-  var arrayConfigured = whichArrayConfiguration(time.day);
-  var compatible = arrayCompatible(arrayConfigured, slot.array);
-  if ((!compatible) && (ident != "CONFIG")) {
-    printMessage("Attempted to schedule a " + proj.details.ident +
-		 " slot requiring " + slot.array.toUpperCase() + ", but configuration " +
-		 "on selected date is not compatible (" +
-		 arrayConfigured +").", "error");
-    return null;
+  if (obs == "atca") {
+    // Check if the array configuration is suitable.
+    var arrayConfigured = whichArrayConfiguration(time.day);
+    var compatible = arrayCompatible(arrayConfigured, slot.array);
+    if ((!compatible) && (ident != "CONFIG")) {
+      var arrString = "";
+      if (slot.array instanceof Array) {
+	arrString = slot.array.join("/").toUpperCase();
+      } else {
+	arrString = slot.array.toUpperCase();
+      }
+      printMessage("Attempted to schedule a " + proj.details.ident +
+		   " slot requiring " + arrString + ", but configuration " +
+		   "on selected date is not compatible (" +
+		   arrayConfigured +").", "error");
+      return null;
+    }
   }
 
   // Work out when we should start on this day.
@@ -3447,15 +3471,24 @@ const whichArrayConfiguration = function(d) {
 // the array required.
 const arrayCompatible = function(config, required) {
   var lconfig = config.toLowerCase();
-  var lrequired = required.toLowerCase();
-  if (configDescriptor[obs].hasOwnProperty(lconfig)) {
-    if (configDescriptor[obs][lconfig].indexOf(lrequired) >= 0) {
-      return true;
-    /*} else {
-      console.log(lrequired + " not compatible with " + lconfig);*/
+  var lrequired;
+  if (required instanceof Array) {
+    lrequired = required.map(function(v) {
+      return v.toLowerCase();
+    });
+  } else {
+    lrequired = [ required.toLowerCase() ];
+  }
+  for (var i = 0; i < lrequired.lenght; i++) {
+    if (configDescriptor[obs].hasOwnProperty(lconfig)) {
+      if (configDescriptor[obs][lconfig].indexOf(lrequired[i]) >= 0) {
+	return true;
+	/*} else {
+	  console.log(lrequired + " not compatible with " + lconfig);*/
+      }
+      /*} else {
+	console.log("Config " + lconfig + " not found!");*/
     }
-  /*} else {
-    console.log("Config " + lconfig + " not found!");*/
   }
   return false;
 };
