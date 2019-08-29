@@ -101,6 +101,7 @@
       #messagebox div { border-bottom: 1px dashed grey; width: 100%; }
       .messageError { color: red; font-weight: bold; }
       .messageWarning { color: orange; font-weight: bold; }
+      .invisible { display: none; }
     </style>
   </head>
   <body>
@@ -134,8 +135,13 @@
 	  </table>
 	  <table id="projectslotsSelection">
 	    <thead>
-	      <tr><th>&nbsp;</th><th>Array</th><th>Band</th><th>CABB</th>
+	      <tr id="atcaSlotSelectionHeader">
+		<th>&nbsp;</th><th>Array</th><th>Band</th><th>CABB</th>
 		<th>Source</th><th>Time</th></tr>
+	      <tr id="parkesSlotSelectionHeader" class="invisible">
+		<th><&nbsp;</th><th>Receiver</th><th>Backend</th><th>Source</th>
+		       <th>Time</th>
+	      </tr>
 	    </thead>
 	    <tbody id="projectslotsSelectionBody"></tbody>
 	  </table>
