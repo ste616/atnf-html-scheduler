@@ -60,13 +60,13 @@ const localKey = "atnfSchedule";
 const observatoryKey = "atnfObservatory";
 const semesterKey = "atnfSemester";
 const spath = "/cgi-bin/scheduler.pl";
-const obsNames = { 'atca': "ATCA", 'pk': "Parkes" };
+const obsNames = { 'atca': "ATCA", 'parkes': "Parkes" };
 
 // An object to describe config compatibility.
 // The keys are the available configs, which we can use later to
 // allow for config selection. Each value is an array with the names
 // of all config requirements that are compatible.
-const configDescriptor = {
+const configDescriptor = { 'atca': {
   '6a': [ 0, "any", "any6", "any 750 or greater", "6a" ],
   '6b': [ 1, "any", "any6", "any 750 or greater", "6b" ],
   '6c': [ 2, "any", "any6", "any 750 or greater", "6c" ],
@@ -84,7 +84,15 @@ const configDescriptor = {
   'h214': [ 14, "any", "hybrid", "h214" ],
   'h168': [ 15, "any", "hybrid", "h168", "h75/168" ],
   'h75': [ 16, "any", "hybrid", "h75", "h75/168" ]
-};
+}, 'parkes': {
+  'uwl': [ 0, "any", "uwl" ],
+  'mb': [ 1, "any", "multi", "mb" ],
+  'mars': [ 2, "any", "mars" ],
+  'k': [ 3, "any", "13mm", "k" ],
+  'ku': [ 4, "any", "ku" ],
+  '10/50': [ 5, "any", '10/50' ],
+  'vlbi': [ 6, "any" ]
+} };
 
 // An object to hold all our measurements.
 var meas = {
@@ -320,7 +328,8 @@ const gst = function(mjd, dUT1) {
   var d = 0.0000062 / 86400.0;
   var tu = (mjd - (2451545.0 - 2400000.5)) / 36525.0;
   var sidtim = turnFraction(a + tu * (b + tu * (e - tu * d)));
-  var gmst = turnFraction(sidtim + (mjd - Math.floor(mjd) + dUT1 / 86400.0) * 1.002737909350795);
+  var gmst = turnFraction(sidtim + (mjd - Math.floor(mjd) + dUT1 / 86400.0) *
+			  1.002737909350795);
   return gmst;
 };
 
@@ -505,13 +514,16 @@ const sunPosition = function(mjd) {
   L = degreesBounds(L);
   g = degreesBounds(g);
   // Ecliptic longitude of the Sun, in degrees.
-  var lambda = L + 1.915 * Math.sin(deg2rad(g)) + 0.020 * Math.sin(2 * deg2rad(g));
+  var lambda = L + 1.915 * Math.sin(deg2rad(g)) + 0.020 *
+      Math.sin(2 * deg2rad(g));
   // Sun distance from Earth.
-  var R = 1.00014 - 0.01671 * Math.cos(deg2rad(g)) - 0.00014 * Math.cos(2 * deg2rad(g));
+  var R = 1.00014 - 0.01671 * Math.cos(deg2rad(g)) -
+      0.00014 * Math.cos(2 * deg2rad(g));
   // The obliquity, in degrees.
   // We need the number of centuries since J2000.0.
   var T = (n / (100.0 * 365.2525));
-  var epsilon = 23.4392911 - (46.636769 / 3600.0) * T - (0.0001831 / 3600.0) * T * T +
+  var epsilon = 23.4392911 - (46.636769 / 3600.0) * T -
+      (0.0001831 / 3600.0) * T * T +
       (0.00200340 / 3600.0) * T * T * T;
   // Get the right ascension in radians.
   var alpha = Math.atan2(Math.cos(deg2rad(epsilon)) * Math.sin(deg2rad(lambda)),
@@ -571,6 +583,30 @@ const domAddClasses = function(e, addClasses) {
   
 };
 
+// Remove one or more classes to a DOM element.
+const domRemoveClasses = function(e, removeClasses) {
+  if ((typeof e == "undefined") || (e == "undefined")) {
+    return;
+  }
+
+  // Do we want to remove one or more classes?
+  if ((typeof removeClasses != "undefined") &&
+      (removeClasses != null)) {
+    if (removeClasses instanceof Array) {
+      for (var i = 0; i < removeClasses.length; i++) {
+	if (e.classList.contains(removeClasses[i])) {
+	  e.classList.remove(removeClasses[i]);
+	}
+      }
+    } else {
+      if (e.classList.contains(removeClasses)) {
+	e.classList.remove(removeClasses);
+      }
+    }
+  }
+  
+};
+
 // A little helper function to do things to a DOM element.
 const fillId = function(id, text, addClasses, remClasses) {
   // Try to find the ID.
@@ -580,27 +616,14 @@ const fillId = function(id, text, addClasses, remClasses) {
     return;
   }
 
-  if ((typeof text != "undefined") && (text != null)) {
+  if ((typeof text != "undefined") && (text != null) &&
+      (typeof e != "undefined") && (e != null)) {
     e.innerHTML = text;
   }
 
   domAddClasses(e, addClasses);
-
-  // Do we want to remove one or more classes.
-  if ((typeof remClasses != "undefined") &&
-      (remClasses != null)) {
-    if (remClasses instanceof Array) {
-      for (var i = 0; i < remClasses.length; i++) {
-	if (e.classList.contains(remClasses[i])) {
-	  e.classList.remove(remClasses[i]);
-	}
-      }
-    } else {
-      if (e.classList.contains(remClasses)) {
-	e.classList.remove(remClasses);
-      }
-    }
-  }
+  domRemoveClasses(e, remClasses);
+  
   
 };
 
@@ -622,8 +645,6 @@ const getObservatory = function() {
   var oe = document.getElementById("observatory");
   var cobs = oe.options[oe.selectedIndex].value;
   var sobs = window.localStorage.getItem(observatoryKey);
-  console.log("obs is " + obs);
-  console.log("sobs is " + sobs);
   if (obs == null) {
     // We've likely just been loaded.
     console.log("loading page now");
@@ -649,6 +670,18 @@ const getObservatory = function() {
   }
   // Store this value.
   window.localStorage.setItem(observatoryKey, obs);
+
+  // Display the correct slot selection header.
+  var ah = document.getElementById("atcaSlotSelectionHeader");
+  console.log("selection headers follow");
+  var ph = document.getElementById("parkesSlotSelectionHeader");
+  if (obs == "atca") {
+    domAddClasses(ph, "invisible");
+    domRemoveClasses(ah, "invisible");
+  } else if (obs == "parkes") {
+    domAddClasses(ah, "invisible");
+    domRemoveClasses(ph, "invisible");
+  }
 };
 
 // Determine the semester to show.
@@ -895,22 +928,41 @@ const showProjectDetails = function(ident) {
     });
     tr.appendChild(tsel);
     var arrId = "slotarray-" + ident + "-" + sn;
-    var td = makeElement("td", sd.array.toUpperCase(), {
-      'id': arrId
-    });
+    var td = null;
+    if (obs == "atca") {
+      td = makeElement("td", sd.array.toUpperCase(), {
+	'id': arrId
+      });
+    } else if (obs == "parkes") {
+      var arrString = "";
+      if (sd.array instanceof Array) {
+	arrString = sd.array.join(",").toUpperCase();
+      } else {
+	arrString = sd.array.toUpperCase();
+      }
+      td = makeElement("td", arrString, {
+	'id': arrId
+      });
+    }
     // Add a double-click handler on the array.
     addDoubleClickHandler(td,
 			  arraySelectorGen(ident, sn, arrId));
     tr.appendChild(td);
-    var bandId = "slotband-" + ident + "-" + sn;
-    td = makeElement("td", sd.bands.join(","), { 'id': bandId });
-    addDoubleClickHandler(td,
-			  bandsSelectorGen(ident, sn, bandId));
-    tr.appendChild(td);
+    if (obs == "atca") {
+      var bandId = "slotband-" + ident + "-" + sn;
+      td = makeElement("td", sd.bands.join(","), { 'id': bandId });
+      addDoubleClickHandler(td,
+			    bandsSelectorGen(ident, sn, bandId));
+      tr.appendChild(td);
+    }
     var bandwidthId = "slotbandwidth-" + ident + "-" + sn;
     td = makeElement("td", sd.bandwidth, { 'id': bandwidthId });
-    addDoubleClickHandler(td, cabbSelectorGen(ident, sn,
-					      bandwidthId));
+    if (obs == "atca") {
+      addDoubleClickHandler(td, cabbSelectorGen(ident, sn,
+						bandwidthId));
+    } else if (obs == "parkes") {
+      addDoubleClickHandler(td, backendSelectorGen(ident, sn, bandwidthId));
+    }
     tr.appendChild(td);
     var sourceId = "slotsource-" + ident + "-" + sn;
     td = makeElement("td", sd.source, { 'id': sourceId });
@@ -1005,11 +1057,19 @@ const showProjectDetails = function(ident) {
       // Go through each ID in turn.
       var arrId = "slotarray-" + ident + "-" + i;
       emptyDomNode(arrId);
-      fillId(arrId, s.array.toUpperCase());
+      var arrString = "";
+      if (s.array instanceof Array) {
+	arrString = s.array.join(",").toUpperCase();
+      } else {
+	arrString = s.array.toUpperCase();
+      }
+      fillId(arrId, arrString);
 
-      var bandId = "slotband-" + ident + "-" + i;
-      emptyDomNode(bandId);
-      fillId(bandId, s.bands.join(","));
+      if (obs == "atca") {
+	var bandId = "slotband-" + ident + "-" + i;
+	emptyDomNode(bandId);
+	fillId(bandId, s.bands.join(","));
+      }
 
       var bandwidthId = "slotbandwidth-" + ident + "-" + i;
       emptyDomNode(bandwidthId);
@@ -2230,44 +2290,64 @@ const summariseProjects = function() {
 // Make a summary of the array configurations required,
 // and a general summary of the semester.
 const summariseSemester = function() {
-  var r = { 'arrays': [],
-	    'timeSummary': {
-	      'total': 0,
-	      'maintenance': 0,
-	      'vlbi': 0,
-	      'calibration': 0,
-	      'legacy': 0,
-	      'available': 0,
-	      'scheduled': 0,
-	      'requested': 0,
-	      'lowScore': 6,
-	      'nCabb': 0,
-	      'nReconfigure': 0
-	    }, 'arrayLabels': [ { '6km': { 'a': "6A" } },
-				{ '6km': { 'b': "6B" } },
-				{ '6km': { 'c': "6C" } },
-				{ '6km': { 'd': "6D" } },
-				{ '6km': { 'any': "6*"} },
-				{ '1.5km': { 'a': "1.5A" } },
-				{ '1.5km': { 'b': "1.5B" } },
-				{ '1.5km': { 'c': "1.5C" } },
-				{ '1.5km': { 'd': "1.5D" } },
-				{ '1.5km': { 'any': "1.5*" } },
-				{ '750m': { 'a': "750A" } },
-				{ '750m': { 'b': "750B" } },
-				{ '750m': { 'c': "750C" } },
-				{ '750m': { 'd': "750D" } },
-				{ '750m': { 'any': "750*" } },
-				{ 'compact': { 'ew367': "367" } },
-				{ 'compact': { 'ew352': "352" } },
-				{ 'compact': { 'any': "cmp" } },
-				{ 'hybrid': { 'h214': "H214" } },
-				{ 'hybrid': { 'h168': "H168" } },
-				{ 'hybrid': { 'h75': "H75" } },
-				{ 'hybrid': { 'any': "H*" } },
-				{ 'any': { 'any': "*" } }
-			      ]
-	  };
+  var r = {};
+  if (obs == "atca") {
+    r = { 'arrays': [],
+	  'timeSummary': {
+	    'total': 0,
+	    'maintenance': 0,
+	    'vlbi': 0,
+	    'calibration': 0,
+	    'legacy': 0,
+	    'available': 0,
+	    'scheduled': 0,
+	    'requested': 0,
+	    'lowScore': 6,
+	    'nCabb': 0,
+	    'nReconfigure': 0
+	  }, 'arrayLabels': [ { '6km': { 'a': "6A" } },
+			      { '6km': { 'b': "6B" } },
+			      { '6km': { 'c': "6C" } },
+			      { '6km': { 'd': "6D" } },
+			      { '6km': { 'any': "6*"} },
+			      { '1.5km': { 'a': "1.5A" } },
+			      { '1.5km': { 'b': "1.5B" } },
+			      { '1.5km': { 'c': "1.5C" } },
+			      { '1.5km': { 'd': "1.5D" } },
+			      { '1.5km': { 'any': "1.5*" } },
+			      { '750m': { 'a': "750A" } },
+			      { '750m': { 'b': "750B" } },
+			      { '750m': { 'c': "750C" } },
+			      { '750m': { 'd': "750D" } },
+			      { '750m': { 'any': "750*" } },
+			      { 'compact': { 'ew367': "367" } },
+			      { 'compact': { 'ew352': "352" } },
+			      { 'compact': { 'any': "cmp" } },
+			      { 'hybrid': { 'h214': "H214" } },
+			      { 'hybrid': { 'h168': "H168" } },
+			      { 'hybrid': { 'h75': "H75" } },
+			      { 'hybrid': { 'any': "H*" } },
+			      { 'any': { 'any': "*" } }
+			    ]
+	};
+  } else if (obs == "parkes") {
+    r = { 'arrays': [],
+	  'timeSummary': {
+	    'total': 0,
+	    'maintenance': 0,
+	    'vlbi': 0,
+	    'calibration': 0,
+	    'funded': 0,
+	    'available': 0,
+	    'scheduled': 0,
+	    'requested': 0,
+	    'lowScore': 6,
+	    'nReconfigure': 0
+	  }, 'arrayLabels': [ { 'uwl': "UWL" }, { 'mb': "MULTI" },
+			      { 'mars': "MARS" }, { "k": "K" },
+			      { 'ku': "KU" }, { '10/50': "10/50cm" } ]
+	};
+  }
 
   // The total time available for the semester (in hours).
   r.timeSummary.available = (semesterEnd.getTime() -
@@ -2278,14 +2358,20 @@ const summariseSemester = function() {
   var maxScore = 5.0;
   var scoreInterval = 0.1;
   for (var score = minScore; score <= maxScore; score += scoreInterval) {
-    r.arrays.push({ 'score': Math.floor(score * 10) / 10,
-		    '6km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
-		    '1.5km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
-		    '750m': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
-		    'compact': { 'ew367': 0, 'ew352': 0, 'any': 0 },
-		    'hybrid': { 'h214': 0, 'h168': 0, 'h75': 0, 'any': 0 },
-		    'any': { 'any': 0 }
-		  });
+    if (obs == "atca") {
+      r.arrays.push({ 'score': Math.floor(score * 10) / 10,
+		      '6km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+		      '1.5km': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+		      '750m': { 'a': 0, 'b': 0, 'c': 0, 'd': 0, 'any': 0 },
+		      'compact': { 'ew367': 0, 'ew352': 0, 'any': 0 },
+		      'hybrid': { 'h214': 0, 'h168': 0, 'h75': 0, 'any': 0 },
+		      'any': { 'any': 0 }
+		    });
+    } else if (obs == "parkes") {
+      r.arrays.push({ 'score': Math.floor(score * 10) / 10,
+		      'uwl': 0, 'mb': 0, 'ku': 0, 'k': 0, '10/50': 0,
+		      'mars': 0 });
+    }
   }
   
   var allProjects = scheduleData.program.project;
@@ -2348,37 +2434,58 @@ const summariseSemester = function() {
 	  if (slots[j].rating < r.arrays[sarr].score) {
 	    break;
 	  }
-	  if ((slots[j].array == "6a") || (slots[j].array == "6b") ||
-	      (slots[j].array == "6c") || (slots[j].array == "6d") ||
-	      (slots[j].array == "any6")) {
-	    var v = slots[j].array.replace("6", "");
-	    r['arrays'][sarr]["6km"][v] += slots[j].requested_duration;
-	  } else if ((slots[j].array == "1.5a") || (slots[j].array == "1.5b") ||
-		     (slots[j].array == "1.5c") || (slots[j].array == "1.5d") ||
-		     (slots[j].array == "any1.5")) {
-	    var v = slots[j].array.replace("1.5", "");
-	    r['arrays'][sarr]["1.5km"][v] += slots[j].requested_duration;
-	  } else if ((slots[j].array == "750a") || (slots[j].array == "750b") ||
-		     (slots[j].array == "750c") || (slots[j].array == "750d") ||
-		     (slots[j].array == "any750")) {
-	    var v = slots[j].array.replace("750", "");
-	    r['arrays'][sarr]["750m"][v] += slots[j].requested_duration;
-	  } else if ((slots[j].array == "ew352") || (slots[j].array == "ew367") ||
-		     (slots[j].array == "anycompact")) {
-	    var v = slots[j].array.replace("compact", "");
-	    r['arrays'][sarr]["compact"][v] += slots[j].requested_duration;
-	  } else if ((slots[j].array == "h168") || (slots[j].array == "h214") ||
-		     (slots[j].array == "h75")) {
-	    var v = slots[j].array;
-	    r['arrays'][sarr]["hybrid"][v] += slots[j].requested_duration;
-	  } else if (/^h/.test(slots[j].array)) {
-	    // This means some other hybrid combination: we put this as any.
-	    r['arrays'][sarr]["hybrid"]['any'] += slots[j].requested_duration;
-	  } else if (slots[j].array == "any") {
-	    r['arrays'][sarr]['any']['any'] += slots[j].requested_duration;
-	  } else {
-	    console.log("found array string " + slots[j].array);
-	    break;
+	  if (obs == "atca") {
+	    if ((slots[j].array == "6a") || (slots[j].array == "6b") ||
+		(slots[j].array == "6c") || (slots[j].array == "6d") ||
+		(slots[j].array == "any6")) {
+	      var v = slots[j].array.replace("6", "");
+	      r['arrays'][sarr]["6km"][v] += slots[j].requested_duration;
+	    } else if ((slots[j].array == "1.5a") ||
+		       (slots[j].array == "1.5b") ||
+		       (slots[j].array == "1.5c") ||
+		       (slots[j].array == "1.5d") ||
+		       (slots[j].array == "any1.5")) {
+	      var v = slots[j].array.replace("1.5", "");
+	      r['arrays'][sarr]["1.5km"][v] += slots[j].requested_duration;
+	    } else if ((slots[j].array == "750a") ||
+		       (slots[j].array == "750b") ||
+		       (slots[j].array == "750c") ||
+		       (slots[j].array == "750d") ||
+		       (slots[j].array == "any750")) {
+	      var v = slots[j].array.replace("750", "");
+	      r['arrays'][sarr]["750m"][v] += slots[j].requested_duration;
+	    } else if ((slots[j].array == "ew352") ||
+		       (slots[j].array == "ew367") ||
+		       (slots[j].array == "anycompact")) {
+	      var v = slots[j].array.replace("compact", "");
+	      r['arrays'][sarr]["compact"][v] += slots[j].requested_duration;
+	    } else if ((slots[j].array == "h168") ||
+		       (slots[j].array == "h214") ||
+		       (slots[j].array == "h75")) {
+	      var v = slots[j].array;
+	      r['arrays'][sarr]["hybrid"][v] += slots[j].requested_duration;
+	    } else if (/^h/.test(slots[j].array)) {
+	      // This means some other hybrid combination: we put this as any.
+	      r['arrays'][sarr]["hybrid"]['any'] += slots[j].requested_duration;
+	    } else if (slots[j].array == "any") {
+	      r['arrays'][sarr]['any']['any'] += slots[j].requested_duration;
+	    } else {
+	      console.log("found array string " + slots[j].array);
+	      break;
+	    }
+	  } else if (obs == "parkes") {
+	    var ps = slots[j].array;
+	    if (!Array.isArray(slots[j].array)) {
+	      ps = [ slots[j].array ];
+	    }
+	    for (var k = 0; k < ps.length; k++) {
+	      var larr = ps[k].toLowerCase();
+	      if (typeof r['arrays'][sarr][larr] != "undefined") {
+		r['arrays'][sarr][larr] += slots[j].requested_duration;
+	      } else {
+		console.log("found array string " + larr);
+	      }
+	    }
 	  }
 	}
       }
@@ -2507,9 +2614,9 @@ const arraySelectorGen = function(ident, slotnum, tdid) {
   // We call a function to display a dropdown box.
   return function() {
     // Get the list of configurations.
-    var arrs = Object.keys(configDescriptor);
+    var arrs = Object.keys(configDescriptor[obs]);
     arrs.sort(function(a, b) {
-      return (configDescriptor[a][0] - configDescriptor[b][0]);
+      return (configDescriptor[obs][a][0] - configDescriptor[obs][b][0]);
     });
     arrs = arrs.map(function(v) {
       return v.toUpperCase();
@@ -2533,6 +2640,16 @@ const cabbSelectorGen = function(ident, slotnum, tdid) {
       'payload': { 'ident': ident, 'slotnum': slotnum,
 		   'type': "bandwidth" }
     }, "select");
+  };
+};
+
+const backendSelectorGen = function(ident, slotnum, tdid) {
+  return function() {
+    slotChangeDisplay(tdid, null, {
+      'callback': slotChangeFulfillment,
+      'payload': { 'ident': ident, 'slotnum': slotnum,
+		   'type': "backend" }
+    }, "input");
   };
 };
 
@@ -2581,9 +2698,21 @@ const slotChangeFulfillment = function(proj, value) {
     var nv = value.toLowerCase();
     if (slot.array != nv) {
       changed = true;
-      printMessage("Changed array for " + proj.ident + " slot from " +
-		   slot.array.toUpperCase() + " to " +
-		   nv.toUpperCase() + ".", "warning");
+      if (obs == "atca") {
+	printMessage("Changed array for " + proj.ident + " slot from " +
+		     slot.array.toUpperCase() + " to " +
+		     nv.toUpperCase() + ".", "warning");
+      } else if (obs == "parkes") {
+	var recvString = "";
+	if (slot.array instanceof Array) {
+	  recvString = slot.array.join("/").toUpperCase();
+	} else {
+	  recvString = slot.array.toUpperCase();
+	}
+	printMessage("Changed receiver for " + proj.ident + " slot from " +
+		     recvString + " to " + nv.toUpperCase() + ".",
+		     "warning");
+      }
       slot.array = nv;
     }
   } else if (proj.type == "bandwidth") {
@@ -2603,6 +2732,13 @@ const slotChangeFulfillment = function(proj, value) {
 		   slot.bands.join(",") + " to " +
 		   bands.join(",") + ".", "warning");
       slot.bands = bands;
+    }
+  } else if (proj.type == "backend") {
+    if (slot.bandwidth != value) {
+      changed = true;
+      printMessage("Changed backend for " + proj.ident + " slot from " +
+		   slot.bandwidth + " to " + value + ".", "warning");
+      slot.bandwidth = value;
     }
   } else if (proj.type == "time") {
     var time = parseFloat(value);
@@ -2638,8 +2774,9 @@ const slotChangeFulfillment = function(proj, value) {
 
 const emptyDomNode = function(id) {
   var n = document.getElementById(id);
-
-  if ((typeof n != "undefined") && (n != "undefined")) {
+  
+  if ((typeof n != "undefined") && (n != "undefined") &&
+      (n != null)) {
     while (n.firstChild) {
       n.removeChild(n.firstChild);
     }
@@ -2787,7 +2924,8 @@ var savedDomNodes = {};
 const updateSemesterSummary = function() {
   // Get our helper to make the summary.
   var semsum = summariseSemester();
-
+  console.log(semsum);
+  
   // Step 1: show the demand for each array type.
   // Have we already made the table?
   var arrayTable = document.getElementById("array-demand-table");
@@ -2818,11 +2956,15 @@ const updateSemesterSummary = function() {
       for (var k in semsum.arrayLabels[i]) {
 	if (semsum.arrayLabels[i].hasOwnProperty(k)) {
 	  tm = tm[k];
-	  for (var l in semsum.arrayLabels[i][k]) {
-	    if (semsum.arrayLabels[i][k].hasOwnProperty(l)) {
-	      tm = tm[l]
-	      label = semsum.arrayLabels[i][k][l];
+	  if (obs == "atca") {
+	    for (var l in semsum.arrayLabels[i][k]) {
+	      if (semsum.arrayLabels[i][k].hasOwnProperty(l)) {
+		tm = tm[l]
+		label = semsum.arrayLabels[i][k][l];
+	      }
 	    }
+	  } else if (obs == "parkes") {
+	    label = semsum.arrayLabels[i][k];
 	  }
 	}
       }
@@ -2843,10 +2985,14 @@ const updateSemesterSummary = function() {
       for (var arr in semsum.arrays[i]) {
 	if ((semsum.arrays[i].hasOwnProperty(arr)) &&
 	    (arr != "score")) {
-	  for (var atype in semsum.arrays[i][arr]) {
-	    if (semsum.arrays[i][arr].hasOwnProperty(atype)) {
-	      totalTime += semsum.arrays[i][arr][atype];
+	  if (obs == "atca") {
+	    for (var atype in semsum.arrays[i][arr]) {
+	      if (semsum.arrays[i][arr].hasOwnProperty(atype)) {
+		totalTime += semsum.arrays[i][arr][atype];
+	      }
 	    }
+	  } else if (obs == "parkes") {
+	    totalTime += semsum.arrays[i][arr];
 	  }
 	}
       }
@@ -2875,11 +3021,15 @@ const updateSemesterSummary = function() {
 	for (var k in semsum.arrayLabels[j]) {
 	  if (semsum.arrayLabels[j].hasOwnProperty(k)) {
 	    tm = tm[k];
-	    for (var l in semsum.arrayLabels[j][k]) {
-	      if (semsum.arrayLabels[j][k].hasOwnProperty(l)) {
-		tm = tm[l];
-		tlab = semsum.arrayLabels[j][k][l];
+	    if (obs == "atca") {
+	      for (var l in semsum.arrayLabels[j][k]) {
+		if (semsum.arrayLabels[j][k].hasOwnProperty(l)) {
+		  tm = tm[l];
+		  tlab = semsum.arrayLabels[j][k][l];
+		}
 	      }
+	    } else if (obs == "parkes") {
+	      tlab = semsum.arrayLabels[j][k];
 	    }
 	  }
 	}
@@ -2918,9 +3068,15 @@ const updateSemesterSummary = function() {
     makeTableCell("th", "Calibration:", r);
     savedDomNodes.calibrationTime = makeTableCell("td", "NN", r, {
       'id': "sst-calibration-allocation" });
-    makeTableCell("th", "Legacy:", r);
-    savedDomNodes.legacyTime = makeTableCell("td", "NN", r, {
-      'id': "sst-legacy-allocation" });
+    if (obs == "atca") {
+      makeTableCell("th", "Legacy:", r);
+      savedDomNodes.legacyTime = makeTableCell("td", "NN", r, {
+	'id': "sst-legacy-allocation" });
+    } else if (obs == "parkes") {
+      makeTableCell("th", "Funded:", r);
+      savedDomNodes.fundedTime = makeTableCell("td", "NN", r, {
+	'id': "sst-funded-allocation" });
+    }
     makeTableCell("th", "VLBI:", r);
     savedDomNodes.vlbiTime = makeTableCell("td", "NN", r, {
       'id': "sst-vlbi-allocation" });
@@ -2932,26 +3088,36 @@ const updateSemesterSummary = function() {
     makeTableCell("th", "Reconfigs:", r);
     savedDomNodes.reconfigTime = makeTableCell("td", "NN", r, {
       'id': "sst-reconfig-allocation" });
-    makeTableCell("th", "CABB:", r);
-    savedDomNodes.cabbTime = makeTableCell("td", "NN", r, {
-      'id': "sst-cabb-allocation" });
+    if (obs == "atca") {
+      makeTableCell("th", "CABB:", r);
+      savedDomNodes.cabbTime = makeTableCell("td", "NN", r, {
+	'id': "sst-cabb-allocation" });
+    }
     
   }
 
   // Update the table.
-  savedDomNodes.availableTime.innerHTML =
-    semsum.timeSummary.available - semsum.timeSummary.scheduled -
-    semsum.timeSummary.calibration - semsum.timeSummary.legacy -
-    semsum.timeSummary.vlbi - semsum.timeSummary.maintenance;
+  if (obs == "atca") {
+    savedDomNodes.availableTime.innerHTML =
+      semsum.timeSummary.available - semsum.timeSummary.scheduled -
+      semsum.timeSummary.calibration - semsum.timeSummary.legacy -
+      semsum.timeSummary.vlbi - semsum.timeSummary.maintenance;
+    savedDomNodes.legacyTime.innerHTML = semsum.timeSummary.legacy;
+    savedDomNodes.cabbTime.innerHTML = semsum.timeSummary.nCabb;
+  } else if (obs == "parkes") {
+    savedDomNodes.availableTime.innerHTML =
+      semsum.timeSummary.available - semsum.timeSummary.scheduled -
+      semsum.timeSummary.calibration - semsum.timeSummary.funded -
+      semsum.timeSummary.vlbi - semsum.timeSummary.maintenance;
+    savedDomNodes.fundedTime.innerHTML = semsum.timeSummary.funded;
+  }
   savedDomNodes.scheduledTime.innerHTML = semsum.timeSummary.scheduled;
   savedDomNodes.remainingTime.innerHTML = (semsum.timeSummary.requested -
 					   semsum.timeSummary.scheduled);
   savedDomNodes.calibrationTime.innerHTML = semsum.timeSummary.calibration;
-  savedDomNodes.legacyTime.innerHTML = semsum.timeSummary.legacy;
   savedDomNodes.vlbiTime.innerHTML = semsum.timeSummary.vlbi;
   savedDomNodes.maintenanceTime.innerHTML = semsum.timeSummary.maintenance;
   savedDomNodes.reconfigTime.innerHTML = semsum.timeSummary.nReconfigure;
-  savedDomNodes.cabbTime.innerHTML = semsum.timeSummary.nCabb;
 
 };
 
@@ -3282,8 +3448,8 @@ const whichArrayConfiguration = function(d) {
 const arrayCompatible = function(config, required) {
   var lconfig = config.toLowerCase();
   var lrequired = required.toLowerCase();
-  if (configDescriptor.hasOwnProperty(lconfig)) {
-    if (configDescriptor[lconfig].indexOf(lrequired) >= 0) {
+  if (configDescriptor[obs].hasOwnProperty(lconfig)) {
+    if (configDescriptor[obs][lconfig].indexOf(lrequired) >= 0) {
       return true;
     /*} else {
       console.log(lrequired + " not compatible with " + lconfig);*/
@@ -3846,6 +4012,10 @@ const slotChangeDisplay = function(id, options, callback, type) {
   if ((type == "input") && (options != null)) {
     // We've been given a manipulation function.
     cv = options(cv);
+  } else if ((obs == "parkes") && (cv.includes(","))) {
+    // Split the string up and use the first part.
+    var cve = cv.split(",");
+    cv = cve[0];
   }
   
   // Remove whatever was there before.
@@ -3858,7 +4028,11 @@ const slotChangeDisplay = function(id, options, callback, type) {
   inp.setAttribute("id", selid);
   if (type == "input") {
     inp.setAttribute("type", "text");
-    inp.setAttribute("size", "10");
+    if (callback.payload.type == "backend") {
+      inp.setAttribute("size", "30");
+    } else {
+      inp.setAttribute("size", "10");
+    }
     inp.setAttribute("value", cv);
   } else if (type == "select") {
     options.forEach(function(v) {
