@@ -1775,10 +1775,15 @@ sub printFileJson($$$$$$$$$$$) {
 			   $holidays, "", $colours);
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
+    my $configDuration = 24;
+    if ($obs eq "parkes") {
+	# Configs don't go all day.
+	$configDuration = 8;
+    }
     for (my $i = 0; $i <= $#{$arrays}; $i++) {
 	push @{$s}, &createSlot(
 	    $arrays->[$i], "", "", "100", "00:00:00,-90:00:00",
-	    24, 6, 0, "00:00", "23:59");
+	    $configDuration, 6, 0, "00:00", "23:59");
     }
     if ($obs eq "atca") {
 	# And some CABB reconfigurations.
