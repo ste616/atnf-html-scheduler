@@ -1280,8 +1280,12 @@ const drawBlock = function(proj, slot) {
       mainTitleOpts.text = proj.title;
       mainTitleOpts.textPattern = "full";
     } else if (proj.ident == "CONFIG") {
-      mainTitleOpts.text = "Reconfigure #" + proj.slot[slot].source +
-	"/Calibration";
+      if (obs == "atca") {
+	mainTitleOpts.text = "Reconfigure #" + proj.slot[slot].source +
+	  "/Calibration";
+      } else if (obs == "parkes") {
+	mainTitleOpts.text = "ReceiverChange";
+      }
       mainTitleOpts.textPattern = "full";
     } else if (proj.ident == "CABB") {
       mainTitleOpts.text = "CABB";
@@ -1308,7 +1312,11 @@ const drawBlock = function(proj, slot) {
 	  if (proj.ident == "MAINT") {
 	    mainTitleOpts.text = "Maint";
 	  } else if (proj.ident == "CONFIG") {
-	    mainTitleOpts.text = "Reconf #" + proj.slot[slot].source;
+	    if (obs == "atca") {
+	      mainTitleOpts.text = "Reconf #" + proj.slot[slot].source;
+	    } else if (obs == "parkes") {
+	      mainTitleOpts.text = "RecvChg";
+	    }
 	  } else if (proj.ident == "CABB") {
 	    // Do nothing.
 	    mainTitleOpts.text = "CABB";
