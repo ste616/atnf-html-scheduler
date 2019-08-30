@@ -35,6 +35,11 @@ if ($infile =~ /\.json$/) {
     
     # Write the schedule summary.
     &writeScheduleSummary($prog);
+
+    # Write out a file for the usage stats and the
+    # maintenance text file.
+    &writeTextSchedules($prog);
+
     
     close(P);
 }
@@ -373,6 +378,20 @@ sub epoch2timeString($$) {
     return $dt->strftime($fmt);
 }
 
+sub epoch2usage($) {
+    my $epoch = shift;
+    my $dt = DateTime->from_epoch(epoch => $epoch);
+    my $fmt = "%Y-%m-%d %H:%M";
+    return $dt->strftime($fmt);
+}
+
+sub epoch2maint($) {
+    my $epoch = shift;
+    my $dt = DateTime->from_epoch(epoch => $epoch);
+    my $fmt = "%Y-%m-%d, %H:%M";
+    return $dt->strftime($fmt);
+}
+
 sub stringToDatetime($) {
     my $dstring = shift;
 
@@ -562,13 +581,15 @@ sub writeScheduleSummary($) {
 	    );
 	my $dstring = sprintf("%-5.1f", $slot->{'scheduled_duration'});
 	$dstring =~ s/\.0//;
+	# The output needs to be in AEST.
 	my $sline =
 	    sprintf("%-9s %19s  -  %19s   %-5s %-91s",
 		    $proj->{'ident'},
-		    &epoch2timeString($slot->{'scheduled_start'}),
+		    &epoch2timeString($slot->{'scheduled_start'} +
+				      (10 * 3600)),
 		    &epoch2timeString($slot->{'scheduled_start'} +
 				      ($slot->{'scheduled_duration'} *
-				       3600)),
+				       3600) + (10 * 3600)),
 		    $dstring, &getConfig($prog, $dt));
 	push @details_lines, $sline;
 	if ($proj->{'type'} eq "ASTRO") {
@@ -613,3 +634,76 @@ sub writeScheduleSummary($) {
     }
     close(O);
 }
+
+sub writeTextSchedules($) {
+    my $prog = shift;
+
+    my $usage_file = sprintf "%s/schedule.txt", $obsStrings{'directory'};
+    my $maint_file = sprintf("%s/%s_maint.txt", $obsStrings{'directory'},
+			     lc($obsStrings{'name'}));
+    my @sorted_slots = &sortSlots($prog, 0);
+    open(O, ">".$usage_file) || die "Unable to open $usage_file for writing\n";
+    open(M, ">".$maint_file) || die "Unable to open $maint_file for writing\n";
+    my $ctime = &stringToDatetime($prog->{'term'}->{'start'})->subtract(
+	hours => 10 );
+    my $config = &getConfig($prog, $ctime);
+    for (my $i = 0; $i <= $#sorted_slots; $i++) {
+	my $proj = $sorted_slots[$i]->{'proj'};
+	my $slot = $sorted_slots[$i]->{'slot'};
+	# Output is in UTC.
+	if ($ctime->epoch() < $slot->{'scheduled_start'}) {
+	    # Directors time.
+	    printf O "%16s Directors time\n", &epoch2usage($ctime->epoch());
+	    printf M ("%17s, %17s, Directors time, %s\n",
+		      &epoch2maint($ctime->epoch()),
+		      &epoch2maint($slot->{'scheduled_start'}),
+		      $config);
+	    $ctime = DateTime->from_epoch( 
+		epoch => $slot->{'scheduled_start'});
+	}
+	if (($proj->{'type'} eq "MAINT") ||
+	    ($proj->{'type'} eq "CONFIG") ||
+	    ($proj->{'ident'} eq "CABB")) {
+	    printf O "%16s Maintenance/test\n",
+	    &epoch2usage($slot->{'scheduled_start'});
+	    if ($proj->{'ident'} eq "CONFIG") {
+		$config = uc($slot->{'array'});
+		printf M ("%17s, %17s, Reconfigure #%d/Calibration, %s\n",
+			  &epoch2maint($slot->{'scheduled_start'}),
+			  &epoch2maint($slot->{'scheduled_start'} +
+				       ($slot->{'scheduled_duration'} * 3600)),
+			  $slot->{'source'}, $config);
+	    } else {
+		printf M ("%17s, %17s, Maintenance/test, %s\n",
+			  &epoch2maint($slot->{'scheduled_start'}),
+			  &epoch2maint($slot->{'scheduled_start'} +
+				       ($slot->{'scheduled_duration'} * 3600)),
+			  $config);
+	    }
+	} else {
+	    printf O ("%16s %s\n", &epoch2usage($slot->{'scheduled_start'}),
+		      $proj->{'ident'});
+	    printf M ("%17s, %17s, %s, %s\n",
+		      &epoch2maint($slot->{'scheduled_start'}),
+		      &epoch2maint($slot->{'scheduled_start'} +
+				   ($slot->{'scheduled_duration'} * 3600)),
+		      $proj->{'ident'}, $config);
+	}
+	$ctime = DateTime->from_epoch(
+	    epoch => ($slot->{'scheduled_start'} + 
+		      ($slot->{'scheduled_duration'} * 3600)));
+    }
+    my $etime = &stringToDatetime($prog->{'term'}->{'end'})->subtract(
+	hours => 10 );
+    if ($ctime->epoch() < $etime->epoch()) {
+	# Directors time until the end.
+	printf O "%16s Directors time\n", &epoch2usage($ctime->epoch());
+	printf M ("%17s, %17s, Directors time, %s\n",
+		  &epoch2maint($ctime->epoch()),
+		  &epoch2maint($etime->epoch()),
+		  $config);
+    }
+    close(O);
+    close(M);
+}
+
