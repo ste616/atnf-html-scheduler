@@ -12,11 +12,9 @@ my $json = JSON->new->allow_nonref;
 
 my $infile = $ARGV[0];
 
-my $obs = "";
-my $obsName = {
-    'ATCA' => "Australia Telescope Compact Array",
-    'PK' => "Parkes Radiotelescope"
-};
+my %obsStrings = ( 'name' => "", 'short' => "",
+		   'directory' => "", 'full' => "");
+
 
 # Do something based on the file extension.
 if ($infile =~ /\.json$/) {
@@ -26,14 +24,66 @@ if ($infile =~ /\.json$/) {
     close(J);
     my $jref = $json->decode($jstring);
     my $prog = $jref->{'program'};
-    my $outfile = $infile;
-    $outfile =~ s/\.json$/\.scd/;
+
+    &fillObsStrings($prog);
+    
+    # Write the SCD file.
+    &writeScd($prog);
+    
+    # Write the PS file.
+    &writePostscriptSchedule($prog);
+    
+    # Write the schedule summary.
+    &writeScheduleSummary($prog);
+    
+    close(P);
+}
+
+sub fillObsStrings($) {
+    my $prog = shift;
+
+    if (lc($prog->{'observatory'}->{'observatory'}) eq "atca") {
+	$obsStrings{'name'} = "ATCA";
+	$obsStrings{'short'} = "CA";
+	$obsStrings{'directory'} = "atca-".
+	    $prog->{'term'}->{'term'};
+	$obsStrings{'full'} = "Australia Telescope Compact Array";
+    } elsif (lc($prog->{'observatory'}->{'observatory'}) eq "parkes") {
+	$obsStrings{'name'} = "Parkes";
+	$obsStrings{'short'} = "PK";
+	$obsStrings{'directory'} = "parkes-".
+	    $prog->{'term'}->{'term'};
+	$obsStrings{'full'} = "Parkes Radiotelescope";
+    }
+    
+}
+
+sub outfilePrefix($) {
+    my $prog = shift;
+
+    # Generate the output file name prefix.
+    my $outfile = sprintf("%s/%s_%sT%d", $obsStrings{'directory'},
+			  $obsStrings{'short'}, $prog->{'term'}->{'term'}, 
+			  $prog->{'term'}->{'version'});
+
+    # Check if the directory is present.
+    if (!-d $obsStrings{'directory'}) {
+	system "mkdir ".$obsStrings{'directory'};
+    }
+    
+    return $outfile;
+}
+
+sub writeScd($) {
+    my $prog = shift;
+
+    my $pfx = &outfilePrefix($prog);
+    my $outfile = $pfx.".scd";
+
     open(O, ">".$outfile) || die "Unable to open $outfile for writing\n";
     print O "<Program>\n";
-    print O "<Observatory>\nObservatory=".
-	uc($prog->{'observatory'}->{'observatory'})."\n".
+    print O "<Observatory>\nObservatory=".$obsStrings{'name'}."\n".
 	"</Observatory>\n";
-    $obs = uc($prog->{'observatory'}->{'observatory'});
     print O "<Term>\n";
     print O "Term=".$prog->{'term'}->{'term'}.
 	$prog->{'term'}->{'version'}."\n";
@@ -126,6 +176,14 @@ if ($infile =~ /\.json$/) {
     
     print O "</Program>\n";
     close(O);
+    
+}
+
+sub writePostscriptSchedule($) {
+    my $prog = shift;
+
+    my $pfx = &outfilePrefix($prog);
+    my $outps = $pfx.".ps";
 
     # Make the Postscript output.
     my $t = &stringToDatetime($prog->{'term'}->{'start'});
@@ -135,15 +193,13 @@ if ($infile =~ /\.json$/) {
     my $totalDays = $dur / 86400;
     my $numberOfPages = ($totalDays + 1) / $days;
     
-    my $outps = $infile;
-    $outps =~ s/\.json$/.ps/;
     open(P, ">".$outps) || die "cannot open $outps for writing";
     open(A, "schedulea.ps");
     while(<A>) {
 	print P $_;
     }
     close(A);
-    print P "/tel (".$obsName->{$obs}.") def\n";
+    print P "/tel (".$obsStrings{'full'}.") def\n";
     open(U, "prepage.ps");
     my $preUrl = do { local $/; <U> };
     close(U);
@@ -160,7 +216,6 @@ if ($infile =~ /\.json$/) {
     
     print P "%%EOF\n";
     
-    close(P);
 }
 
 sub printps($$) {
@@ -390,7 +445,7 @@ sub ps_sch_box($$$) {
 	$tstring = sprintf "%.1f", $d10;
 	substr($line, 22, length($tstring)) = $tstring;
 	if ($proj->{'ident'} eq "CONFIG") {
-	    if ($obs eq "PK") {
+	    if ($obsStrings{'short'} eq "PK") {
 		$tstring = sprintf " (%s) rx_box", $slot->{'source'};
 	    } else {
 		$tstring = sprintf " (%s) cfg_box", $slot->{'source'};
@@ -431,4 +486,130 @@ sub ps_sch_box($$$) {
     
     return $rstring."\n";
     
+}
+
+sub alphaSort {
+
+    ($a->{'ident'} cmp $b->{'ident'}) ||
+	($a->{'time'} <=> $b->{'time'});
+    
+}
+
+sub timeSort {
+
+    $a->{'time'} <=> $b->{'time'};
+
+}
+
+sub sortSlots($$) {
+    my $prog = shift;
+    my $sortAlpha = shift;
+
+    my @dets;
+    for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
+	my $proj = $prog->{'project'}->[$i];
+	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
+	    my $slot = $proj->{'slot'}->[$j];
+	    if ($slot->{'scheduled'} == 1) {
+		push @dets, { 'time' => ($slot->{'scheduled_start'} * 1),
+			      'ident' => $proj->{'ident'},
+			      'proj' => $proj, 'slot' => $slot };
+	    }
+	}
+    }
+
+    my @sdets;
+    if ($sortAlpha == 1) {
+	@sdets = sort alphaSort @dets;
+    } else {
+	@sdets = sort timeSort @dets;
+    }
+
+    return @sdets;
+}
+
+sub format_int($) {
+    my $a = shift;
+    my $aa = floor($a);
+    my $ad = $a - $aa;
+    my $b = reverse $aa;
+    my @c = unpack("(A3)*", $b);
+    my $d = reverse join ',', @c;
+    my $df = "";
+    if ($ad > 0) {
+	$df = sprintf "%.1f", $ad;
+	$df =~ s/^0//;
+    }
+    return $d.$df;
+}
+
+sub writeScheduleSummary($) {
+    my $prog = shift;
+
+    my $pfx = &outfilePrefix($prog);
+    my $outfile = $pfx.".txt";
+
+    my @details_lines;
+    my @sorted_slots = &sortSlots($prog, 1);
+    my $astroTime = 0;
+    my $configTime = 0;
+    my $maintTime = 0;
+    for (my $i = 0; $i <= $#sorted_slots; $i++) {
+	my $proj = $sorted_slots[$i]->{'proj'};
+	my $slot = $sorted_slots[$i]->{'slot'};
+	my $dt = DateTime->from_epoch(
+	    epoch => $slot->{'scheduled_start'}
+	    );
+	my $dstring = sprintf("%-5.1f", $slot->{'scheduled_duration'});
+	$dstring =~ s/\.0//;
+	my $sline =
+	    sprintf("%-9s %19s  -  %19s   %-5s %-91s",
+		    $proj->{'ident'},
+		    &epoch2timeString($slot->{'scheduled_start'}),
+		    &epoch2timeString($slot->{'scheduled_start'} +
+				      ($slot->{'scheduled_duration'} *
+				       3600)),
+		    $dstring, &getConfig($prog, $dt));
+	push @details_lines, $sline;
+	if ($proj->{'type'} eq "ASTRO") {
+	    $astroTime += $slot->{'scheduled_duration'};
+	} elsif ($proj->{'ident'} eq "CONFIG") {
+	    $configTime += $slot->{'scheduled_duration'};
+	} elsif ($proj->{'type'} eq "MAINT") {
+	    $maintTime += $slot->{'scheduled_duration'};
+	}
+    }
+
+    open(O, ">".$outfile) || die "Unable to open $outfile for writing\n";
+    print O $obsStrings{'full'}."\n\n";
+    printf O ("Summary of %sT%d\n", $prog->{'term'}->{'term'},
+	      $prog->{'term'}->{'version'});
+    printf O ("%s 00:00:00 to %s 00:00:00\n\n",
+	      $prog->{'term'}->{'start'}, $prog->{'term'}->{'end'});
+
+    my $startTime = &stringToDatetime($prog->{'term'}->{'start'});
+    my $endTime = &stringToDatetime($prog->{'term'}->{'end'});
+    my $semesterDuration = ($endTime->epoch() - $startTime->epoch()) / 3600;
+    printf O ("%-13s %s hours\n", "Term length", 
+	      &format_int($semesterDuration));
+    my $astroFrac = 100 * ($astroTime / $semesterDuration);
+    printf O ("%-13s %s   (%.1f%%)\n", "Astronomy",
+	      &format_int($astroTime), $astroFrac);
+    my $configFrac = 100 * ($configTime / $semesterDuration);
+    printf O ("%-13s %s   (%.1f%%)\n", "Reconfigs",
+	      &format_int($configTime), $configFrac);
+    my $maintFrac = 100 * ($maintTime / $semesterDuration);
+    printf O ("%-13s %s   (%.1f%%)\n", "Maintenance",
+	      &format_int($maintTime), $maintFrac);
+    my $unallocTime = $semesterDuration - ($astroTime + $configTime +
+					   $maintTime);
+    my $unallocFrac = 100 * ($unallocTime / $semesterDuration);
+    printf O ("%-13s %s   (%.1f%%)\n", "Unallocated",
+	      &format_int($unallocTime), $unallocFrac);
+    
+    print O "\n\n\n\nDetails:\n\n";
+    for (my $i = 0; $i <= $#details_lines; $i++) {
+	print O $details_lines[$i]."\n";
+    }
+    close(O);
 }
