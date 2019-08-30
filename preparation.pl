@@ -545,7 +545,9 @@ sub stripSpacing {
     my $a = shift;
 
     $a =~ s/^\s*(.*?)\s*$/$1/;
-
+    # Take this opportunity to remove bad characters too.
+    $a =~ s/\&/and/g;
+    
     return $a;
 }
 
