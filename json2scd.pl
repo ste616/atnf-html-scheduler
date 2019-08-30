@@ -40,6 +40,8 @@ if ($infile =~ /\.json$/) {
     # maintenance text file.
     &writeTextSchedules($prog);
 
+    # Write out the HTML summaries.
+    &writeHTMLSchedules($prog);
     
     close(P);
 }
@@ -392,6 +394,14 @@ sub epoch2maint($) {
     return $dt->strftime($fmt);
 }
 
+sub epoch2webSplit($) {
+    my $epoch = shift;
+    my $dt = DateTime->from_epoch(epoch => $epoch);
+    my $fmt1 = "%d %b";
+    my $fmt2 = "%H:%M";
+    return ( $dt->strftime($fmt1), $dt->strftime($fmt2) );
+}
+
 sub stringToDatetime($) {
     my $dstring = shift;
 
@@ -707,3 +717,140 @@ sub writeTextSchedules($) {
     close(M);
 }
 
+sub writeHTMLSchedules($) {
+    my $prog = shift;
+
+    my @sorted_slots = &sortSlots($prog, 1);
+    my $aestSummaryFile = sprintf("%s/%s-summaryAEST.html",
+				  $obsStrings{'directory'},
+				  lc($obsStrings{'name'}));
+    my $utcSummaryFile = sprintf("%s/%s-summaryUT.html",
+				 $obsStrings{'directory'},
+				 lc($obsStrings{'name'}));
+    open(A, ">".$aestSummaryFile) || die "Unable to open $aestSummaryFile ".
+	"for writing\n";
+    open(U, ">".$utcSummaryFile) || die "Unable to open $utcSummaryFile ".
+	"for writing\n";
+
+    # Print out the preamble.
+    my $prelines = '<!DOCTYPE html>'.
+	'<html><head><meta http-equiv="Content-Type" '.
+	'content="text/html; charset=iso-8859-1">';
+    print A $prelines;
+    print U $prelines;
+    my $tformat = "<%s>%s schedule summary for %s (%s)</%s>";
+    printf A ($tformat, "title", $obsStrings{'name'}, 
+	      $prog->{'term'}->{'term'}, "AEST", "title");
+    printf U ($tformat, "title", $obsStrings{'name'}, 
+	      $prog->{'term'}->{'term'}, "UT", "title");
+    $prelines = '<?php include( $_SERVER[DOCUMENT_ROOT] . "'.
+	'/includes/standard_head.inc" ) ?>'.
+	'<style>#tt th { border: 2px solid black; padding: 0.4em; }'.
+	'#tt td { border: 2px solid black; padding: 0.4em; }'.
+	'</style></head><body><!-- content -->'.
+	'<?php include( $_SERVER[DOCUMENT_ROOT] . "'.
+	'/includes/title_bar_atnf.inc" ) ?><center>';
+    print A $prelines;
+    print U $prelines;
+    printf A ($tformat, "h1", $obsStrings{'name'}, 
+	      $prog->{'term'}->{'term'}, "AEST", "h1");
+    printf U ($tformat, "h1", $obsStrings{'name'}, 
+	      $prog->{'term'}->{'term'}, "UT", "h1");
+    $prelines = '</center><br clear="all"><br><br>&nbsp;<br>'.
+	'<center><table id="tt" border="1" cellspacing="0"'.
+	'cellpadding="2" cols="6" width="98%">'.
+	'<tr><th valign="top" width="10%">Project<br>Code</th>'.
+	'<th valign="top" width="25%">PI</th>';
+    print A $prelines;
+    print U $prelines;
+    $tformat = '<th valign="top" width="10%">%s Dates</th>'.
+	'<th valid="top" width="10%">%s Start time</th>';
+    print A ($tformat, "AEST", "AEST");
+    print U ($tformat, "UT", "UT");
+    $prelines = '<th valign="top" width="10%">Duration (hrs)</th>'.
+	'<th nowrap valign="top" width="35%">Title</th></tr>';
+    print A $prelines;
+    print U $prelines;
+    
+    my $ident = "";
+    my $rowStart;
+    my $rowEnd;
+    my $dateCellAEST;
+    my $timeCellAEST;
+    my $durationCell;
+    my $dateCellUT;
+    my $timeCellUT;
+    my $totalHours;
+    for (my $i = 0; $i <= ($#sorted_slots + 1); $i++) {
+	my $slot;
+	my $proj;
+	if ($i <= $#sorted_slots) {
+	    $slot = $sorted_slots[$i]->{'slot'};
+	    $proj = $sorted_slots[$i]->{'proj'};
+	}
+	if (($i > $#sorted_slots) || ($proj->{'ident'} ne $ident)) {
+	    # We have to end the previous row and start a new one.
+	    if ($ident ne "") {
+		$dateCellAEST .= "Total</td>";
+		$timeCellAEST .= "</td>";
+		$durationCell .= sprintf("%.1f</td>", $totalHours);
+		print A $rowStart.$dateCellAEST.$timeCellAEST.
+		    $durationCell.$rowEnd;
+		$dateCellUT .= "Total</td>";
+		$timeCellUT .= "</td>";
+		print U $rowStart.$dateCellUT.$timeCellUT.
+		    $durationCell.$rowEnd;
+	    }
+	    if ($i <= $#sorted_slots) {
+		$totalHours = 0;
+		$rowStart = sprintf('<tr><td valign="top">%s</td>'.
+				    '<td valign="top">%s<br></td>',
+				    $proj->{'ident'}, $proj->{'PI'});
+		$rowEnd = sprintf('<td valign="top">%s</td></tr>',
+				  $proj->{'title'});
+		$dateCellAEST = '<td nowrap valign="top">';
+		$timeCellAEST = '<td nowrap valign="top" align="center">';
+		$dateCellUT = '<td nowrap valign="top">';
+		$timeCellUT = '<td nowrap valign="top" align="center">';
+		$durationCell = '<td nowrap valign="top" align="right">';
+		$ident = $proj->{'ident'};
+	    } else {
+		last;
+	    }
+	}
+	# Add some info to the cells.
+	$totalHours += $slot->{'scheduled_duration'} * 1;
+	my @dateCompsAEST = &epoch2webSplit($slot->{'scheduled_start'});
+	my @dateCompsUT = &epoch2webSplit($slot->{'scheduled_start'} -
+					  (10 * 3600));
+	$dateCellAEST .= $dateCompsAEST[0]."<br>";
+	$timeCellAEST .= $dateCompsAEST[1]."<br>";
+	$dateCellUT .= $dateCompsUT[0]."<br>";
+	$timeCellUT .= $dateCompsUT[1]."<br>";
+	$durationCell .= sprintf("%.1f<br>", 
+				 ($slot->{'scheduled_duration'} * 1));
+    }
+
+    my $gentime = DateTime->now->strftime("%d-%b-%Y");
+    my $postlines = '</table></center><br><p><br>'.
+	'<hr noshade><address>Generated: Jamie Stevens ('.
+	$gentime.')</address></p>'.
+	'<!-- footer --><footer><div class="wrap">'.
+	'<a href="https://www.atnf.csiro.au/contact/">Contact us</a>'.
+	'&nbsp;|&nbsp;'.
+	'<a href="https://www.atnf.csiro.au/internal/">Intranet</a>'.
+	'&nbsp;|&nbsp;'.
+	'<a href="https://www.csiro.au/en/About">About CSIRO</a>'.
+	'&nbsp;|&nbsp;'.
+	'<a href="https://www.csiro.au/en/About/Footer/Copyright">Copyright</a>'.
+	'&nbsp;|&nbsp;'.
+	'<a href="https://www.csiro.au/en/About/Footer/Legal-notice">'.
+	'Legal Notice and Disclaimer</a>&nbsp;|&nbsp;'.
+	'<a href="https://www.csiro.au/en/About/Access-to-information/'.
+	'Privacy">Privacy</a></div></footer></div></html>';
+    print A $postlines;
+    print U $postlines;
+    
+    close(A);
+    close(U);
+}
