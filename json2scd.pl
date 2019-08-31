@@ -6,6 +6,7 @@ use Data::Dumper;
 use JSON;
 use DateTime;
 use POSIX;
+use Astro::Time;
 use strict;
 
 my $json = JSON->new->allow_nonref;
@@ -426,6 +427,24 @@ sub epoch2webSplit($) {
     my $fmt1 = "%d %b";
     my $fmt2 = "%H:%M";
     return ( $dt->strftime($fmt1), $dt->strftime($fmt2) );
+}
+
+sub epoch2lst($) {
+    my $epoch = shift;
+    my $dt = DateTime->from_epoch(epoch => $epoch);
+    my $mjd = $dt->mjd();
+    my $long = 0;
+    if ($obsStrings{'name'} eq "ATCA") {
+	$long = (149.5501388 / 360);
+    } elsif ($obsStrings{'name'} eq "Parkes") {
+	$long = (148.2635101 / 360);
+    }
+    my $lst = 24 * mjd2lst($mjd, $long);
+    my $lst_h = floor($lst);
+    my $lst_m = floor(($lst - $lst_h) * 60);
+    my $lstString = sprintf("%02d:%02d", $lst_h, $lst_m);
+
+    return $lstString;
 }
 
 sub stringToDatetime($) {
@@ -1020,6 +1039,8 @@ sub writeJSONSchedule($) {
 		'schedID' => 0, 'title' => "Green Time",
 		'start' => &epoch2json($ctime->epoch()),
 		'end' => &epoch2json($slot->{'scheduled_start'}),
+		'startLST' => &epoch2lst($ctime->epoch()),
+		'endLST' => &epoch2lst($slot->{'scheduled_start'}),
 		'array' => $config, 
 		'term' => $prog->{'term'}->{'term'},
 		'className' => "Green Time",
@@ -1035,6 +1056,9 @@ sub writeJSONSchedule($) {
 	    'start' => &epoch2json($slot->{'scheduled_start'}),
 	    'end' => &epoch2json($slot->{'scheduled_start'} +
 				 ($slot->{'scheduled_duration'} * 3600)),
+	    'startLST' => &epoch2lst($slot->{'scheduled_start'}),
+	    'endLST' => &epoch2lst($slot->{'scheduled_start'} +
+				   ($slot->{'scheduled_duration'} * 3600)),
 	    'array' => $config, 'term' => $prog->{'term'}->{'term'},
 	    'className' => "Schedule", 'pi' => $proj->{'PI'},
 	    'expert' => "N/A", 'napas' => "None",
@@ -1073,6 +1097,8 @@ sub writeJSONSchedule($) {
 	    'schedID' => 0, 'title' => "Green Time",
 	    'start' => &epoch2json($ctime->epoch()),
 	    'end' => &epoch2json($etime->epoch()),
+	    'startLST' => &epoch2lst($ctime->epoch()),
+	    'endLST' => &epoch2lst($etime->epoch()),
 	    'array' => $config,
 	    'term' => $prog->{'term'}->{'term'},
 	    'className' => "Green Time",
