@@ -765,8 +765,8 @@ sub writeHTMLSchedules($) {
     print U $prelines;
     $tformat = '<th valign="top" width="10%">%s Dates</th>'.
 	'<th valid="top" width="10%">%s Start time</th>';
-    print A ($tformat, "AEST", "AEST");
-    print U ($tformat, "UT", "UT");
+    printf A ($tformat, "AEST", "AEST");
+    printf U ($tformat, "UT", "UT");
     $prelines = '<th valign="top" width="10%">Duration (hrs)</th>'.
 	'<th nowrap valign="top" width="35%">Title</th></tr>';
     print A $prelines;
@@ -820,9 +820,9 @@ sub writeHTMLSchedules($) {
 	}
 	# Add some info to the cells.
 	$totalHours += $slot->{'scheduled_duration'} * 1;
-	my @dateCompsAEST = &epoch2webSplit($slot->{'scheduled_start'});
-	my @dateCompsUT = &epoch2webSplit($slot->{'scheduled_start'} -
-					  (10 * 3600));
+	my @dateCompsUT = &epoch2webSplit($slot->{'scheduled_start'});
+	my @dateCompsAEST = &epoch2webSplit($slot->{'scheduled_start'} +
+					    (10 * 3600));
 	$dateCellAEST .= $dateCompsAEST[0]."<br>";
 	$timeCellAEST .= $dateCompsAEST[1]."<br>";
 	$dateCellUT .= $dateCompsUT[0]."<br>";
@@ -834,7 +834,7 @@ sub writeHTMLSchedules($) {
     my $gentime = DateTime->now->strftime("%d-%b-%Y");
     my $postlines = '</table></center><br><p><br>'.
 	'<hr noshade><address>Generated: Jamie Stevens ('.
-	$gentime.')</address></p>'.
+	$gentime.')</address></div></article>'.
 	'<!-- footer --><footer><div class="wrap">'.
 	'<a href="https://www.atnf.csiro.au/contact/">Contact us</a>'.
 	'&nbsp;|&nbsp;'.
