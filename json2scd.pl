@@ -42,6 +42,9 @@ if ($infile =~ /\.json$/) {
 
     # Write out the HTML summaries.
     &writeHTMLSchedules($prog);
+
+    # Create the graphical schedule pages.
+    &writeGraphicalSchedules($prog);
     
     close(P);
 }
@@ -222,7 +225,23 @@ sub writePostscriptSchedule($) {
     }
     
     print P "%%EOF\n";
+    close(P);
+
+    # Convert this into PDF.
+    my $outpdf = $pfx.".pdf";
+    my $mkpdf_cmd = "ps2pdf ".$outps." ".$outpdf;
+    system $mkpdf_cmd;
     
+}
+
+sub firstMonday($) {
+    my $prog = shift;
+
+    my $time1 = &stringToDatetime($prog->{'term'}->{'start'});
+    my $d = $time1->day_of_week();
+    $time1->subtract( days => (($d + 6) % 7) );
+
+    return $time1;
 }
 
 sub printps($$) {
@@ -231,11 +250,8 @@ sub printps($$) {
 
     my $days = 14;
     my $pageLength = $days * 86400;
-
-    my $time1 = &stringToDatetime($prog->{'term'}->{'start'});
-    my $d = $time1->day_of_week();
-    $time1->subtract( days => (($d + 6) % 7) );
-
+    
+    my $time1 = &firstMonday($prog);
     my $rstring = "";
     # This is the time at the top of the page.
     $time1->add( days => ($pageNumber * $days) );
@@ -853,4 +869,122 @@ sub writeHTMLSchedules($) {
     
     close(A);
     close(U);
+}
+
+sub writeGraphicalSchedules($) {
+    my $prog = shift;
+
+    # Start by converting the PS to the PNGS.
+    my $pfx = &outfilePrefix($prog);
+    my $psfile = $pfx.".ps";
+
+    my $imwidth = 848;
+    my $imheight = 1102;
+    my $jdir = "/tmp/junk".$obsStrings{'name'};
+    if (-d $jdir) {
+	system "rm -rf $jdir";
+    }
+    system "mkdir $jdir";
+
+    # Make and crop all the PNGs.
+    my $pngfile_pfx = $obsStrings{'short'};
+    my $convcmd = "/usr/bin/convert -background white -alpha off ".
+	"-density 300 -resize ".$imwidth."x".$imheight." -scene 1 ".
+	$psfile." ".$jdir."/".$pngfile_pfx."%03d.png";
+    system $convcmd;
+    my @bigpng = glob "'${jdir}/${pngfile_pfx}*.png'";
+    my $ndir = $obsStrings{'directory'};
+    for (my $i = 0; $i <= $#bigpng; $i++) {
+	my $opng = $bigpng[$i];
+	$opng =~ s/$jdir/$ndir/;
+	my $cropcmd = "/usr/bin/convert -crop 674x1008+65+25 ".
+	    $bigpng[$i]." ".$opng;
+	system $cropcmd;
+    }
+
+    # Work out the start Monday.
+    my $semdate = &firstMonday($prog);
+
+    my @png = glob "'${ndir}/${pngfile_pfx}*.png'";
+    #my @monthnames = ( "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    #		       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" );
+    my @start_dates;
+    my @end_dates;
+    for (my $i = 0; $i <= $#png; $i++) {
+	# Work out the date range of this page.
+	push @start_dates, $semdate->strftime("%d %b");
+	$semdate->add(days => 13);
+	push @end_dates, $semdate->strftime("%d %b");
+	$semdate->add(days => 1);
+    }
+    for (my $i = 0; $i <= $#png; $i++) {
+	# Create the web page.
+	my $hpage = $png[$i];
+	$hpage =~ s/png$/html/;
+	open(O, ">".$hpage) || die "Cannot open $hpage for writing\n";
+	print O "<!DOCTYPE html>\n<html><head><title>Schedule ".
+	    $prog->{'term'}->{'term'}."</title>\n";
+	print O "<?php include( \$_SERVER['DOCUMENT_ROOT'] .".
+	    "\"/includes/standard_head.inc\" ) ?>\n";
+	print O "<style>#scheduletable { ".
+	    "border: 0; margin: 0px auto; width: 100%; }\n";
+	print O ".currpage { border: 3px solid blue; ".
+	    "background: blue; color: white; font-size: 20px; ".
+	    "line-height: 26px; font-family: monospace; ".
+	    "font-weight: bold;  }\n";
+	print O "#fortnighttable { border: 0; border-collapse: collapse; }\n";
+	print O "#fortnighttable a, #fortnighttable a:visited { ".
+	    "font-weight: bold; text-decoration: none; color: black; ".
+	    "font-size: 20px; line-height: 26px; font-family: monospace; }\n";
+	print O "#fortnighttable td.nondate a, #fortnighttable ".
+	    "td.nondate:visited { font-weight: bold; text-decoration: none; ".
+	    "color: green; font-size: 16px; line-height: 20px; ".
+	    "font-family: Arial; }\n";
+	print O "#scheduletable td { padding: 0; text-align: center; ".
+	    "vertical-align: top; }\n";
+	print O "#fortnighttable td { padding: 0.2em 0; }\n";
+	print O "</style></head>\n";
+	print O "<body>\n";
+        print O "<?php include( \$_SERVER['DOCUMENT_ROOT'] . ".
+	    "\"/includes/title_bar_atnf.inc\" ) ?>\n";
+	print O "<table id=\"scheduletable\"><tr><td>";
+	print O "<table id=\"fortnighttable\"><tr><td><h1>".
+	    $prog->{'term'}->{'term'}." ".
+	    $obsStrings{'name'}."</h1></td></tr>";
+	for (my $j = 0; $j <= $#start_dates; $j++) {
+	    my $lpage = $png[$j];
+	    $lpage =~ s/png$/html/;
+	    $lpage =~ s/^.*\/(.*)$/$1/;
+	    my $cname = "";
+	    my $stype = "<a href=\"".$lpage."\">";
+	    my $etype = "</a>";
+	    if ($j == $i) {
+		$cname = " class=\"currpage\"";
+		$stype = "";
+		$etype = "";
+	    }
+	    print O "<tr><td$cname>$stype".$start_dates[$j]." - ".
+		$end_dates[$j]."$etype</td></tr>\n";
+	}
+	print O "<tr><td class=\"nondate\"><a href=\"".
+	    lc($obsStrings{'name'})."-summaryUT.html\">".
+	    "Schedule Summary</a></td></tr>\n";
+	print O "<tr><td class=\"nondate\">".
+	    "<a href=\"/observing/schedules/\">Back to Schedule Index</a>".
+	    "</td></tr>\n";
+	print O "</table></td>";
+	my $sdpng = $png[$i];
+	$sdpng =~ s/^.*\/(.*)$/$1/;
+	print O "<td><img src=\"".$sdpng."\"></td></tr>\n";
+	print O "</table>\n";
+        print O "<p><hr><address>Last Modified: Jamie Stevens ".
+	    `date +"(%d-%b-%Y)"`."</address></body></html>\n";
+	print O "<?php include( \$_SERVER['DOCUMENT_ROOT'] . \"".
+	    "/includes/footer.inc\" ) ?>\n";
+
+	close(O);
+
+	system "chmod u+x $hpage";
+    }
+    
 }
