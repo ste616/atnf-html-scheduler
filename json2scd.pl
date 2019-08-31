@@ -45,6 +45,9 @@ if ($infile =~ /\.json$/) {
 
     # Create the graphical schedule pages.
     &writeGraphicalSchedules($prog);
+
+    # Create the JSON schedule output.
+    &writeJSONSchedule($prog);
     
     close(P);
 }
@@ -407,6 +410,13 @@ sub epoch2maint($) {
     my $epoch = shift;
     my $dt = DateTime->from_epoch(epoch => $epoch);
     my $fmt = "%Y-%m-%d, %H:%M";
+    return $dt->strftime($fmt);
+}
+
+sub epoch2json($) {
+    my $epoch = shift;
+    my $dt = DateTime->from_epoch(epoch => $epoch);
+    my $fmt = "%Y-%m-%dT%H:%M:%S+00:00";
     return $dt->strftime($fmt);
 }
 
@@ -986,5 +996,94 @@ sub writeGraphicalSchedules($) {
 
 	system "chmod u+x $hpage";
     }
+    
+}
+
+sub writeJSONSchedule($) {
+    my $prog = shift;
+
+    my $json_file = sprintf ("%s/%s_maint.json", $obsStrings{'directory'},
+			     lc($obsStrings{'name'}));
+    my @sorted_slots = &sortSlots($prog, 0);
+
+    my @json_maint;
+    my $ctime = &stringToDatetime($prog->{'term'}->{'start'})->subtract(
+	hours => 10 );
+    my $config = &getConfig($prog, $ctime);
+    for (my $i = 0; $i <= $#sorted_slots; $i++) {
+	my $proj = $sorted_slots[$i]->{'proj'};
+	my $slot = $sorted_slots[$i]->{'slot'};
+	# Output is in UTC.
+	if ($ctime->epoch() < $slot->{'scheduled_start'}) {
+	    # Directors time.
+	    push @json_maint, {
+		'schedID' => 0, 'title' => "Green Time",
+		'start' => &epoch2json($ctime->epoch()),
+		'end' => &epoch2json($slot->{'scheduled_start'}),
+		'array' => $config, 
+		'term' => $prog->{'term'}->{'term'},
+		'className' => "Green Time",
+		'pi' => "N/A", 'expert' => "N/A",
+		'napas' => "N/A", 'source' => "N/A",
+		'receivers' => "N/A", 'cabb' => "N/A"
+	    };
+	    $ctime = DateTime->from_epoch(
+		epoch => $slot->{'scheduled_start'});
+	}
+	my $jobj = { 
+	    'schedID' => 0, 'title' => $proj->{'ident'},
+	    'start' => &epoch2json($slot->{'scheduled_start'}),
+	    'end' => &epoch2json($slot->{'scheduled_start'} +
+				 ($slot->{'scheduled_duration'} * 3600)),
+	    'array' => $config, 'term' => $prog->{'term'}->{'term'},
+	    'className' => "Schedule", 'pi' => $proj->{'PI'},
+	    'expert' => "N/A", 'napas' => "None",
+	    'source' => "N/A", 'receivers' => "N/A",
+	    'cabb' => "N/A"
+	};
+	if ($proj->{'type'} eq "MAINT") {
+	    # Maintenance time.
+	    $jobj->{'title'} = "Maintenance";
+	    $jobj->{'className'} = "Maintenance";
+	} elsif ($proj->{'type'} eq "CONFIG") {
+	    $config = uc($slot->{'array'});
+	    $jobj->{'title'} = "Reconfig";
+	    $jobj->{'className'} = "Reconfig";
+	    $jobj->{'array'} = $config;
+	} elsif ($proj->{'ident'} eq "CABB") {
+	    $jobj->{'title'} = "CABB";
+	    $jobj->{'className'} = "Special";
+	} else {
+	    # Regular project.
+	    $jobj->{'source'} = $slot->{'source'};
+	    $jobj->{'cabb'} = $slot->{'bandwidth'};
+	    my @bands = @{$slot->{'bands'}};
+	    $jobj->{'receivers'} = join(",", @bands);
+	}
+	push @json_maint, $jobj;
+	$ctime = DateTime->from_epoch(
+	    epoch => ($slot->{'scheduled_start'} +
+		      ($slot->{'scheduled_duration'} * 3600)));
+    }
+    my $etime = &stringToDatetime($prog->{'term'}->{'end'})->subtract(
+	hours => 10 );
+    if ($ctime->epoch() < $etime->epoch()) {
+	# Directors time until the end.
+	push @json_maint, {
+	    'schedID' => 0, 'title' => "Green Time",
+	    'start' => &epoch2json($ctime->epoch()),
+	    'end' => &epoch2json($etime->epoch()),
+	    'array' => $config,
+	    'term' => $prog->{'term'}->{'term'},
+	    'className' => "Green Time",
+	    'pi' => "N/A", 'expert' => "N/A",
+	    'napas' => "N/A", 'source' => "N/A",
+	    'receivers' => "N/A", 'cabb' => "N/A"
+	};
+    }
+    # Make the JSON string.
+    open(O, ">".$json_file) || die "Unable to open $json_file for writing\n";
+    printf O "%s\n", $json->pretty->encode(\@json_maint);
+    close(O);
     
 }
