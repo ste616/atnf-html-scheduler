@@ -647,7 +647,6 @@ const getObservatory = function() {
   var sobs = window.localStorage.getItem(observatoryKey);
   if (obs == null) {
     // We've likely just been loaded.
-    console.log("loading page now");
     if ((sobs == null) || (sobs == "null")) {
       // Use the page observatory, because no cache value has been found.
       console.log("setting observatory to " + cobs);
@@ -673,7 +672,6 @@ const getObservatory = function() {
 
   // Display the correct slot selection header.
   var ah = document.getElementById("atcaSlotSelectionHeader");
-  console.log("selection headers follow");
   var ph = document.getElementById("parkesSlotSelectionHeader");
   if (obs == "atca") {
     domAddClasses(ph, "invisible");
@@ -688,8 +686,6 @@ const getObservatory = function() {
 const getSemester = function() {
   var ts = document.getElementById("termSelected");
   var csem = null;
-  console.log(ts.options);
-  console.log(ts.selectedIndex);
   if (ts.selectedIndex != -1) {
     csem = ts.options[ts.selectedIndex].value;
   }
@@ -698,7 +694,6 @@ const getSemester = function() {
   if (semester == null) {
     // We've likely just been loaded.
     // Check if the saved semester is valid.
-    console.log(ssem);
     if ((typeof ssem != "undefined") && (ssem != "undefined") &&
 	(ssem != null)) {
       // Something has been cached, so we check if the cache has
@@ -2689,6 +2684,48 @@ const sourceSelectorGen = function(ident, slotnum, tdid) {
   };
 };
 
+const titleChanger = function() {
+  // Do nothing if nothing is selected.
+  if (previouslySelectedProject == null) {
+    return;
+  }
+
+  // Get the current value.
+  var id = "projectselectedTitle";
+  var pt = document.getElementById(id);
+  var cv = pt.innerHTML;
+
+  // Remove whatever was there before.
+  emptyDomNode(id);
+  pt.innerHTML = "";
+
+  // Set up the input.
+  var inp = document.createElement("input");
+  var selid = id + "-input";
+  inp.setAttribute("id", selid);
+  inp.setAttribute("type", "text");
+  inp.setAttribute("size", "30");
+  inp.setAttribute("value", cv);
+  pt.appendChild(inp);
+
+  // Set up the event handler.
+  var _listener = function(ev) {
+    // Remove the event handlers from this ID.
+    inp.removeEventListener("change", _listener);
+    inp.removeEventListener("blur", _listener);
+    var v = inp.value;
+    previouslySelectedProject.details.title = v;
+    // Ensure we have NAPA in front of NAPA projects. (TODO)
+    // Change it back to text.
+    emptyDomNode(id);
+    fillId(id, previouslySelectedProject.details.title);
+    // Update the local schedule.
+    scheduleUpdated();
+  }
+  inp.addEventListener("change", _listener);
+  inp.addEventListener("blue", _listener);
+};
+
 const matchTime = function(v) {
   var m = /^(\d+)\s+\/\s+([\d\.]+)$/.exec(v);
   return m[2];
@@ -2940,7 +2977,7 @@ var savedDomNodes = {};
 const updateSemesterSummary = function() {
   // Get our helper to make the summary.
   var semsum = summariseSemester();
-  console.log(semsum);
+  //console.log(semsum);
   
   // Step 1: show the demand for each array type.
   // Have we already made the table?
@@ -3718,6 +3755,8 @@ const saveScheduleToServer = function() {
       var status = xhr.status;
       if (status === 200) {
 	printMessage("Schedule saved to the server.");
+	var resp = JSON.parse(xhr.response.received);
+	serverModificationTime = resp.modificationTime;
 	displayModificationTimes();
       } else {
 	printMessage("Failed to save schedule to the server.",
@@ -4138,6 +4177,9 @@ const staticEventHandlers = function() {
 
   var ts = document.getElementById("termSelected");
   addChangeHandler(ts, getSemester);
+
+  var pt = document.getElementById("projectselectedTitle");
+  addDoubleClickHandler(pt, titleChanger);
 };
 staticEventHandlers();
 
