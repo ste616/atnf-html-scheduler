@@ -1355,6 +1355,10 @@ sub semesterTimeSummary($$$$) {
 		    my $bstring = $o->{'requested_bands'}->[$j];
 		    $bstring =~ s/and//g;
 		    $bstring =~ s/\,/ /g;
+		    $bstring =~ s/\+/ /g;
+		    if ($bstring eq "3 6cm") {
+			$bstring = "4cm";
+		    }
 		    my @bands = split(/\s+/, $bstring);
 		    my $dt = $o->{'requested_times'}->[$j] / (($#bands + 1) * ($#{$a} + 1));
 		    $dt *= $o->{'nrepeats'}->[$j];
