@@ -49,7 +49,10 @@ if ($infile =~ /\.json$/) {
 
     # Create the JSON schedule output.
     &writeJSONSchedule($prog);
-    
+
+    # Create the file that goes back into OPAL.
+    &writeOPALFile($prog);
+
     close(P);
 }
 
@@ -1112,4 +1115,43 @@ sub writeJSONSchedule($) {
     printf O "%s\n", $json->pretty->encode(\@json_maint);
     close(O);
     
+}
+
+sub writeOPALFile($) {
+    my $prog = shift;
+
+    my %codes;
+    
+    for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
+	my $proj = $prog->{'project'}->[$i];
+	my $ident = $proj->{'ident'};
+	$codes{$ident} = { 'time' => 0, 'napa' => 0 };
+	if ($proj->{'type'} eq "NAPA") {
+	    $codes{$ident}->{'napa'} = 1;
+	}
+	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
+	    my $slot = $proj->{'slot'}->[$j];
+	    $codes{$ident}->{'time'} += $slot->{'scheduled_duration'};
+	}
+    }
+
+    my @p = keys %codes;
+    my @sp = sort @p;
+    my $sem = $prog->{'term'}->{'term'};
+
+    my $opalfile = sprintf("%s/%s-opal.csv", $obsStrings{'directory'},
+			   lc($obsStrings{'name'}));
+    open(O, ">".$opalfile) || die "Unable to open $opalfile for writing\n";
+    
+    for (my $i = 0; $i <= $#sp; $i++) {
+	my $y = 0;
+	if (($codes{$sp[$i]}->{'time'} > 0) ||
+	    ($codes{$sp[$i]}->{'napa'} == 1)) {
+	    $y = 1;
+	}
+	printf O ("\"%s\",\"%s\",\"%.1f\",\"%d\"\n",
+		  $sem, $sp[$i], $codes{$sp[$i]}->{'time'}, $y);
+    }
+
+    close(O);
 }
