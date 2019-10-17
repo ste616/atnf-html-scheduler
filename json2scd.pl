@@ -1126,7 +1126,7 @@ sub writeOPALFile($) {
 	my $proj = $prog->{'project'}->[$i];
 	my $ident = $proj->{'ident'};
 	$codes{$ident} = { 'time' => 0, 'napa' => 0 };
-	if ($proj->{'title'} =~ /^NAPA\:/) {
+	if ($proj->{'title'} =~ /^NAPA/) {
 	    $codes{$ident}->{'napa'} = 1;
 	}
 	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
