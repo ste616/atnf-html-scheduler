@@ -1126,7 +1126,7 @@ sub writeOPALFile($) {
 	my $proj = $prog->{'project'}->[$i];
 	my $ident = $proj->{'ident'};
 	$codes{$ident} = { 'time' => 0, 'napa' => 0 };
-	if ($proj->{'type'} eq "NAPA") {
+	if ($proj->{'title'} =~ /^NAPA\:/) {
 	    $codes{$ident}->{'napa'} = 1;
 	}
 	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
@@ -1137,7 +1137,7 @@ sub writeOPALFile($) {
 
     my @p = keys %codes;
     my @sp = sort @p;
-    my $sem = $prog->{'term'}->{'term'};
+    my $sem = $prog->{'term'}->{'term'}."S";
 
     my $opalfile = sprintf("%s/%s-opal.csv", $obsStrings{'directory'},
 			   lc($obsStrings{'name'}));
