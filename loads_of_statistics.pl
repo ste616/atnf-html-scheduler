@@ -7,6 +7,7 @@ use XML::Simple;
 use Data::Dumper;
 use strict;
 use JSON;
+use Text::GenderFromName;
 
 # Get a list of all the coversheet .xml files under this directory.
 my $coversheets = &get_coversheets();
@@ -19,6 +20,7 @@ my %categories;
 my %abstracts;
 my %codes;
 my %pi_details;
+my %metadata;
 my $cloudstring = "";
 
 # Pass the name of the observatory to assess statistics for as the
@@ -39,6 +41,7 @@ for (my $i = 0; $i <= $#semnames; $i++) {
 	'affiliation' => { 'country' => {} },
 	'phd' => 0
     };
+    $metadata{$semnames[$i]} = {};
     $sn++;
     my @obsnames = keys %{$coversheets->{$semnames[$i]}};
     for (my $j = 0; $j <= $#obsnames; $j++) {
@@ -162,8 +165,15 @@ sub get_pi_details($) {
 
     $rv{'gender'} = lc($cs->{'principalInvestigator'}->{'gender'}->{'content'});
     # TODO: if non-specified, guess based on name.
-    if ($rv{'gender'} eq "not given") {
-	$rv{'gender'} = "notspecified";
+    if (($rv{'gender'} ne "male") && ($rv{'gender'} ne "female")) {
+	my $guess = gender($cs->{'principalInvestigator'}->{'firstNames'}->{'content'});
+	if ($guess eq "m") {
+	    $rv{'gender'} = "male";
+	} elsif ($guess eq "f") {
+	    $rv{'gender'} = "female";
+	} else {
+	    $rv{'gender'} = "notspecified";
+	}
     }
 
     $rv{'country'} = lc($cs->{'principalInvestigator'}->{'affiliation'}->{'country'}->{'name'}->{'content'});
