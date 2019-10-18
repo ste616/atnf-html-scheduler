@@ -16,6 +16,9 @@ my @semnames = keys %{$coversheets};
 my %sems;
 my %observatories;
 my %categories;
+my %abstracts;
+my %codes;
+my %pi_details;
 my $cloudstring = "";
 
 # Pass the name of the observatory to assess statistics for as the
@@ -29,6 +32,13 @@ for (my $i = 0; $i <= $#semnames; $i++) {
     foreach my $k (keys %categories) {
 	push @{$categories{$k}}, 0;
     }
+    $abstracts{$semnames[$i]} = {};
+    $codes{$semnames[$i]} = [];
+    $pi_details{$semnames[$i]} = { 
+	'gender' => { 'male' => 0, 'female' => 0, 'notspecified' => 0 },
+	'affiliation' => { 'country' => {} },
+	'phd' => 0
+    };
     $sn++;
     my @obsnames = keys %{$coversheets->{$semnames[$i]}};
     for (my $j = 0; $j <= $#obsnames; $j++) {
@@ -39,9 +49,10 @@ for (my $i = 0; $i <= $#semnames; $i++) {
 	    $observatories{$obsnames[$j]} = 1;
 	}
 	my $allc = $coversheets->{$semnames[$i]}->{$obsnames[$j]};
-	for (my $k = 0; $k <= $#{$allc}; $k++) {
+	for (my $k = 0; $k <= $#{$allc->{'coversheets'}}; $k++) {
 	    # Get the coversheet as a string.
-	    my $cover = &get_coversheet_string($allc->[$k]);
+	    my $cover = &get_coversheet_string(
+		$allc->{'coversheets'}->[$k]);
 	    my $cats = &get_categories($cover);
 	    for (my $l = 0; $l <= $#{$cats}; $l++) {
 		my $c = $cats->[$l]->{'content'};
@@ -53,7 +64,19 @@ for (my $i = 0; $i <= $#semnames; $i++) {
 		}
 		$categories{$c}->[$sn] += 1;
 	    }
-	    $cloudstring .= $cover->{'abstractText'}->{'content'};
+	    $abstracts{$semnames[$i]}->{$allc->{'codes'}->[$k]} =
+		&get_abstracts($cover);
+	    push @{$codes{$semnames[$i]}}, $allc->{'codes'}->[$k];
+	    # Get details about the PI.
+	    my $pidetails = &get_pi_details($cover);
+	    $pi_details{$semnames[$i]}->{'gender'}->{$pidetails->{'gender'}} += 1;
+	    if (!defined $pi_details{$semnames[$i]}->{'affiliation'}->{'country'}->{$pidetails->{'country'}}) {
+		$pi_details{$semnames[$i]}->{'affiliation'}->{'country'}->{$pidetails->{'country'}} = 0;
+	    }
+	    $pi_details{$semnames[$i]}->{'affiliation'}->{'country'}->{$pidetails->{'country'}} += 1;
+	    if ($pidetails->{'phd'} eq "true") {
+		$pi_details{$semnames[$i]}->{'phd'} += 1;
+	    }
 	}
     }
 }
@@ -63,11 +86,13 @@ for (my $i = 0; $i <= $#semnames; $i++) {
 my %jo = ( 'observatory' => $obs );
 &json_add_semesters(\%sems, \%jo);
 &json_add_categories(\%categories, \%jo);
+&collate_project_totals($jo{'semesterNames'}, \%codes, \%jo);
 &collate_category_totals($jo{'semesterNames'}, \%sems,
 			 $jo{'categoryNames'}, \%categories, \%jo);
 &json_add_category_fractions($jo{'semesterNames'}, \%sems,
 			     $jo{'categoryNames'}, \%categories, \%jo);
-&json_add_abstracts($cloudstring, \%jo);
+&json_add_abstracts(\%abstracts, \%jo);
+&json_add_pidetails(\%pi_details, \%jo);
 
 # Output the JSON now.
 &output_json(\%jo);
@@ -113,12 +138,39 @@ sub get_coversheets() {
 	    $rlist->{$sem} = {};
 	}
 	if (!defined $rlist->{$sem}->{$obs}) {
-	    $rlist->{$sem}->{$obs} = [];
+	    $rlist->{$sem}->{$obs} = { 'codes' => [], 
+				       'coversheets' => [] };
 	}
-	push @{$rlist->{$sem}->{$obs}}, $coversheets[$i];
+	push @{$rlist->{$sem}->{$obs}->{'coversheets'}}, $coversheets[$i];
+	push @{$rlist->{$sem}->{$obs}->{'codes'}}, $proj;
     }
 
     return $rlist;
+}
+
+sub get_abstracts($) {
+    my $cs = shift;
+
+    return { 'abstract' => $cs->{'abstractText'}->{'content'},
+	     'outreach' => $cs->{'outreachAbstractText'}->{'content'} };
+}
+
+sub get_pi_details($) {
+    my $cs = shift;
+
+    my %rv;
+
+    $rv{'gender'} = lc($cs->{'principalInvestigator'}->{'gender'}->{'content'});
+    # TODO: if non-specified, guess based on name.
+    if ($rv{'gender'} eq "not given") {
+	$rv{'gender'} = "notspecified";
+    }
+
+    $rv{'country'} = lc($cs->{'principalInvestigator'}->{'affiliation'}->{'country'}->{'name'}->{'content'});
+    
+    $rv{'phd'} = $cs->{'principalInvestigator'}->{'phdStudent'}->{'content'};
+    
+    return \%rv;
 }
 
 sub json_add_semesters($$) {
@@ -141,6 +193,14 @@ sub json_add_categories($$) {
     
 }
 
+sub json_add_pidetails($$) {
+    my $piref = shift;
+    my $jref = shift;
+
+    # Add details about the principal investigators to the JSON.
+    $jref->{'principalInvestigators'} = $piref;
+}
+
 sub collate_category_totals($$$$$) {
     my $semnames = shift;
     my $semref = shift;
@@ -160,6 +220,21 @@ sub collate_category_totals($$$$$) {
     }
 
     $jref->{'semesterCategoryTotals'} = \%semester_totals;
+}
+
+sub collate_project_totals($$$) {
+    my $semnames = shift;
+    my $coderef = shift;
+    my $jref = shift;
+
+    my %semester_nprojects;
+    # Collate the total number of proposals in each semester.
+    for (my $i = 0; $i <= $#{$semnames}; $i++) {
+	$semester_nprojects{$semnames->[$i]} =
+	    ($#{$coderef->{$semnames->[$i]}} + 1);
+    }
+
+    $jref->{'semesterNumProjects'} = \%semester_nprojects;
 }
 
 sub json_add_category_fractions($$$$$) {
@@ -188,11 +263,11 @@ sub json_add_category_fractions($$$$$) {
 }
 
 sub json_add_abstracts($$) {
-    my $cs = shift;
+    my $absref = shift;
     my $jref = shift;
 
-    # Add the string with all the abstracts to the JSON reference.
-    $jref->{'allAbstractsText'} = $cs;
+    # Add all the abstracts to the JSON output.
+    $jref->{'abstracts'} = $absref;
 }
 
 sub output_json($) {
