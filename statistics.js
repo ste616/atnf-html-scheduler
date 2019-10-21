@@ -23,7 +23,7 @@ const loadFile = function(fname, callback) {
 };
 
 const fileLoaded = function(data) {
-  console.log(fileLoaded);
+  console.log(data);
 };
 
 var atcaStats = loadFile(atcaFile, fileLoaded);
