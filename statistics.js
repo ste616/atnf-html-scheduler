@@ -22,7 +22,7 @@ const loadFile = function(fname, callback) {
   xhr.send();
 };
 
-const fileLoaded = function(data) {
+const fileLoaded = function(status, data) {
   console.log(data);
 };
 
