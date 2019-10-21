@@ -19,8 +19,10 @@ my %observatories;
 my %categories;
 my %abstracts;
 my %codes;
+my %accepted_projects;
 my %pi_details;
 my %metadata;
+my %project_types;
 my $cloudstring = "";
 
 # Pass the name of the observatory to assess statistics for as the
@@ -36,12 +38,40 @@ for (my $i = 0; $i <= $#semnames; $i++) {
     }
     $abstracts{$semnames[$i]} = {};
     $codes{$semnames[$i]} = [];
+    $accepted_projects{$semnames[$i]} = 
+	&get_successful_projects($obs, $semnames[$i]);
     $pi_details{$semnames[$i]} = { 
-	'gender' => { 'male' => 0, 'female' => 0, 'notspecified' => 0 },
+	'gender' => {
+	    'all' => { 'male' => 0, 'female' => 0, 'notspecified' => 0 },
+	    'phd' => { 'male' => 0, 'female' => 0, 'notspecified' => 0 },
+	    'non_napa_all' => { 'male' => 0, 'female' => 0, 'notspecified' => 0 },
+	    'non_napa_phd' => { 'male' => 0, 'female' => 0, 'notspecified' => 0 }
+	},
 	'affiliation' => { 'country' => {} },
 	'phd' => 0
     };
     $metadata{$semnames[$i]} = {};
+    $project_types{$semnames[$i]} = {
+	'proposed' => {
+	    'normal' => 0, 'napa' => 0, 'large' => 0, '1mhz' => 0,
+	    'zooms' => 0, '64mhz' => 0,	'pulsar' => 0, 'vlbi' => 0,
+	    'phd_normal' => 0, 'phd_napa' => 0,	'phd_large' => 0,
+	    'phd_1mhz' => 0, 'phd_zooms' => 0, 'phd_64mhz' => 0,
+	    'phd_pulsar' => 0, 'phd_vlbi' => 0, 'male_pi' => 0,
+	    'female_pi' => 0, 'notspecified_pi' => 0,
+	    'phd_male_pi' => 0, 'phd_female_pi' => 0,
+	    'phd_notspecified_pi' => 0, 'continuing' => 0
+	}, 'successful' => {
+	    'normal' => 0, 'napa' => 0, 'large' => 0, '1mhz' => 0,
+	    'zooms' => 0, '64mhz' => 0,	'pulsar' => 0, 'vlbi' => 0,
+	    'phd_normal' => 0, 'phd_napa' => 0,	'phd_large' => 0,
+	    'phd_1mhz' => 0, 'phd_zooms' => 0, 'phd_64mhz' => 0,
+	    'phd_pulsar' => 0, 'phd_vlbi' => 0, 'male_pi' => 0,
+	    'female_pi' => 0, 'notspecified_pi' => 0,
+	    'male_phd_pi' => 0, 'female_phd_pi' => 0,
+	    'notspecified_phd_pi' => 0, 'continuing' => 0
+    }
+    };
     $sn++;
     my @obsnames = keys %{$coversheets->{$semnames[$i]}};
     for (my $j = 0; $j <= $#obsnames; $j++) {
@@ -70,15 +100,58 @@ for (my $i = 0; $i <= $#semnames; $i++) {
 	    $abstracts{$semnames[$i]}->{$allc->{'codes'}->[$k]} =
 		&get_abstracts($cover);
 	    push @{$codes{$semnames[$i]}}, $allc->{'codes'}->[$k];
+	    # Check if this project was accepted.
+	    my $proj_accepted = 0;
+	    for (my $l = 0; $l <= $#{$accepted_projects{$semnames[$i]}}; $l++) {
+		if ($accepted_projects{$semnames[$i]}->[$l] eq
+		    $allc->{'codes'}->[$k]) {
+		    $proj_accepted = 1;
+		    last;
+		}
+	    }
 	    # Get details about the PI.
 	    my $pidetails = &get_pi_details($cover);
-	    $pi_details{$semnames[$i]}->{'gender'}->{$pidetails->{'gender'}} += 1;
-	    if (!defined $pi_details{$semnames[$i]}->{'affiliation'}->{'country'}->{$pidetails->{'country'}}) {
-		$pi_details{$semnames[$i]}->{'affiliation'}->{'country'}->{$pidetails->{'country'}} = 0;
+	    my $pd = $pi_details{$semnames[$i]};
+	    my $pig = $pidetails->{'gender'};
+	    $pd->{'gender'}->{'all'}->{$pig} += 1;
+	    if (!defined $pd->{'affiliation'}->{'country'}->{$pidetails->{'country'}}) {
+		$pd->{'affiliation'}->{'country'}->{$pidetails->{'country'}} = 0;
 	    }
-	    $pi_details{$semnames[$i]}->{'affiliation'}->{'country'}->{$pidetails->{'country'}} += 1;
+	    $pd->{'affiliation'}->{'country'}->{$pidetails->{'country'}} += 1;
 	    if ($pidetails->{'phd'} eq "true") {
-		$pi_details{$semnames[$i]}->{'phd'} += 1;
+		$pd->{'phd'} += 1;
+		$pd->{'gender'}->{'phd'}->{$pig} += 1;
+	    }
+	    # Keep track of the number of different types of projects.
+	    my $ptype = lc($cover->{'type'}->{'content'});
+	    if ($ptype eq "large project") {
+		$ptype = "large";
+	    } elsif ($ptype eq "standard") {
+		$ptype = "normal";
+	    }
+	    $project_types{$semnames[$i]}->{'proposed'}->{$ptype} += 1;
+	    if ($proj_accepted == 1) {
+		$project_types{$semnames[$i]}->{'successful'}->{$ptype} += 1;
+	    }
+	    my $pitype = lc($pig."_pi");
+	    $project_types{$semnames[$i]}->{'proposed'}->{$pitype} += 1;
+	    if ($proj_accepted == 1) {
+		$project_types{$semnames[$i]}->{'successful'}->{$pitype} += 1;
+	    }		
+	    if ($pidetails->{'phd'} eq "true") {
+		$project_types{$semnames[$i]}->{'proposed'}->{"phd_".$ptype} += 1;
+		$project_types{$semnames[$i]}->{'proposed'}->{"phd_".$pitype} += 1;
+		if ($proj_accepted == 1) {
+		    $project_types{$semnames[$i]}->{'successful'}->{"phd_".$ptype} += 1;
+		    $project_types{$semnames[$i]}->{'successful'}->{"phd_".$pitype} += 1;
+		}
+	    }
+	    my $contstate = lc($cover->{'continuing'}->{'content'});
+	    if ($contstate eq "yes") {
+		$project_types{$semnames[$i]}->{'proposed'}->{'continuing'} += 1;
+		if ($proj_accepted == 1) {
+		    $project_types{$semnames[$i]}->{'successful'}->{'continuing'} += 1;
+		}
 	    }
 	}
     }
@@ -96,6 +169,7 @@ my %jo = ( 'observatory' => $obs );
 			     $jo{'categoryNames'}, \%categories, \%jo);
 &json_add_abstracts(\%abstracts, \%jo);
 &json_add_pidetails(\%pi_details, \%jo);
+&json_add_project_types(\%project_types, \%jo);
 
 # Output the JSON now.
 &output_json(\%jo);
@@ -112,7 +186,7 @@ sub get_categories($) {
 
 sub get_coversheet_string($) {
     my $csname = shift;
-    print "getting coversheet information from file $csname\n";
+    #print "getting coversheet information from file $csname\n";
     
     my $coverstring = `iconv -f utf-8 -t utf-8 -c $csname`;
     $coverstring =~ s/\&\#.*?\;//g;
@@ -166,7 +240,9 @@ sub get_pi_details($) {
     $rv{'gender'} = lc($cs->{'principalInvestigator'}->{'gender'}->{'content'});
     # TODO: if non-specified, guess based on name.
     if (($rv{'gender'} ne "male") && ($rv{'gender'} ne "female")) {
-	my $guess = gender($cs->{'principalInvestigator'}->{'firstNames'}->{'content'});
+	my $fname = $cs->{'principalInvestigator'}->{'firstNames'}->{'content'};
+	my $guess = gender($fname);
+	#print "guessed $fname to be $guess\n";
 	if ($guess eq "m") {
 	    $rv{'gender'} = "male";
 	} elsif ($guess eq "f") {
@@ -280,6 +356,14 @@ sub json_add_abstracts($$) {
     $jref->{'abstracts'} = $absref;
 }
 
+sub json_add_project_types($$) {
+    my $ptref = shift;
+    my $jref = shift;
+
+    # Add details about all the project types to the JSON output.
+    $jref->{'projectDetails'} = $ptref;
+}
+
 sub output_json($) {
     my $jref = shift;
 
@@ -291,4 +375,50 @@ sub output_json($) {
     open(O, ">".$fname) || die "Unable to open $fname for writing\n";
     printf O "%s\n", $json->pretty->encode($jref);
     close(O);
+}
+
+sub get_successful_projects($$) {
+    my $obs = shift;
+    my $sem = shift;
+
+    # Return a list of successful project codes, for a telescope and
+    # semester.
+    # The expected file name.
+    my $fname = sprintf("accepted_%s.csv", lc($sem));
+    my @acc;
+    if (!-e $fname) {
+	# File doesn't exist.
+	return \@acc;
+    }
+
+    open(A, $fname) || die "Unable to open $fname for reading";
+    my $l = 0;
+    my $code_idx = -1;
+    my $accepted_idx = -1;
+    while(<A>) {
+	chomp(my $line = $_);
+	$line =~ s/\"//g;
+	my @els = split(/\,/, $line);
+	if ($l == 0) {
+	    # Header line, get the element numbers.
+	    for (my $i = 0; $i <= $#els; $i++) {
+		if ($els[$i] eq "Project") {
+		    $code_idx = $i;
+		} elsif ($els[$i] eq "Accepted") {
+		    $accepted_idx = $i;
+		}
+	    }
+	    $l = 1;
+	} else {
+	    if ($els[$accepted_idx] == 1) {
+		if ((($obs eq "atca") && ($els[$code_idx] =~ /^C/)) ||
+		    (($obs eq "parkes") && ($els[$code_idx] =~ /^P/))) {
+		    push @acc, $els[$code_idx];
+		}
+	    }
+	}
+    }
+    close(A);
+
+    return \@acc;
 }
