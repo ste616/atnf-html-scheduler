@@ -4,16 +4,28 @@
     <script src="Chart.min.js"></script>
     <style>
       #atca_diversity { width: 100%; height: 400px; }
+      #div_atca_diversity_representation { width: 49%; float: left; height: 380px;
+      border: 2px black; margin: 0; }
+      #div_atca_diversity_success { width: 49%; height: 380px; border: 2px red;
+      float: left; }
+      #atca_diversity_representation { width: 95%; height: 95%; }
+      #atca_diversity_success { width: 95%; height: 95%; }
+      #parkes_diversity { clear: both; width: 100%; height: 400px; }
+      body { font-family: arial, sans-serif; }
     </style>
   </head>
   <body>
     <div id="diversity_plots">
       <div id="atca_diversity">
-	<canvas id="atca_diversity_representation"></canvas>
-
-	<canvas id="atca_diversity_success"
-		width="400" height="400"></canvas>
-	
+	<h1>ATCA</h1>
+	<div id="div_atca_diversity_representation">
+	  <h2>Principal Investigators</h1>
+	  <canvas id="atca_diversity_representation"></canvas>
+	</div>
+	<div id="div_atca_diversity_success">
+	  <h2>Successful PIs</h1>
+	  <canvas id="atca_diversity_success"></canvas>
+	</div>
       </div>
       <div id="parkes_diversity"></div>
     </div>
