@@ -165,6 +165,9 @@ const plotDiversity = function(data) {
 	  scaleLabel: {
 	    display: true,
 	    labelString: "% People"
+	  },
+	  ticks: {
+	    min: 0, max: 100
 	  }
 	}]
       }
