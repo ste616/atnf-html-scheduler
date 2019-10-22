@@ -183,4 +183,5 @@ const fileLoaded = function(status, data) {
   plotDiversity(data);
 };
 
-var atcaStats = loadFile(atcaFile, fileLoaded);
+loadFile(atcaFile, fileLoaded);
+loadFile(parkesFile, fileLoaded);
