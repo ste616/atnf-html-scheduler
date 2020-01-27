@@ -51,6 +51,29 @@ if ($reqtype eq "load") {
     my @semesters = &listSemesters($obs);
     $retjson->{'semesters'} = \@semesters;
     print to_json($retjson)."\n";
+} elsif ($reqtype eq "authenticate") {
+    my $retjson = { 'authenticated' => 0 };
+    my @authtokens = &loadAuthFile();
+    for (my $i = 0; $i <= $#authtokens; $i++) {
+	if ($q->param('auth') eq $authtokens[$i]) {
+	    $retjson->{'authenticated'} = 1;
+	    last;
+	}
+    }
+    print to_json($retjson)."\n";
+}
+
+sub loadAuthFile() {
+    my $authfile = "/usr/lib/cgi-bin/.auth";
+    open(A, $authfile);
+    my @authtokens;
+    while(<A>) {
+	chomp(my $line = $_);
+	push @authtokens, $line;
+    }
+    close(A);
+
+    return @authtokens;
 }
 
 sub loadLatest($$) {
