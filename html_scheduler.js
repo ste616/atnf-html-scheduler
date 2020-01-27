@@ -28,6 +28,7 @@ var previouslySelectedProject = null;
 var previouslySelectedSlot = null;
 var obs = null;
 var semester = null;
+var authenticated = 0;
 // This contains all the nodes for each project in the table.
 var tableRows = {};
 // This contains all the block Konva objects.
@@ -838,6 +839,48 @@ const setObservatory = function(sobs) {
 
 };
 
+// Get authenticated.
+const getAuthenticated = function(callback) {
+  // Check if we're online.
+  if (!navigator.onLine) {
+    // We assume we are authenticated, because if they don't have the
+    // schedule beforehand it doesn't matter.
+    authenticated = -1;
+  } else {
+    var userstring = window.location.hash;
+    if (userstring == "") {
+      // No user string was given, so we check the local storage.
+      userstring = window.localStorage.getItem("userstring");
+    } else {
+      // Get rid of the hash at the front.
+      userstring = userstring.substring(1);
+      // Save this in the local storage so we don't keep having to
+      // supply it.
+      window.localStorage.setItem("userstring", userstring);
+    }
+    console.log("userstring follows");
+    console.log(userstring);
+    if ((userstring != null) && (userstring != "")) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', spath + "?request=authenticate&" +
+	       "auth=" + userstring);
+      xhr.responseType = "json";
+      xhr.onload = function() {
+	var status = xhr.status;
+	if (status == 200) {
+	  authenticated = xhr.response.authenticated;
+	}
+      }
+      xhr.send();
+    }
+  }
+  if (typeof callback != "undefined") {
+    callback();
+  } else {
+    console.log("no callback specified to authentication routine");
+  }
+};
+
 // Set the semester.
 const setSemester = function(ssem) {
   var n = new Date();
@@ -1188,6 +1231,7 @@ const drawBlock = function(proj, slot) {
     // Redraw it the way it has already been specified.
     bo.group.absolutePosition(bo.absolutePosition);
     bo.redrawRequired = false;
+    bo.group.moveToBottom();
     return;
   }
   
@@ -1461,6 +1505,7 @@ const drawBlock = function(proj, slot) {
 
   }
   blockLayer.add(blockGroup);
+  blockGroup.moveToBottom();
   
   // Add this block to the block object array.
   var blockAddition = {
@@ -1681,7 +1726,7 @@ const highlightBlock = function(proj, slot) {
       bo.rects[i].on('transformend', genBlockTransform(bo, i));
     }
   }
-  bo.group.moveToTop();
+  bo.group.moveToBottom();
   // Make it possible to drag this block now.
   bo.group.draggable(true);
   blockLayer.draw();
@@ -2082,7 +2127,7 @@ const loadFile = function(callback, forceServer) {
   if (loadLocal == true) {
     printMessage("Loading local schedule.");
     callback(null, getLocalSchedule());
-  } else if (loadLocal == false) {
+  } else if ((loadLocal == false) && (authenticated == 1)) {
     var msg = "Loading server schedule for " + obsNames[obs];
     // We get the file from a CGI script.
     var xhr = new XMLHttpRequest();
@@ -3746,7 +3791,7 @@ const saveLocalSchedule = function() {
 };
 
 const saveScheduleToServer = function() {
-  if (scheduleData != null) {
+  if ((scheduleData != null) && (authenticated == 1)) {
     var xhr = new XMLHttpRequest();
     xhr.open("POST", spath, true)
     xhr.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
@@ -4189,10 +4234,14 @@ const pageInitBootstrap = function() {
   return loadFile(pageInit, false);
 };
 
+const pageInitBootstrapAuth = function() {
+  return getAuthenticated(pageInitBootstrap);
+}
+
 getObservatory();
 getSemester();
 checkServerTime(pageInitBootstrap);
-checkLocalTime(pageInitBootstrap);
+checkLocalTime(pageInitBootstrapAuth);
 
 const stateChange = function() {
   var s = showLineState();
