@@ -42,6 +42,7 @@ my $vlbi_length = "168,96,72,48,24,8";
 my $grades_file = "";
 my $breakthrough_time = 1000;
 my $fast_time = 450;
+my $ignore_scores = 0;
 my @legacy;
 my @funded;
 # You can add projects on the command line.
@@ -75,7 +76,8 @@ GetOptions(
     "colour=s" => \@colour_specs,
     "breakthrough=i" => \$breakthrough_time,
     "fast=i" => \$fast_time,
-    "funded=s" => \@funded
+    "funded=s" => \@funded,
+    "ignorescores" => \$ignore_scores
     ) or die "Error in command line arguments.\n";
 
 # Set some default colours.
@@ -118,11 +120,14 @@ my $mapfile = &downloadProposalMapping($sem, $map_file);
 &renameProposals($sem);
 
 # Step 6. download the scores file.
-my $scorefile = &downloadScores($sem, $grades_file);
+my $projectScores = {};
+if (!$ignore_scores) {
+    my $scorefile = &downloadScores($sem, $grades_file);
 
-# Step 7. Gather the scores.
-my $projectScores = &parseScoreFile($scorefile, \@legacy);
-#print Dumper($projectScores);
+    # Step 7. Gather the scores.
+    $projectScores = &parseScoreFile($scorefile, \@legacy);
+    #print Dumper($projectScores);
+}
 
 # Step 8. prepare the summary file.
 # Get the public holidays.
@@ -792,6 +797,11 @@ sub getObs($$$) {
 		}
 	    }
 	    my $recvs = $insentry->{'receivers'}->{'org.apache.commons.collections.set.ListOrderedSet'}->{'default'}->{'setOrder'}->{'string'};
+	    if (!defined $recvs) {
+		$recvs = $insentry->{'receivers'}->{'string'};
+	    }
+	    print "receivers:\n";
+	    print Dumper($recvs);
 	    if (ref($recvs) ne "ARRAY") {
 		my $h = $recvs;
 		$recvs = [ $h ];
@@ -1065,7 +1075,7 @@ sub getPublicHolidays() {
     
     # Get the information from the web site.
     my $res = $dates->scrape(
-	URI->new("https://www.industrialrelations.nsw.gov.au/public-holidays/public-holidays-nsw")
+	URI->new("https://www.industrialrelations.nsw.gov.au/public-holidays/public-holidays-in-nsw")
 	);
     
     # Work out the shape of the table.
@@ -1087,7 +1097,7 @@ sub getPublicHolidays() {
 	    my @de = split(/\s+/, $d);
 	    my $day = $de[0];
 	    my $month = &month2number($de[1]);
-	    if ($d ne "") {
+	    if (($d ne "") && ($month > 0)){
 		#printf "%4d - %02d - %02d\n", $year, $month, $day;
 		my $dt = DateTime->new(
 		    year => $year, month => $month, day => $day,
@@ -1202,6 +1212,7 @@ sub xmlParse($$) {
 	$a->{"principal"} = $principal;
 	$a->{"pi_email"} = $pi_email;
 
+	print "Getting obs table for $proj\n";
 	$a->{"observations"} = &getObs($obs, $obstable, $cover);
 
 	push @outproj, $a;
