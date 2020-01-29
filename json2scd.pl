@@ -16,6 +16,19 @@ my $infile = $ARGV[0];
 my %obsStrings = ( 'name' => "", 'short' => "",
 		   'directory' => "", 'full' => "");
 
+# Set some default colours.
+my %colours = (
+    'default' => "cdcdcd",
+    'unscheduled' => "9ae68d",
+    'MAINT' => "cdcdff",
+    'CONFIG' => "ffff8d",
+    'CABB' => "ffcdcd",
+    'NASA' => "ffcdcd",
+    'BL' => "ffcdff",
+    'FAST' => "ffc000",
+    'outside' => "ffcdcd"
+    );
+
 
 # Do something based on the file extension.
 if ($infile =~ /\.json$/) {
@@ -54,7 +67,221 @@ if ($infile =~ /\.json$/) {
     &writeOPALFile($prog);
 
     close(P);
+} elsif ($infile =~ /\.scd$/) {
+    # We've been given an SCD file, we change to JSON.
+    open(S, $infile) || die "Unable to open SCD $infile\n";
+    my @slines;
+    while(<S>) {
+	chomp(my $line = $_);
+	push @slines, $line;
+    }
+    # Get the modification time of the file.
+    my @fstats = stat(S);
+    close(S);
+    
+    # Convert this file to the requisite Perl structure.
+    my $jref = &parseScd($fstats[9], \@slines);
+
+    # Write out the file.
+    my $ofile = $infile;
+    $ofile =~ s/\.scd$/.json/;
+    open(O, ">".$ofile) || die "Unable to open $ofile for writing\n";
+    printf O "%s\n", $json->pretty->encode($jref);
+    close(O);
+    
 }
+
+sub parseScd($$) {
+    my $mtime = shift;
+    my $slines = shift;
+
+    # The return value.
+    my %jobj = (
+	'program' => {
+	    'observatory' => { 'observatory' => "none" },
+	    'colours' => { 'default' => $colours{'default'},
+			   'unscheduled' => $colours{'unscheduled'},
+			   'outsideSemester' => $colours{'outside'} },
+	    'term' => { 'term' => "none", 'version' => 1,
+			'configs' => [],
+			'start' => "none",
+			"end" => "none" },
+	    'special' => { 'lastReconfigNumber' => 0 },
+	    'project' => []
+	}, 'modificationTime' => $mtime
+	);
+    # Some metadata variables we'll need later.
+    # For the project.
+    my ($pcode, $ptype, $pi_name, $comments, $other, $title, $impossible,
+	$preferred, $clines);
+    # For the slot.
+    my ($sarrays, $sbands, $sbandwidths, $ssources, $spositions,
+	$sscores, $slststart, $slstend, $slstused,
+	$sstarttime, $sscheduledduration, $srequestedduration, $sscheduled);
+    my @allslots;
+    # For config list.
+    my @allconfigs;
+    my $earlyconfig = "";
+    my $earlyconfig_epoch = 0;
+    my $isconfig = 0;
+    
+    # Start going through the SCD.
+    for (my $i = 0; $i <= $#{$slines}; $i++) {
+	if ($slines->[$i] =~ /^Observatory\=(.*)$/) {
+	    # The name of the observatory.
+	    $jobj{'program'}->{'observatory'}->{'observatory'} = lc($1);
+	} elsif ($slines->[$i] =~ /^Term\=(.*)$/) {
+	    my $tname = $1;
+	    $tname =~ s/^(.*)T\d+$/$1/;
+	    $jobj{'program'}->{'term'}->{'term'} = $tname;
+	} elsif ($slines->[$i] =~ /^Start\=(.*?)\s.*$/) {
+	    $jobj{'program'}->{'term'}->{'start'} = $1;
+	} elsif ($slines->[$i] =~ /^End\=(.*?)\s.*$/) {
+	    $jobj{'program'}->{'term'}->{'end'} = $1;
+	} elsif ($slines->[$i] =~ /Version\=(\d+)$/) {
+	    $jobj{'program'}->{'term'}->{'version'} = $1 * 1;
+	} elsif ($slines->[$i] eq "<Project>") {
+	    # We have found a new project.
+	    $pcode = "";
+	    $ptype = "";
+	    $pi_name = "";
+	    $comments = "";
+	    $other = "";
+	    $title = "";
+	    $impossible = "";
+	    $preferred = "";
+	    $clines = 0;
+	    @allslots = ();
+	} elsif ($slines->[$i] eq "</Project>") {
+	    $isconfig = 0;
+	    # Create the project.
+	    my @pslots = @allslots;
+	    my $aref =  {
+		'ident' => $pcode, 'type' => $ptype,
+		'PI' => $pi_name, 'comments' => $comments,
+		'title' => $title, 'excluded_dates' => $impossible,
+		'preferred_dates' => $preferred,
+		'prefers_night' => 0, 'slot' => \@pslots
+	    };
+	    if (defined $colours{$pcode}) {
+		$aref->{'colour'} = $colours{$pcode};
+	    } elsif ($pcode =~ /^PX/) {
+		$aref->{'colour'} = $colours{'FAST'};
+	    } else {
+		$aref->{'colour'} = $colours{'default'};
+	    }
+	    push @{$jobj{'program'}->{'project'}}, $aref;
+	} elsif ($slines->[$i] =~ /^Ident\=(.*)$/) {
+	    $pcode = $1;
+	    if ($pcode eq "CONFIG") {
+		$isconfig = 1;
+	    }
+	} elsif ($slines->[$i] =~ /^PI\=(.*)$/) {
+	    $pi_name = $1;
+	} elsif ($slines->[$i] =~ /^Type\=(.*)$/) {
+	    $ptype = $1;
+	} elsif ($slines->[$i] =~ /^NumComments\=(\d+)$/) {
+	    $clines = $1 * 1;
+	} elsif ($clines > 0) {
+	    $comments .= $slines->[$i];
+	    $clines--;
+	} elsif ($slines->[$i] =~ /^Title\=(.*)$/) {
+	    $title = $1;
+	} elsif ($slines->[$i] eq "<Slot>") {
+	    # We have found a new slot.
+	    $sarrays = "";
+	    $sbands = [];
+	    $sbandwidths = "";
+	    $ssources = "";
+	    $spositions = { 'ra' => "", 'dec' => "" };
+	    $sstarttime = 0;
+	    $sscores = 0.0;
+	    $slststart = "00:00";
+	    $slstend = "23:59";
+	    $slstused = 0;
+	    $sstarttime = 0;
+	    $sscheduledduration = 0;
+	    $srequestedduration = 0;
+	    $sscheduled = 0;
+	} elsif ($slines->[$i] eq "</Slot>") {
+	    # Create the slot.
+	    push @allslots, {
+		'array' => $sarrays, 'bands' => $sbands,
+		'bandwidth' => $sbandwidths, 'source' => $ssources,
+		'position' => $spositions, 
+		'requested_duration' => $srequestedduration,
+		'scheduled_duration' => $sscheduledduration,
+		'scheduled_start' => $sstarttime,
+		'scheduled' => $sscheduled,
+		'rating' => $sscores,
+		'lst_limits_used' => $slstused,
+		'lst_start' => $slststart, 'lst_end' => $slstend
+	    };
+	    if ($isconfig == 1) {
+		push @allconfigs, $sarrays;;
+		if (($sscheduled == 1) && (($sstarttime < $earlyconfig_epoch) ||
+					   ($earlyconfig_epoch == 0))) {
+		    $earlyconfig_epoch = $sstarttime;
+		    $earlyconfig = $sarrays;
+		}
+	    }
+	} elsif ($slines->[$i] =~ /^Array\=(.*)$/) {
+	    $sarrays = $1;
+	} elsif ($slines->[$i] =~ /^Bands\=(.*)$/) {
+	    my @bands = split(/[\,\/]/, $1);
+	    $sbands = \@bands;
+	} elsif ($slines->[$i] =~ /^Bandwidths\=(.*)$/) {
+	    $sbandwidths = $1;
+	} elsif ($slines->[$i] =~ /^Source\=(.*)$/) {
+	    $ssources = $1;
+	} elsif ($slines->[$i] =~ /^RA\=(.*)$/) {
+	    $spositions->{'ra'} = $1;
+	} elsif ($slines->[$i] =~ /^Dec\=(.*)$/) {
+	    $spositions->{'dec'} = $1;
+	} elsif ($slines->[$i] =~ /^Rating\=(.*)$/) {
+	    my $r = $1;
+	    if ($r eq "X") {
+		$sscores = 5.0;
+	    } else {
+		$sscores = $r * 1.0;
+	    }
+	} elsif ($slines->[$i] =~ /^SidTimStart\=(.*)$/) {
+	    $slststart = &lst2string($1);
+	} elsif ($slines->[$i] =~ /^SidTimEnd\=(.*)$/) {
+	    $slstend = &lst2string($1);
+	} elsif ($slines->[$i] =~ /^LSTLimitsUsed\=(.*)$/) {
+	    $slstused = ($1 eq "true") ? 1 : 0;
+	} elsif ($slines->[$i] =~ /^Start1\=(.*)$/) {
+	    my $st = &scdStringToDatetime($1);
+	    $sstarttime = $st->epoch();
+	} elsif ($slines->[$i] =~ /^SchDuration1\=(.*)$/) {
+	    $sscheduledduration = $1 / 3600000.0;
+	} elsif ($slines->[$i] =~ /^ReqDuration\=(.*)$/) {
+	    $srequestedduration = $1 / 3600000.0;
+	} elsif ($slines->[$i] =~ /^Scheduled\=(.*)$/) {
+	    $sscheduled = ($1 eq "true") ? 1 : 0;
+	}
+    }
+
+    # Work out the configs.
+    push @{$jobj{'program'}->{'term'}->{'configs'}}, $earlyconfig;
+    for (my $i = 0; $i <= $#allconfigs; $i++) {
+	my $on = 0;
+	for (my $j = 0; $j <= $#{$jobj{'program'}->{'term'}->{'configs'}}; $j++) {
+	    if ($allconfigs[$i] eq $jobj{'program'}->{'term'}->{'configs'}->[$j]) {
+		$on = 1;
+		last;
+	    }
+	}
+	if ($on == 0) {
+	    push @{$jobj{'program'}->{'term'}->{'configs'}}, $allconfigs[$i];
+	}
+    }
+    
+    return \%jobj;
+}
+
+
 
 sub fillObsStrings($) {
     my $prog = shift;
@@ -389,6 +616,17 @@ sub lstConverter($) {
     return $lstsec;
 }
 
+sub lst2string($) {
+    my $lstms = shift;
+
+    my $lstd = $lstms / 86400000.0;
+    my $lsth = floor($lstd * 24.0);
+    my $lstm = floor(($lstd * 24.0 - $lsth) * 60);
+    my $lsts = sprintf("%02d:%02d", $lsth, $lstm);
+
+    return $lsts;
+}
+
 sub epoch2timeString($$) {
     my $epoch = shift;
     my $dateonly = shift;
@@ -457,6 +695,16 @@ sub stringToDatetime($) {
     my $dt = DateTime->new(
 	year => $dels[0], month => $dels[1], day => $dels[2],
 	hour => 0, minute => 0, second => 0 );
+    return $dt;
+}
+
+sub scdStringToDatetime($) {
+    my $dstring = shift;
+
+    my @dels = split(/[\/\s\:]/, $dstring);
+    my $dt = DateTime->new(
+	year => $dels[0], month => $dels[1], day => $dels[2],
+	hour => $dels[3], minute => $dels[4], second => $dels[5] );
     return $dt;
 }
 
