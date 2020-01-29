@@ -1243,6 +1243,11 @@ const drawBlock = function(proj, slot) {
   var endDayIdx = calcDayNumber(
     easternStandardTime(endingDate(proj, slot))) - 1;
 
+  if ((startDayIdx >= allDates.length) ||
+      (endDayIdx >= allDates.length)) {
+    return;
+  }
+  
   var blockGroup = new Konva.Group({
     draggable: false
   });
@@ -1250,7 +1255,7 @@ const drawBlock = function(proj, slot) {
   var blockRects = [];
   var blockTextOpts = [];
   var blockTexts = [];
-  
+
   for (var i = startDayIdx; i <= endDayIdx; i++) {
     // Get the time range on this day.
     var d1 = allDates[i].getTime() / 1000;
@@ -1315,7 +1320,10 @@ const drawBlock = function(proj, slot) {
       fontSize: 16, fill: "black",
       type: "main", textPattern: "full"
     };
-    if (proj.ident == "MAINT") {
+    if (/^\!/.test(proj.slot[slot].source)) {
+      mainTitleOpts.text = proj.slot[slot].source.substr(1);
+      mainTitleOpts.textPattern = "full";
+    } else if (proj.ident == "MAINT") {
       mainTitleOpts.text = proj.title;
       mainTitleOpts.textPattern = "full";
     } else if (proj.ident == "CONFIG") {
@@ -1328,6 +1336,9 @@ const drawBlock = function(proj, slot) {
       mainTitleOpts.textPattern = "full";
     } else if (proj.ident == "CABB") {
       mainTitleOpts.text = "CABB";
+      mainTitleOpts.textPattern = "full";
+    } else if (proj.type == "BL") {
+      mainTitleOpts.text = "BL";
       mainTitleOpts.textPattern = "full";
     }
     blockTextOpts.push(mainTitleOpts);
@@ -1400,10 +1411,14 @@ const drawBlock = function(proj, slot) {
     blockGroup.add(mainTitleText);
 
     // More text for the ASTRO blocks.
-    if (proj.type == "ASTRO") {
+    if ((proj.type == "ASTRO") || (proj.type == "BL")) {
+      var srcText = proj.slot[slot].source;
+      if (/^\!/.test(srcText)) {
+	srcText = srcText.substr(1);
+      }
       var sourceTextOpts = {
 	x: blockOpts.x, y: blockOpts.y,
-	text: proj.slot[slot].source,
+	text: srcText,
 	fontSize: meas.supportFontSize,
 	fill: "black", type: "source"
       };
@@ -1469,6 +1484,14 @@ const drawBlock = function(proj, slot) {
 	}
       }
 
+      // Check for empty strings.
+      if (bandTextOpts.text.length == 2) {
+	showBand = false;
+      }
+      if (modeTextOpts.text.length == 2) {
+	showMode = false;
+      }
+      
       if (showSource) {
 	sourceText.offsetX(-1 * meas.textOffset);
 	sourceText.offsetY(-1 * meas.textOffset);
@@ -1558,6 +1581,7 @@ const drawConfiguration = function(title, start, end) {
   var totalHeight = 0;
   while (boxHeight > 0) {
     var labelHeight = (boxHeight > limitHeight) ? limitHeight : boxHeight;
+    console.log("array text = " + title);
     var arrayLabelString = new Konva.Text({
       x: boxLeft, y: boxTop + totalHeight, width: boxWidth, height: labelHeight,
       align: "center", verticalAlign: "middle", text: title.toUpperCase(),
@@ -2455,10 +2479,24 @@ const summariseSemester = function() {
     if (/^NAPA/.test(allProjects[i].title)) {
       isNapa = true;
     }
+    var isFunded = false;
+    if ((allProjects[i].type == "BL") ||
+	(/^PX/.test(allProjects[i].title))) {
+      isFunded = true;
+    }
     
     var projectTotalTime = 0;
     for (var j = 0; j < slots.length; j++) {
-      if (!isCalibration && !isLegacy && !isMaintenance && !isVlbi && !isNapa) {
+      // Check for time outside the semester.
+      if ((slots[j].scheduled_start < (semesterStart.getTime() / 1000)) ||
+	  ((slots[j].scheduled_start + slots[j].scheduled_duration * 3600) >
+	   (semesterEnd.getTime() / 1000))) {
+	console.log("excluding time from " + allProjects[i].ident);
+	continue;
+      }
+
+      if (!isCalibration && !isLegacy && !isMaintenance && !isVlbi && !isNapa &&
+	  !isFunded) {
 	r.timeSummary.requested += slots[j].requested_duration;
 	r.timeSummary.scheduled += slots[j].scheduled_duration;
 	projectTotalTime += slots[j].scheduled_duration;
@@ -2477,13 +2515,15 @@ const summariseSemester = function() {
 		   (slots[j].scheduled == 1)) {
 	  r.timeSummary.nCabb += 1;
 	}
+      } else if (isFunded) {
+	r.timeSummary.funded += slots[j].scheduled_duration;
       }
 
       if ((!isLegacy && (projectTotalTime >= projectLimit)) ||
 	  (isLegacy && (projectTotalTime >= legacyLimit))) {
 	continue;
       }
-      
+
       // Add to the correct array.
       if (!isMaintenance && !isVlbi && !isNapa) {
 	for (var sarr = 0; sarr < r.arrays.length; sarr++) {
@@ -2538,8 +2578,8 @@ const summariseSemester = function() {
 	      var larr = ps[k].toLowerCase();
 	      if (typeof r['arrays'][sarr][larr] != "undefined") {
 		r['arrays'][sarr][larr] += slots[j].requested_duration;
-	      } else {
-		console.log("found array string " + larr);
+	      /*} else {
+		console.log("found array string " + larr);*/
 	      }
 	    }
 	  }
@@ -3203,6 +3243,8 @@ const updateSemesterSummary = function() {
     savedDomNodes.legacyTime.innerHTML = semsum.timeSummary.legacy;
     savedDomNodes.cabbTime.innerHTML = semsum.timeSummary.nCabb;
   } else if (obs == "parkes") {
+    console.log(semsum.timeSummary.available + " hours available");
+    console.log(semsum.timeSummary);
     savedDomNodes.availableTime.innerHTML =
       semsum.timeSummary.available - semsum.timeSummary.scheduled -
       semsum.timeSummary.calibration - semsum.timeSummary.funded -
@@ -3617,6 +3659,7 @@ const drawArrayConfigurations = function() {
       break;
     }
 
+    console.log(slots[currentConfig]);
     drawConfiguration(slots[currentConfig].array,
 		      slots[currentConfig].scheduled_start,
 		      slots[nextConfig].scheduled_start);
@@ -4234,14 +4277,14 @@ const pageInitBootstrap = function() {
   return loadFile(pageInit, false);
 };
 
-const pageInitBootstrapAuth = function() {
-  return getAuthenticated(pageInitBootstrap);
-}
+const serverAuthCallback = function() {
+  checkServerTime(pageInitBootstrap);
+};
 
 getObservatory();
 getSemester();
-checkServerTime(pageInitBootstrap);
-checkLocalTime(pageInitBootstrapAuth);
+getAuthenticated(serverAuthCallback);
+checkLocalTime(pageInitBootstrap);
 
 const stateChange = function() {
   var s = showLineState();
