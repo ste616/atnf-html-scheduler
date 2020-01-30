@@ -41,6 +41,10 @@ const plotDiversity = function(data) {
   var femaleSuccessfulData = [];
   var malePhdSuccessfulData = [];
   var femalePhdSuccessfulData = [];
+  var unspecifiedData = [];
+  var unspecifiedPhdData = [];
+  var unspecifiedSuccessfulData = [];
+  var unspecifiedPhdSuccessfulData = [];
   for (var i = 0; i < data.semesterNames.length; i++) {
     var semName = data.semesterNames[i];
     if (data.projectDetails.hasOwnProperty(semName) &&
@@ -48,26 +52,36 @@ const plotDiversity = function(data) {
       labels.push(semName.toUpperCase());
       maleData.push(data.projectDetails[semName].proposed.male_pi);
       femaleData.push(data.projectDetails[semName].proposed.female_pi);
+      unspecifiedData.push(data.projectDetails[semName].proposed.notspecified_pi);
       malePhdData.push(data.projectDetails[semName].proposed.phd_male_pi);
       femalePhdData.push(data.projectDetails[semName].proposed.phd_female_pi);
+      unspecifiedPhdData.push(data.projectDetails[semName].proposed.phd_notspecified_pi);
       var msr = data.projectDetails[semName].successful.male_pi /
 	  data.projectDetails[semName].proposed.male_pi;
       var fsr = data.projectDetails[semName].successful.female_pi /
 	  data.projectDetails[semName].proposed.female_pi;
+      var usr = data.projectDetails[semName].successful.notspecified_pi /
+	  data.projectDetails[semName].proposed.notspecified_pi;
       maleSuccessfulData.push(msr * 100);
       femaleSuccessfulData.push(fsr * 100);
+      unspecifiedSuccessfulData.push(usr * 100);
       var mpsr = data.projectDetails[semName].successful.phd_male_pi /
 	  data.projectDetails[semName].proposed.phd_male_pi;
       var fpsr = data.projectDetails[semName].successful.phd_female_pi /
 	  data.projectDetails[semName].proposed.phd_female_pi;
+      var upsr = data.projectDetails[semName].successful.phd_notspecified_pi /
+	  data.projectDetails[semName].proposed.phd_notspecified_pi;
       malePhdSuccessfulData.push(mpsr * 100);
       femalePhdSuccessfulData.push(fpsr * 100);
+      unspecifiedPhdSuccessfulData.push(upsr * 100);
     }
   }
   var maleColor = "#ffd700";
   var malePhdColor = "#32cd32";
   var femaleColor = "#6495ed";
   var femalePhdColor = "#ff0000";
+  var unspecifiedColor = "#ff00ff";
+  var unspecifiedPhdColor = "#000000";
 
   var configRepresentation = {
     type: 'line',
@@ -93,7 +107,18 @@ const plotDiversity = function(data) {
 	data: femalePhdData,
 	fill: false,
 	backgroundColor: femalePhdColor, borderColor: femalePhdColor
-      }]},
+      }, {
+	label: "Unspecified",
+	data: unspecifiedData,
+	fill: false,
+	backgroundColor: unspecifiedColor, borderColor: unspecifiedColor
+      }, {
+	label: "PhD Unspecified",
+	data: unspecifiedPhdData,
+	fill: false,
+	backgroundColor: unspecifiedPhdColor, borderColor: unspecifiedPhdColor
+      } 
+         ]},
     options: {
       responsive: true,
       title: {
@@ -145,6 +170,16 @@ const plotDiversity = function(data) {
 	data: femalePhdSuccessfulData,
 	fill: false,
 	backgroundColor: femalePhdColor, borderColor: femalePhdColor
+      }, {
+	label: "Unspecified",
+	data: unspecifiedSuccessfulData,
+	fill: false,
+	backgroundColor: unspecifiedColor, borderColor: unspecifiedColor
+      }, {
+	label: "PhD Unspecified",
+	data: unspecifiedPhdSuccessfulData,
+	fill: false,
+	backgroundColor: unspecifiedPhdColor, borderColor: unspecifiedPhdColor
       }]},
     options: {
       responsive: true,
