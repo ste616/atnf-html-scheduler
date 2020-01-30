@@ -858,8 +858,6 @@ const getAuthenticated = function(callback) {
       // supply it.
       window.localStorage.setItem("userstring", userstring);
     }
-    console.log("userstring follows");
-    console.log(userstring);
     if ((userstring != null) && (userstring != "")) {
       var xhr = new XMLHttpRequest();
       xhr.open('GET', spath + "?request=authenticate&" +
@@ -1581,7 +1579,6 @@ const drawConfiguration = function(title, start, end) {
   var totalHeight = 0;
   while (boxHeight > 0) {
     var labelHeight = (boxHeight > limitHeight) ? limitHeight : boxHeight;
-    console.log("array text = " + title);
     var arrayLabelString = new Konva.Text({
       x: boxLeft, y: boxTop + totalHeight, width: boxWidth, height: labelHeight,
       align: "center", verticalAlign: "middle", text: title.toUpperCase(),
@@ -2488,9 +2485,10 @@ const summariseSemester = function() {
     var projectTotalTime = 0;
     for (var j = 0; j < slots.length; j++) {
       // Check for time outside the semester.
-      if ((slots[j].scheduled_start < (semesterStart.getTime() / 1000)) ||
-	  ((slots[j].scheduled_start + slots[j].scheduled_duration * 3600) >
-	   (semesterEnd.getTime() / 1000))) {
+      if ((slots[j].scheduled) &&
+	  ((slots[j].scheduled_start < (semesterStart.getTime() / 1000)) ||
+	   ((slots[j].scheduled_start + slots[j].scheduled_duration * 3600) >
+	    (semesterEnd.getTime() / 1000)))) {
 	console.log("excluding time from " + allProjects[i].ident);
 	continue;
       }
