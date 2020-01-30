@@ -60,7 +60,7 @@ const highlightedBlockStroke = 4;
 const localKey = "atnfSchedule";
 const observatoryKey = "atnfObservatory";
 const semesterKey = "atnfSemester";
-const spath = "/cgi-bin/scheduler.pl";
+const spath = "/cgi-bin/obstools/web_scheduler/scheduler.pl";
 const obsNames = { 'atca': "ATCA", 'parkes': "Parkes" };
 
 // An object to describe config compatibility.
@@ -561,7 +561,7 @@ const zeroPadNumber = function(n, l) {
 
 // Add one or more classes to a DOM element.
 const domAddClasses = function(e, addClasses) {
-  if ((typeof e == "undefined") || (e == "undefined")) {
+  if ((typeof e == "undefined") || (e == "undefined") || (e == null)) {
     return;
   }
   
@@ -586,7 +586,7 @@ const domAddClasses = function(e, addClasses) {
 
 // Remove one or more classes to a DOM element.
 const domRemoveClasses = function(e, removeClasses) {
-  if ((typeof e == "undefined") || (e == "undefined")) {
+  if ((typeof e == "undefined") || (e == "undefined") || (e == null)) {
     return;
   }
 
@@ -1292,7 +1292,7 @@ const drawBlock = function(proj, slot) {
     for (var j = hh1; j < hh2; j++) {
       var ti = Math.floor(j / 2);
       fillColour = "#" + proj.colour;
-      if (ti % 2) {
+      if (ti % 2 == 0) {
 	fillColour = "#ffffff";
       }
       var hhRectOpts = {
@@ -1629,7 +1629,7 @@ const drawDay = function(n, d, g, dd, c, t, g2) {
     // Draw an hour grid.
     for (var j = 0; j < 24; j++) {
       fillColour = "#" + scheduleData.program.colours.unscheduled;
-      if (j % 2) {
+      if (j % 2 == 0) {
 	fillColour = "#ffffff";
       }
       var hourRect = new Konva.Rect({
@@ -1832,6 +1832,16 @@ const setupCanvas = function(data) {
   for (var i = -1; i <= nDays; i++) {
     var pdate = new Date();
     pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
+    if (pdate.getHours() != 0) {
+      // We've likely moved into or out of daylight savings.
+      if (pdate.getHours() == 23) {
+	// We've moved out of daylight savings.
+	pdate.setTime(pdate.getTime() + 3600 * 1000);
+      } else {
+	// Moved into daylight savings.
+	pdate.setTime(pdate.getTime() - 3600 * 1000);
+      }
+    }
     allSunDates.push(pdate);
   }
   allDates = allSunDates.slice(1, nDays);
@@ -3601,7 +3611,7 @@ const arrayCompatible = function(config, required) {
   } else {
     lrequired = [ required.toLowerCase() ];
   }
-  for (var i = 0; i < lrequired.lenght; i++) {
+  for (var i = 0; i < lrequired.length; i++) {
     if (configDescriptor[obs].hasOwnProperty(lconfig)) {
       if (configDescriptor[obs][lconfig].indexOf(lrequired[i]) >= 0) {
 	return true;
