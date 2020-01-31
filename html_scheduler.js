@@ -1821,8 +1821,12 @@ const setupCanvas = function(data) {
   } else if (semester == "OCT") {
     semesterStartMonth = 10;
   }
-  semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);
+  semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);  
   semesterStart.setHours(0);
+  if (semesterStart.getTimezoneOffset() < -600) {
+    // We start in daylight savings.
+    semesterStart.setHours(1);
+  }
   //semesterStart.setHours(14);
   // Subtract a few days.
   scheduleFirst = new Date();
@@ -1832,7 +1836,7 @@ const setupCanvas = function(data) {
   for (var i = -1; i <= nDays; i++) {
     var pdate = new Date();
     pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
-    if (pdate.getHours() != 0) {
+    /*if (pdate.getHours() != 0) {
       // We've likely moved into or out of daylight savings.
       if (pdate.getHours() == 23) {
 	// We've moved out of daylight savings.
@@ -1841,7 +1845,7 @@ const setupCanvas = function(data) {
 	// Moved into daylight savings.
 	pdate.setTime(pdate.getTime() - 3600 * 1000);
       }
-    }
+    }*/
     allSunDates.push(pdate);
   }
   allDates = allSunDates.slice(1, nDays);
