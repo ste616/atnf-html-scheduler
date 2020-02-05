@@ -1256,8 +1256,15 @@ const drawBlock = function(proj, slot) {
 
   for (var i = startDayIdx; i <= endDayIdx; i++) {
     // Get the time range on this day.
-    var d1 = allDates[i].getTime() / 1000;
-    var d2 = allDates[i + 1].getTime() / 1000;
+      var d1 = allDates[i].getTime() / 1000;
+      if (allDates.length == (i + 1)) {
+	  // Add another date.
+	  var pdate = new Date();
+	  pdate.setTime(allDates[i].getTime() + 86400 * 1000);
+	  allDates.push(pdate);
+      }
+	  
+      var d2 = allDates[i + 1].getTime() / 1000;
     var s1 = d1;
     var ts1 = easternStandardTime(proj.slot[slot].scheduled_start * 1000)
     if (ts1 > s1) {
