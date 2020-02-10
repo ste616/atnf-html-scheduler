@@ -3,7 +3,6 @@
 use CGI qw (:standard);
 use CGI::Carp qw( fatalsToBrowser );
 use JSON;
-use File::Slurp;
 use DateTime;
 use strict;
 
@@ -11,6 +10,7 @@ $CGI::POST_MAX = 2500000;
 $CGI::DISABLE_UPLOADS = 0;
 
 my $q = CGI->new;
+my $root_dir = "/n/ste616/usr/schedules";
 
 print $q->header(
     -type => "application/json"
@@ -64,7 +64,7 @@ if ($reqtype eq "load") {
 }
 
 sub loadAuthFile() {
-    my $authfile = "/usr/lib/cgi-bin/.auth";
+    my $authfile = $root_dir."/.auth";
     open(A, $authfile);
     my @authtokens;
     while(<A>) {
@@ -80,7 +80,7 @@ sub loadLatest($$) {
     my $obs = shift;
     my $term = shift;
 
-    my $pattern = "schedule-$obs";
+    my $pattern = $root_dir."/schedule-$obs";
     if ($term ne "") {
 	$pattern .= "-$term";
     }
@@ -88,7 +88,9 @@ sub loadLatest($$) {
     # Load the latest JSON file we have.
     my @files = `ls -t $pattern | head -n 1`;
     chomp(my $jsonfile = $files[0]);
-    my $json_content = read_file($jsonfile);
+    open(J, $jsonfile);
+    my $json_content = do { local $/; <J> };
+    close(J);
     return $json_content;
 }
 
@@ -97,12 +99,12 @@ sub listSemesters($) {
     
     # Return a list of the semesters that we have schedules for.
     my @semesters;
-    open(L, "-|") || exec "ls -t schedule-$obs*.json";
+    open(L, "-|") || exec "ls -t ".$root_dir."/schedule-$obs*.json";
     while(<L>) {
 	chomp;
 	my $line = $_;
-	if (($line =~ /^schedule\-$obs\-(.*)\-.*\.json$/) ||
-	    ($line =~ /^schedule\-$obs\-([^-]*)\.json$/)) {
+	if (($line =~ /schedule\-$obs\-(.*)\-.*\.json$/) ||
+	    ($line =~ /schedule\-$obs\-([^-]*)\.json$/)) {
 	    my $s = $1;
 	    my $sf = 0;
 	    for (my $i = 0; $i <= $#semesters; $i++) {
@@ -149,11 +151,13 @@ sub saveSchedule($$$) {
     
     # Create a new file. We put the date in this filename.
     my $ndate = DateTime->now();
-    my $outfile = sprintf "schedule-%s-%s-%4d%02d%02d_%02d%02d%02d.json",
-	$cjson->{'program'}->{'observatory'}->{'observatory'}, 
-	$cjson->{'program'}->{'term'}->{'term'},
-	$ndate->year(), $ndate->month(), $ndate->day(), $ndate->hour(),
-	$ndate->minute(), $ndate->second();
+    my $outfile = sprintf("%s/schedule-%s-%s-%4d%02d%02d_%02d%02d%02d.json",
+			  $root_dir,
+			  $cjson->{'program'}->{'observatory'}->{'observatory'}, 
+			  $cjson->{'program'}->{'term'}->{'term'},
+			  $ndate->year(), $ndate->month(), $ndate->day(), 
+			  $ndate->hour(),
+			  $ndate->minute(), $ndate->second());
     open(O, ">".$outfile) || return 1;
     print O $schedstring."\n";
     close(O);
