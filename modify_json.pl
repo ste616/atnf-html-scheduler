@@ -112,7 +112,7 @@ sub parseScoreFile($$) {
 	$line =~ s/^\s+//g;
 	if ($line =~ /^\<input type\=\"hidden\" id\=.* name\=.* value=\"(.*)\"\>$/) {
 	    my @scorebits = split(/\s+/, $1);
-	    my $ts = ($scorebits[1] eq "-1.0") ? $scorebits[2] : $scorebits[1];
+	    my $ts = ($scorebits[2] eq "-1.0") ? $scorebits[1] : $scorebits[2];
 	    # Over-ride this if it's a Legacy project.
 	    for (my $i = 0; $i <= $#{$legacy}; $i++) {
 		if ($legacy->[$i] eq $scorebits[0]) {
