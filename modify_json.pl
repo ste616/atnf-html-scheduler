@@ -12,9 +12,12 @@ use strict;
 
 # Get the arguments.
 my @codechanges;
+my @codedeletions;
 my $grades_file = "";
 my $json_input = "";
 my $json_output = "";
+my $json_reference = "";
+my @reference_copies;
 my @legacy;
 
 GetOptions(
@@ -22,7 +25,10 @@ GetOptions(
     "output=s" => \$json_output,
     "grades=s" => \$grades_file,
     "changecode=s{2}" => \@codechanges,
-    "legacy=s" => \@legacy
+    "legacy=s" => \@legacy,
+    "deletecode=s" => \@codedeletions,
+    "reference=s" => \$json_reference,
+    "refcopy=s" => \@reference_copies
     );
 
 my $changemade = 0;
@@ -34,7 +40,37 @@ close(J);
 my $json = JSON->new->allow_nonref;
 my $jref = $json->decode($jstring);
 
-# Do the code changes first.
+my $refjref;
+if (($json_reference ne "") && (-e $json_reference)) {
+    open(J, $json_reference) || die "Unable to open reference $json_reference\n";
+    my $rjstring = do { local $/; <J> };
+    close(J);
+    $refjref = $json->decode($rjstring);
+}
+
+# Do the code changes first, starting with deletions.
+for (my $i = 0; $i <= $#codedeletions; $i++) {
+    my $fdel = 0;
+    my $delidx = -1;
+    for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}}; $j++) {
+	if ($jref->{'program'}->{'project'}->[$j]->{'ident'} eq
+	    $codedeletions[$i]) {
+	    printf("DELETING PROJECT WITH CODE %s\n",
+		   $jref->{'program'}->{'project'}->[$j]->{'ident'});
+	    $delidx = $j;
+	    last;
+	}
+    }
+    if ($delidx >= 0) {
+	splice @{$jref->{'program'}->{'project'}}, $delidx, 1;
+	$fdel = 1;
+	$changemade = 1;
+    }
+    if ($fdel == 0) {
+	printf("UNABLE TO FIND PROJECT WITH CODE %s TO DELETE\n",
+	       $codedeletions[$i]);
+    }
+}
 for (my $i = 0; $i <= $#codechanges; $i += 2) {
     my $fchange = 0;
     for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}}; $j++) {
@@ -53,6 +89,35 @@ for (my $i = 0; $i <= $#codechanges; $i += 2) {
     if ($fchange == 0) {
 	printf("UNABLE TO FIND PROJECT WITH CODE %s TO CHANGE TO %s\n",
 	       $codechanges[$i], $codechanges[$i + 1]);
+    }
+}
+
+# Copy projects from the reference.
+if ((defined $refjref) && ($#reference_copies >= 0)) {
+    for (my $i = 0; $i <= $#reference_copies; $i++) {
+	my $refidx = -1;
+	my $jidx = -1;
+	for (my $j = 0; $j <= $#{$refjref->{'program'}->{'project'}}; $j++) {
+	    if ($refjref->{'program'}->{'project'}->[$j]->{'ident'} eq
+		$reference_copies[$i]) {
+		$refidx = $j;
+		last;
+	    }
+	}
+	for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}}; $j++) {
+	    if ($jref->{'program'}->{'project'}->[$j]->{'ident'} eq
+		$reference_copies[$i]) {
+		$jidx = $j;
+		last;
+	    }
+	}
+	if (($refidx >= 0) && ($jidx >= 0)) {
+	    printf("COPYING PROJECT %s FROM REFERENCE\n",
+		   $refjref->{'program'}->{'project'}->[$refidx]->{'ident'});
+	    splice(@{$jref->{'program'}->{'project'}}, $jidx, 1,
+		   $refjref->{'program'}->{'project'}->[$refidx]);
+	    $changemade = 1;
+	}
     }
 }
 
@@ -85,6 +150,7 @@ if (($grades_file ne "") && (-e $grades_file)) {
 	}
     }
 }
+
 
 # Update the modified time if we've made changes.
 if ($changemade == 1) {

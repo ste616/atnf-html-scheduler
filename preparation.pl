@@ -685,6 +685,9 @@ sub getObs($$$) {
 	$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.AtcaObservation'};
     } elsif ($obs eq "parkes") {
 	$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.ParkesContinuumObservation'};
+	if (!defined $obsarr) {
+	    $obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.ParkesSpectralObservation'};
+	}
     }	
     if (ref($obsarr) eq "HASH") {
 	# Turn it into an array.
@@ -1196,7 +1199,9 @@ sub xmlParse($$) {
 	$obstablestring =~ s/\&\#x.*?\;//g;
 	my $obstable = XMLin(
 	    $obstablestring, keyattr => [],
-	    forcearray => [ 'au.csiro.atnf.opal.domain.AtcaObservation' ] );
+	    forcearray => [ 'au.csiro.atnf.opal.domain.AtcaObservation',
+			    'au.csiro.atnf.opal.domain.ParkesContinuumObservation', 
+			    'au.csiro.atnf.opal.domain.ParkesSpectralObservation' ] );
 	my $cmnts = &zapper($cover->{'specialRequirements'}->{'content'})." ".
 	    &zapper($cover->{'preferredDates'}->{'content'})." ".
 	    &zapper($cover->{'impossibleDates'}->{'content'});
