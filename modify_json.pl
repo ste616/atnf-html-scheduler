@@ -19,6 +19,7 @@ my $json_output = "";
 my $json_reference = "";
 my @reference_copies;
 my @legacy;
+my $minuteoffset = 0;
 
 GetOptions(
     "input=s" => \$json_input,
@@ -28,7 +29,8 @@ GetOptions(
     "legacy=s" => \@legacy,
     "deletecode=s" => \@codedeletions,
     "reference=s" => \$json_reference,
-    "refcopy=s" => \@reference_copies
+    "refcopy=s" => \@reference_copies,
+    "minuteoffset=i" => \$minuteoffset
     );
 
 my $changemade = 0;
@@ -151,6 +153,18 @@ if (($grades_file ne "") && (-e $grades_file)) {
     }
 }
 
+# Put an offset into each time if requested.
+if ($minuteoffset != 0) {
+    for (my $i = 0; $i <= $#{$jref->{'program'}->{'project'}}; $i++) {
+	for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}->[$i]->{'slot'}}; $j++) {
+	    if ($jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'scheduled_start'} > 0) {
+		$jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'scheduled_start'} +=
+		    $minuteoffset * 60;
+		$changemade = 1;
+	    }
+	}
+    }
+}
 
 # Update the modified time if we've made changes.
 if ($changemade == 1) {
