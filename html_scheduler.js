@@ -426,6 +426,9 @@ const printDate = function(d) {
   return r;
 };
 
+const printDateTime = function(d) {
+  return d.toFormat('EEE MMM dd (ooo)');
+};
 // Convert radians to degrees.
 const rad2deg = function(r) {
   return (r * 180 / Math.PI);
@@ -1612,15 +1615,17 @@ const drawDay = function(n, d, g, dd, c, t, g2) {
       width: meas.dayLabelWidth, height: meas.dayHeight,
       stroke: "black", strokeWidth: 2, fill: '#ffffff'
     };
+    var ld = luxon.DateTime.fromJSDate(d).setZone("Australia/Sydney");
     // Colour the weekends differently.
-    if ((d.getDay() == 0) || (d.getDay() == 6)) {
+    //if ((d.getDay() == 0) || (d.getDay() == 6)) {
+    if ((ld.weekday == 6) || (ld.weekday == 7)) {
       dayLabelOpts.fill = "#ff9a8d";
     }
     var dayLabelBox = new Konva.Rect(dayLabelOpts);
     // Make the string to go into this box.
     var dateString = new Konva.Text({
       x: meas.marginLeft + 5, y: (meas.marginTop + n * meas.dayHeight),
-      text: printDate(d), fontSize: 16, verticalAlign: "middle",
+      text: printDateTime(ld), fontSize: 16, verticalAlign: "middle",
       height: meas.dayHeight
     });
     // Draw the outline of the box for the hours.
@@ -1811,6 +1816,17 @@ const relabelReconfigs = function() {
   }
 };
 
+const dateWithTimeZone = function(timeZone, year, month, day, hour, minute, second) {
+  var date = new Date(Date.UTC(year, month, day, hour, minute, second));
+  var utcDate = new Date(date.toLocaleString('en-us', { timeZone: "UTC" }));
+  var tzDate = new Date(date.toLocaleString('en-us', { timeZone: timeZone }));
+  var offset = utcDate.getTime() - tzDate.getTime();
+
+  date.setTime(date.getTime() + offset);
+
+  return date;
+};
+
 // Do all the things needed to create the canvas, after the schedule
 // has been loaded.
 const setupCanvas = function(data) {
@@ -1823,17 +1839,25 @@ const setupCanvas = function(data) {
 
   // Get the date for the first day of the schedule.
   var semesterStartMonth = -1;
+  var pdate = null;
   if (semester == "APR") {
     semesterStartMonth = 4;
+    pdate = luxon.DateTime.utc(year, (semesterStartMonth - 1), 31, 14, 0, 0);
   } else if (semester == "OCT") {
     semesterStartMonth = 10;
+    pdate = luxon.DateTime.utc(year, (semesterStartMonth - 1), 30, 14, 0, 0);
   }
-  semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);  
-  semesterStart.setHours(0);
-  if (semesterStart.getTimezoneOffset() < -600) {
+  semesterStart = pdate.toJSDate();
+  //semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);  
+  //semesterStart.setHours(0);
+  //console.log("setting time now");
+  //semesterStart = dateWithTimeZone("Australia/Sydney", year, (semesterStartMonth - 1), 1, 0, 0, 0);
+  console.log(semesterStart);
+  console.log(semesterStart.getTimezoneOffset());
+  //if (semesterStart.getTimezoneOffset() < -600) {
     // We start in daylight savings.
-    semesterStart.setHours(1);
-  }
+    //semesterStart.setHours(1);
+  //}
   //semesterStart.setHours(14);
   // Subtract a few days.
   scheduleFirst = new Date();
@@ -2593,12 +2617,15 @@ const summariseSemester = function() {
 	    if (!Array.isArray(slots[j].array)) {
 	      ps = [ slots[j].array ];
 	    }
-	    for (var k = 0; k < ps.length; k++) {
-	      var larr = ps[k].toLowerCase();
+	      for (var k = 0; k < ps.length; k++) {
+		  var larr = "any";
+		  if (typeof ps[k] != "undefined") {
+		      larr = ps[k].toLowerCase();
+		  }
 	      if (typeof r['arrays'][sarr][larr] != "undefined") {
 		r['arrays'][sarr][larr] += slots[j].requested_duration;
-	      /*} else {
-		console.log("found array string " + larr);*/
+	      } else {
+		  console.log("found array string " + larr);
 	      }
 	    }
 	  }
@@ -2659,6 +2686,7 @@ const selectSlot = function(slotnumber) {
   fillInput("sourceDeclination", psps.position.dec);
   fillInput("sourceLSTRise", psps.lst_start);
   fillInput("sourceLSTSet", psps.lst_end);
+  console.log(psps);
   var lstIndicator = document.getElementById("sourceUseLST");
   lstIndicator.checked = (psps.lst_limits_used == 0) ? false : true;
   
@@ -3305,8 +3333,11 @@ const posTime = function(x, y) {
   // Get the time stamp here.
   var epoch = (allDates[nDays].getTime() / 1000) +
       (nHalfHours * 1800);
+  console.log("clicked at ");
   
-  return { 'day': nDays, 'hour': (nHalfHours / 2), 'timestamp': epoch };
+  var r = { 'day': nDays, 'hour': (nHalfHours / 2), 'timestamp': epoch };
+  console.log(r);
+  return r;
 
 };
 
@@ -3323,6 +3354,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   // Get the project.
   var proj = getProjectByName(ident);
 
+  console.log("inserting into schedule");
   if (proj.details == null) {
     printMessage("Did not find the project to schedule!", "error");
     console.log("something has gone terribly wrong");
@@ -3338,7 +3370,9 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   }
 
   // Get the actual date for the day number.
+  var ld = luxon.DateTime.fromJSDate(allDates[time.day]).setZone("Australia/Sydney");
   var d = allDates[time.day];
+  //console.log(d);
   // Check if this is on the excluded days list.
   var excluded = false;
   if (proj.details.excluded_dates instanceof Array) {
@@ -3353,7 +3387,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   }
   // Check for weekends for certain projects.
   if ((ident == "MAINT") || (ident == "CONFIG")) {
-    if ((d.getDay() == 0) || (d.getDay() == 6)) {
+    if ((ld.weekday == 6) || (ld.weekday == 7)) {
       excluded = true;
     }
   }
@@ -3395,10 +3429,11 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     // This is a maintenance block, and we try to start at 8am
     // local on the day that was clicked. This doesn't
     // necessarily mean 8am AEST, given daylight savings.
-    startingDate = new Date(d.getTime());
+    /*startingDate = new Date(d.getTime());
     startingDate.setHours(8);
     startingDate.setMinutes(0);
-    startingDate.setSeconds(0);
+    startingDate.setSeconds(0); */
+    startingDate = ld.set({ hours: 8, minutes: 0, seconds: 0 }).toJSDate();
     hStart = startingDate.getUTCHours();
   } else if ((ident == "CABB") || (ident == "VLBI")) {
     // We just put this down where the user clicked.
@@ -3750,7 +3785,12 @@ const pageInit = function(status, data) {
   
   // Work out the semester time details.
   semesterStart = new Date(scheduleData.program.term.start);
+  //semesterStart = luxon.DateTime.fromISO(scheduleData.program.term.start + "T00:00:00", {
+  //  zone: "Australia/Sydney" })
   semesterEnd = new Date(scheduleData.program.term.end);
+  console.log(scheduleData.program.term);
+  console.log(semesterStart);
+  console.log(semesterEnd);
   
   setupCanvas(scheduleData);
   updateProjectTable();
