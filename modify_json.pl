@@ -20,6 +20,9 @@ my $json_reference = "";
 my @reference_copies;
 my @legacy;
 my $minuteoffset = 0;
+my @changecolour;
+my @addexperiment;
+
 
 GetOptions(
     "input=s" => \$json_input,
@@ -30,7 +33,9 @@ GetOptions(
     "deletecode=s" => \@codedeletions,
     "reference=s" => \$json_reference,
     "refcopy=s" => \@reference_copies,
-    "minuteoffset=i" => \$minuteoffset
+    "minuteoffset=i" => \$minuteoffset,
+    "changecolor=s{2}" => \@changecolour,
+    "add=s" => \@addexperiment
     );
 
 my $changemade = 0;
@@ -119,6 +124,87 @@ if ((defined $refjref) && ($#reference_copies >= 0)) {
 	    splice(@{$jref->{'program'}->{'project'}}, $jidx, 1,
 		   $refjref->{'program'}->{'project'}->[$refidx]);
 	    $changemade = 1;
+	}
+    }
+}
+
+# Add any new projects.
+if ($#addexperiment >= 0) {
+    # Format should be comma separated string.
+    # Elements are:
+    # 0    1  2     3     4      5        6     7    8    9      10 11  12   13
+    # code,PI,title,score,nslots,hoursper,array,band,mode,source,ra,dec,type,colour
+    for (my $i = 0; $i <= $#addexperiment; $i++) {
+	my @els = split(/\,/, $addexperiment[$i]);
+	# Check for duplicated code.
+	my $dcode = 0;
+	for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}}; $j++) {
+	    if ($jref->{'program'}->{'project'}->[$j]->{'ident'} eq
+		uc($els[0])) {
+		printf("UNABLE TO ADD PROJECT %s, DUPLICATE CODE FOUND\n",
+		       $jref->{'program'}->{'project'}->[$j]->{'ident'});
+		$dcode = 1;
+		last;
+	    }
+	}
+	if ($dcode == 0) {
+	    $els[0] = uc($els[0]);
+	    printf("ADDED PROJECT %s\n", $els[0]);
+	    my $np = {
+		'ident' => $els[0],
+		'title' => $els[2],
+		'preferred_dates' => "", 'excluded_dates' => [],
+		'comments' => "",
+		'type' => uc($els[12]),
+		'PI' => $els[1], 'pi_email' => "",
+		'colour' => $els[13], 'prefers_night' => 0,
+		'slot' => []
+	    };
+	    for (my $j = 0; $j < $els[4]; $j++) {
+		my $ns = {
+		    'scheduled_duration' => 0,
+		    'array' => $els[6],
+		    'lst_end' => "23:59",
+		    'lst_start' => "00:00",
+		    'source' => $els[9],
+		    'bandwidth' => $els[8],
+		    'requested_duration' => $els[5] * 1.0,
+		    'scheduled_start' => 0,
+		    'position' => { 'ra' => $els[10], 'dec' => $els[11] },
+		    'scheduled' => 0,
+		    'rating' => $els[3] * 1.0,
+		    'bands' => [ $els[7] ],
+		    'lst_limits_used' => 0
+		};
+		push @{$np->{'slot'}}, $ns;
+	    }
+	    push @{$jref->{'program'}->{'project'}}, $np;
+	    $changemade = 1;
+	}
+    }
+}
+
+# Change colours.
+if ($#changecolour >= 1) {
+    for (my $i = 0; $i <= $#changecolour; $i += 2) {
+	my $fchange = 0;
+	for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}}; $j++) {
+	    if ($jref->{'program'}->{'project'}->[$j]->{'ident'} eq
+		$changecolour[$i]) {
+		printf("CHANGED PROJECT %s FROM COLOUR %s to %s\n",
+		       $jref->{'program'}->{'project'}->[$j]->{'ident'},
+		       $jref->{'program'}->{'project'}->[$j]->{'colour'},
+		       $changecolour[$i + 1]);
+		$jref->{'program'}->{'project'}->[$j]->{'colour'} =
+		    $changecolour[$i + 1];
+		$fchange = 1;
+		$changemade = 1;
+		last;
+	    }
+	}
+	if ($fchange == 0) {
+	    printf("UNABLE TO FIND PROJECT %s TO CHANGE COLOUR\n",
+		   $changecolour[$i]);
 	}
     }
 }
