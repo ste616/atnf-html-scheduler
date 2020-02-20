@@ -777,6 +777,10 @@ sub ps_sch_box($$$) {
 	    }
 	} elsif ($proj->{'ident'} eq "MAINT") {
 	    $tstring = " () mnt_box";
+	} elsif ($proj->{'type'} eq "MAINT") {
+	    $tstring = sprintf " (%s) (%s) (%s) %.1f %.1f %.1f colnopi_box",
+	    $proj->{'title'}, substr($proj->{'title'}, 0, 5), substr($proj->{'title'}, 0, 5),
+	    0.8, 0.8, 1.0;
 	} elsif ($proj->{'ident'} eq "CABB") {
 	    $tstring = sprintf " (%s) () () () () () nasa_box", $slot->{'source'};
 	} elsif ($proj->{'ident'} eq "BL") {

@@ -309,8 +309,59 @@
  0 ds RL stroke
  M sb_dh hr 0 RM 0 ds RL stroke
  } def
+
+/colnopi_box
+ {/sb_b exch def
+ /sb_g exch def
+ /sb_r exch def
+ /sb_s3 exch def
+ /sb_s2 exch def
+ /sb_s1 exch def
+ /sb_dh exch def
+ /sb_h0 exch def
+ /sb_d exch def
+
+ x2 sb_h0 hr add y4 sb_d ds mul sub M CP
+
+ sb_r sb_g sb_b setrgbcolor
+ /x sb_h0 cvi def
+ x 2 mod 0 eq {/a x 1 sub def /b x 1 sub def}
+    {/a sb_h0 def /b x 1 add def} ifelse
+ /x sb_h0 sb_dh add cvi def
+ x 2 mod 0 eq {/d x def /c x 1 sub def}
+    {/d sb_h0 sb_dh add def /c x def} ifelse
+
+ x2 a hr add y4 sb_d ds mul sub M
+ a b ne {b a sub hr ds rect
+   b a sub 1 sub hr 0 RM} if
+ c b gt {c b sub 1 sub 2 idiv {2 hr 0 RM
+     1 hr ds rect
+     } repeat
+ c d ne {2 hr 0 RM
+   d c sub hr ds rect} if } if
+ fill
+ 0 setgray 
+
+ M CP
+ psB fh SF
+ /tst 0 def
+ sb_s1 stringwidth pop sb_dh hr lt
+ {sb_dh hr ds sb_s1 fh psB putcen}
+ {psb fh SF
+  sb_s2 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s2 fh psb putcen}
+  {psB fh SF
+  sb_s3 stringwidth pop sb_dh hr lt
+  {sb_dh hr ds sb_s3 fh psB putcen}
+  {/tst 1 def sb_dh hr ds sb_s3 fh psB putvert} ifelse } ifelse } ifelse
+
+ M CP
+ 0 ds RL stroke
+ M sb_dh hr 0 RM 0 ds RL stroke
+ } def
+
  
- /fast_box
+/fast_box
  {/sb_s6 exch def
  /sb_s5 exch def
  /sb_s4 exch def
@@ -425,7 +476,7 @@
  M sb_dh hr 0 RM 0 ds RL stroke
  } def
  
- /rx_box
+/rx_box
  {/sb_s2 exch def
  /sb_dh exch def
  /sb_h0 exch def
@@ -521,7 +572,7 @@
  0 ds RL stroke
  M sb_dh hr 0 RM 0 ds RL stroke
  } def
- 
+
 /nasa_box
  {/sb_s6 exch def
  /sb_s5 exch def
