@@ -1331,7 +1331,7 @@ const drawBlock = function(proj, slot) {
     if (/^\!/.test(proj.slot[slot].source)) {
       mainTitleOpts.text = proj.slot[slot].source.substr(1);
       mainTitleOpts.textPattern = "full";
-    } else if (proj.ident == "MAINT") {
+    } else if (proj.type == "MAINT") {
       mainTitleOpts.text = proj.title;
       mainTitleOpts.textPattern = "full";
     } else if (proj.ident == "CONFIG") {
@@ -1367,8 +1367,9 @@ const drawBlock = function(proj, slot) {
 	if (mainTitleOpts.textPattern == "full") {
 	  // Shrink to short.
 	  mainTitleOpts.textPattern = "short";
-	  if (proj.ident == "MAINT") {
-	    mainTitleOpts.text = "Maint";
+	    if (proj.type == "MAINT") {
+		mainTitleOpts.text = proj.title.substr(0, 5);
+	    //mainTitleOpts.text = "Maint";
 	  } else if (proj.ident == "CONFIG") {
 	    if (obs == "atca") {
 	      mainTitleOpts.text = "Reconf #" + proj.slot[slot].source;
@@ -2646,6 +2647,17 @@ const versionChanged = function() {
   updateLocalSchedule();
 };
 
+const downloadSchedule = function() {
+    // We allow the user to download the current JSON in local storage to
+    // their hard drive, as a precaution against data loss.
+    var a = document.createElement("a");
+    var content = JSON.stringify(getLocalSchedule());
+    var file = new Blob([content], { type: "text/plain" });
+    a.href = URL.createObjectURL(file);
+    a.download = localKey + "-" + obs + "-" + semester + ".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+};
 
 
 
@@ -4295,7 +4307,11 @@ const staticEventHandlers = function() {
 
   // Enable the revert button.
   var rb = document.getElementById("revertbutton");
-  addClickHandler(rb, revertScheduleToServerCheck);
+    addClickHandler(rb, revertScheduleToServerCheck);
+
+    // Enable the download button.
+    var db = document.getElementById("downloadbutton");
+    addClickHandler(db, downloadSchedule);
 
   var gd = document.getElementById("gooddates");
   addChangeHandler(gd, function() {
