@@ -951,16 +951,46 @@ sub writeTextSchedules($) {
     my $usage_file = sprintf "%s/schedule.txt", $obsStrings{'directory'};
     my $maint_file = sprintf("%s/%s_maint.txt", $obsStrings{'directory'},
 			     lc($obsStrings{'name'}));
+    # We also make a HTML file.
+    my $special_html = sprintf("%s/%s_observing_schedule.html", $obsStrings{'directory'},
+			       lc($obsStrings{'name'}));
     my @sorted_slots = &sortSlots($prog, 0);
     open(O, ">".$usage_file) || die "Unable to open $usage_file for writing\n";
     open(M, ">".$maint_file) || die "Unable to open $maint_file for writing\n";
+    open(H, ">".$special_html) || die "Unable to open $special_html for writing\n";
+
+    # Put the preamble in the HTML.
+    printf H ("<html><head><title>%s Observing Schedule</title></head>".
+	      "<body bgcolor = \"#FFFFFF\"\n", $obsStrings{'name'});
+    print H "<img src=\"/images/obs_schedule_header.gif\">\n";
+    print H "<hr><center>\n";
+    print H "<p><b><font color=blue size=5>Please Note: </font></b>All times in this schedule\n";
+    print H "are in <b>Australian Eastern Standard Time</b>.\n";
+    ## TODO: make this automatic.
+    print H "<br>Daylight Saving will \n";
+    printf H ("<p>This is version %d of the current schedule</p>\n", 
+	      $prog->{'term'}->{'version'});
+    my $mnth = substr($prog->{'term'}->{'term'}, 3, 3);
+    if ($mnth eq "OCT") {
+	$mnth = "October";
+    } else {
+	$mnth = "April";
+    }
+    printf H ("<table border><caption><font color=red><h2>%s Semester %d</h2>".
+	      "</font></caption>\n", $mnth, substr($prog->{'term'}->{'term'}, 0, 4));
+    print H "<tr align=center><td><b>Date</b></td><td><b>Day</b></td>\n";
+    print H "<td><b>Local Time (AEST) / Proposal</b></td><td><b>LST</b></td><td><b>\n";
+    print H "Observers</b></td><td><b>Friend</b></td>\n";
+    print H "<td><b>Receiver</b></td></tr>\n";
+
     my $ctime = &stringToDatetime($prog->{'term'}->{'start'})->subtract(
 	hours => 10 );
     my $config = &getConfig($prog, $ctime);
+    my @sphtml_lines;
     for (my $i = 0; $i <= $#sorted_slots; $i++) {
 	my $proj = $sorted_slots[$i]->{'proj'};
 	my $slot = $sorted_slots[$i]->{'slot'};
-	# Output is in UTC.
+	# Output is in UTC, except for the HTML in AEST.
 	if ($ctime->epoch() < $slot->{'scheduled_start'}) {
 	    # Directors time.
 	    printf O "%16s Directors time\n", &epoch2usage($ctime->epoch());
@@ -968,6 +998,11 @@ sub writeTextSchedules($) {
 		      &epoch2maint($ctime->epoch()),
 		      &epoch2maint($slot->{'scheduled_start'}),
 		      $config);
+	    push @sphtml_lines, &slotToDayEntries(
+		$ctime->epoch(),
+		$slot->{'scheduled_start'},
+		"<b>Director's Time                </b>",
+		".", ".", ".");
 	    $ctime = DateTime->from_epoch( 
 		epoch => $slot->{'scheduled_start'});
 	}
@@ -983,12 +1018,32 @@ sub writeTextSchedules($) {
 			  &epoch2maint($slot->{'scheduled_start'} +
 				       ($slot->{'scheduled_duration'} * 3600)),
 			  $slot->{'source'}, $config);
+		if (lc($obsStrings{'name'}) eq "parkes") {
+		    push @sphtml_lines, &slotToDayEntries(
+			$slot->{'scheduled_start'},
+			$slot->{'scheduled_start'} + ($slot->{'scheduled_duration'} * 3600),
+			"<b>Receiver Change (".$slot->{'array'}." in)                    </b>",
+			".", ".", ".");
+		} else {
+		    push @sphtml_lines, &slotToDayEntries(
+			$slot->{'scheduled_start'},
+			$slot->{'scheduled_start'} + ($slot->{'scheduled_duration'} * 3600),
+			"<b>Reconfiguration into ".$slot->{'array'}."</b>",
+			".", ".", ".");
+		}
 	    } else {
 		printf M ("%17s, %17s, Maintenance/test, %s\n",
 			  &epoch2maint($slot->{'scheduled_start'}),
 			  &epoch2maint($slot->{'scheduled_start'} +
 				       ($slot->{'scheduled_duration'} * 3600)),
 			  $config);
+		my @edate = &epoch2webSplit($slot->{'scheduled_start'} + (10 * 3600) +
+					    $slot->{'scheduled_duration'} * 3600);
+		push @sphtml_lines, &slotToDayEntries(
+		    $slot->{'scheduled_start'},
+		    $slot->{'scheduled_start'} + ($slot->{'scheduled_duration'} * 3600),
+		    "<b>Maintenance                   </b>",
+		    ".", ".", ".");
 	    }
 	} else {
 	    printf O ("%16s %s\n", &epoch2usage($slot->{'scheduled_start'}),
@@ -998,6 +1053,18 @@ sub writeTextSchedules($) {
 		      &epoch2maint($slot->{'scheduled_start'} +
 				   ($slot->{'scheduled_duration'} * 3600)),
 		      $proj->{'ident'}, $config);
+	    my $pstring = ($proj->{'ident'} eq "BL") ?
+		"<b>BL</b>" : "<b>".$proj->{'ident'}." </b>".$proj->{'title'}."(".$proj->{'PI'}.")";
+	    my $astring = (ref($slot->{'array'}) eq "ARRAY") ?
+		uc(join(" ", @{$slot->{'array'}})) : uc($slot->{'array'});
+	    push @sphtml_lines, &slotToDayEntries(
+		$slot->{'scheduled_start'},
+		$slot->{'scheduled_start'} + ($slot->{'scheduled_duration'} * 3600),
+		$pstring,
+		$proj->{'PI'}."...",
+		"<a href=\"/observing/schedules/friends.html\">ops-team".
+		"                                                                        </a>",
+		$astring);
 	}
 	$ctime = DateTime->from_epoch(
 	    epoch => ($slot->{'scheduled_start'} + 
@@ -1012,9 +1079,126 @@ sub writeTextSchedules($) {
 		  &epoch2maint($ctime->epoch()),
 		  &epoch2maint($etime->epoch()),
 		  $config);
+	push @sphtml_lines, &slotToDayEntries(
+	    $ctime->epoch(),
+	    $etime->epoch(),
+	    "<b>Director's Time                </b>",
+	    ".", ".", ".");
     }
+
+    my $cdate = "";
+    my $cday = "";
+    my $cproj = "";
+    my $clst = "";
+    my $cobs = "";
+    my $cfriend = "";
+    my $creceiver = "";
+    for (my $i = 0; $i <= $#sphtml_lines; $i++) {
+	for (my $j = 0; $j <= $#{$sphtml_lines[$i]->{'dates'}}; $j++) {
+	    if ($sphtml_lines[$i]->{'dates'}->[$j] ne $cdate) {
+		if ($cdate ne "") {
+		    printf H ("<tr valign=middle><td nowrap><font size=2>%s</font></td>".
+			      "<td nowrap><font size=2>%s</font></td>\n",
+			      $cdate, $cday);
+		    printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $cproj);
+		    printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $clst);
+		    printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $cobs);
+		    printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $cfriend);
+		    printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $creceiver);
+		    print H "</tr>\n";
+		}
+		$cdate = $sphtml_lines[$i]->{'dates'}->[$j];
+		$cday = $sphtml_lines[$i]->{'days'}->[$j];
+		$cproj = $sphtml_lines[$i]->{'times'}->[$j];
+		$clst = $sphtml_lines[$i]->{'lsts'}->[$j];
+		$cobs = $sphtml_lines[$i]->{'observers'}->[$j];
+		$cfriend = $sphtml_lines[$i]->{'friends'}->[$j];
+		$creceiver = $sphtml_lines[$i]->{'receivers'}->[$j];
+	    } else {
+		$cproj .= sprintf("<br>\n%s", $sphtml_lines[$i]->{'times'}->[$j]);
+		$clst .= sprintf("<br>\n%s", $sphtml_lines[$i]->{'lsts'}->[$j]);
+		$cobs .= sprintf("<br>\n%s", $sphtml_lines[$i]->{'observers'}->[$j]);
+		$cfriend .= sprintf("<br>\n%s", $sphtml_lines[$i]->{'friends'}->[$j]);
+		$creceiver .= sprintf("<br>\n%s", $sphtml_lines[$i]->{'receivers'}->[$j]);
+	    }
+	}
+    }
+    
+    # Close the HTML file.
+    # Close out the row.
+    #printf H ("<tr valign=middle><td nowrap><font size=2>%s</font></td>".
+    #	      "<td nowrap><font size=2>%s</font></td>\n",
+    #	      $cdate, $cday);
+    #printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $cproj);
+    #printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $clst);
+    #printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $cobs);
+    #printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $cfriend);
+    #printf H ("<td nowrap><font size=2>\n%s</font></td>\n", $creceiver);
+    #print H "</tr>\n";
+    print H "</table></center><hr><p>\n";
+    print H "<p><i>Enquiries to <a href=\"&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#115;p&#0105;".
+	"&#100;&#101;&#114;&#064;&#097;&#116;&#110;&#102;&#46;&#099;&#115;&#0105;&#114;&#0111;".
+	"&#046;&#097;&#0117;\">WebMaster</a></i><hr></body></html>\n";
+    
     close(O);
     close(M);
+    close(H);
+}
+
+sub slotToDayEntries($$$$$$) {
+    my $stime = shift;
+    my $etime = shift;
+    my $projstring = shift;
+    my $obsstring = shift;
+    my $friendstring = shift;
+    my $receiverstring = shift;
+
+    # Our return value.
+    my $rv = { 'dates' => [], 'days' => [], 'lsts' => [],
+	       'times' => [], 'observers' => [],
+	       'friends' => [], 'receivers' => [] };
+    
+    # Start and end times.
+    my $st = DateTime->from_epoch(epoch => $stime + (10 * 3600));
+    my $et = DateTime->from_epoch(epoch => $etime + (10 * 3600));
+    my $addt = 0;
+    for (my $i = $st->doy(), $addt = 0; $i <= $et->doy(); $i++, $addt += 24) {
+	my $ct = DateTime->from_epoch(epoch => $stime + (($addt + 10) * 3600));
+	my $cep = $stime + ($addt * 3600);
+	push @{$rv->{'dates'}}, $ct->strftime("%d %b");
+	push @{$rv->{'days'}}, $ct->strftime("%a");
+	my $ststring;
+	my $slstring;
+	my $etstring;
+	my $elstring;
+	if ($addt == 0) {
+	    # Starting day.
+	    $ststring = $st->strftime("%H:%M");
+	    $slstring = &epoch2lst($stime);
+	} else {
+	    # Starting at the day transition.
+	    $ststring = "00:00";
+	    my $cdf = $ct->hour() * 3600 + $ct->minute() * 60 + $ct->second();
+	    $slstring = &epoch2lst($cep - $cdf);
+	}
+	if ($ct->doy() == $et->doy()) {
+	    # We end today.
+	    $etstring = $et->strftime("%H:%M");
+	    $elstring = &epoch2lst($etime);
+	} else {
+	    # End at the day transition.
+	    $etstring = "24:00";
+	    my $cdf = $ct->hour() * 3600 + $ct->minute() * 60 + $ct->second();
+	    $elstring = &epoch2lst($cep + (86400 - $cdf));
+	}
+	push @{$rv->{'times'}}, sprintf("%s - %s %s",
+					$ststring, $etstring, $projstring);
+	push @{$rv->{'lsts'}}, sprintf("%s - %s", $slstring, $elstring);
+	push @{$rv->{'observers'}}, $obsstring;
+	push @{$rv->{'friends'}}, $friendstring;
+	push @{$rv->{'receivers'}}, $receiverstring;
+    }
+    return $rv;
 }
 
 sub writeHTMLSchedules($) {
