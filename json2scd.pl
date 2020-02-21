@@ -961,7 +961,7 @@ sub writeTextSchedules($) {
 
     # Put the preamble in the HTML.
     printf H ("<html><head><title>%s Observing Schedule</title></head>".
-	      "<body bgcolor = \"#FFFFFF\"\n", $obsStrings{'name'});
+	      "<body bgcolor = \"#FFFFFF\">\n", $obsStrings{'name'});
     print H "<img src=\"/images/obs_schedule_header.gif\">\n";
     print H "<hr><center>\n";
     print H "<p><b><font color=blue size=5>Please Note: </font></b>All times in this schedule\n";
