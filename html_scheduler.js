@@ -3473,38 +3473,48 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
     startingDate = new Date(d.getTime() + startHour * 3600000);
   }
   if (startingDate == null) {
-    printMessage("Unable to find a suitable time to start " +
+    /*printMessage("Unable to find a suitable time to start " +
 		 ident + " slot!", "error");
-    return null;
+    return null;*/
   /*} else {
     console.log(startingDate); */
+      // Let's just start where the user clicked; we don't like getting
+      // in the situation where the user can't schedule something.
+      startingDate = new Date(time.timestamp * 1000);
   }
 
   // Check if something else is already scheduled at this time.
-  var overlap = scheduledAt(startingDate);
-
-  if (overlap != null) {
-    // Determine what we should do. By default, we assume that the
-    // more desirable project was scheduled first, and we just start when
-    // the slot ends.
-    var endDate = endingDate(overlap.project, overlap.slot);
-    // Check if we can use this end date.
-    if ((ident == "MAINT") || (ident == "CONFIG")) {
-      // We need to start within office hours.
-      if ((!force) && ((endDate.getHours() > 15) || (endDate.getHours() <= 8))) {
-	// This won't work.
-	printMessage("Unable to schedule " + ident +" block, as it would " +
-		     "fall out of office hours.", "error");
-	return null;
-      } else {
-	startingDate = endDate;
-      }
-    } else {
-      startingDate = endDate;
+    var overlap = scheduledAt(startingDate);
+    if (overlap != null) {
+	startingDate = new Date(time.timestamp * 1000);
     }
-  /*} else {
-    console.log("no overlapping project found"); */
-  }
+
+  // if (overlap != null) {
+  //   // Determine what we should do. By default, we assume that the
+  //   // more desirable project was scheduled first, and we just start when
+  //     // the slot ends.
+  //     var bstartStamp = overlap.project.slot[overlap.slot].scheduled_start;
+  //     if (time.timestamp < bstartStamp) {
+  // 	  // Clearly, the user wants to start beforehand.
+  // 	  startingDate = new D
+  //   var endDate = endingDate(overlap.project, overlap.slot);
+  //   // Check if we can use this end date.
+  //   if ((ident == "MAINT") || (ident == "CONFIG")) {
+  //     // We need to start within office hours.
+  //     if ((!force) && ((endDate.getHours() > 15) || (endDate.getHours() <= 8))) {
+  // 	// This won't work.
+  // 	printMessage("Unable to schedule " + ident +" block, as it would " +
+  // 		     "fall out of office hours.", "error");
+  // 	return null;
+  //     } else {
+  // 	startingDate = endDate;
+  //     }
+  //   } else {
+  //     startingDate = endDate;
+  //   }
+  // /*} else {
+  //   console.log("no overlapping project found"); */
+  // }
 
   // If we reach here we have a usable start date.
   // Now we determine the duration.
@@ -3523,7 +3533,7 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
   if (conflicts.length > 0) {
     endDate = getEarliestDate(conflicts);
   }
-  if (endDate < startingDate) {
+  if (endDate <= startingDate) {
     // We've tried to start within a project; shouldn't have happened.
     printMessage("An unexpected error occured while attempting to " +
 		 "schedule " + ident + " slot.", "error");
