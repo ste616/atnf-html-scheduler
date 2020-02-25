@@ -102,6 +102,7 @@ for (my $i = 0; $i <= $#codechanges; $i += 2) {
 # Copy projects from the reference.
 if ((defined $refjref) && ($#reference_copies >= 0)) {
     for (my $i = 0; $i <= $#reference_copies; $i++) {
+	#printf("LOOKING FOR PROJECT %s IN REFERENCE\n", $reference_copies[$i]);
 	my $refidx = -1;
 	my $jidx = -1;
 	for (my $j = 0; $j <= $#{$refjref->{'program'}->{'project'}}; $j++) {
@@ -119,11 +120,27 @@ if ((defined $refjref) && ($#reference_copies >= 0)) {
 	    }
 	}
 	if (($refidx >= 0) && ($jidx >= 0)) {
-	    printf("COPYING PROJECT %s FROM REFERENCE\n",
+	    printf("OVERWRITING PROJECT %s FROM REFERENCE\n",
 		   $refjref->{'program'}->{'project'}->[$refidx]->{'ident'});
 	    splice(@{$jref->{'program'}->{'project'}}, $jidx, 1,
 		   $refjref->{'program'}->{'project'}->[$refidx]);
 	    $changemade = 1;
+	} elsif ($refidx >= 0) {
+	    printf("COPYING PROJECT %s FROM REFERENCE\n", 
+		   $refjref->{'program'}->{'project'}->[$refidx]->{'ident'});
+	    # Make a new entry.
+	    push @{$jref->{'program'}->{'project'}}, $refjref->{'program'}->{'project'}->[$refidx];
+	    # Unschedule all the slots in the copy.
+	    $changemade = 1;
+	    $jidx = $#{$jref->{'program'}->{'project'}};
+	}
+	if (($refidx >= 0) && ($jidx >= 0)) {
+	    # Unschedule all the slots from the reference.
+	    for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}->[$jidx]->{'slot'}}; $j++) {
+		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled_start'} = 0;
+		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled'} = 0;
+		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled_duration'} = 0;
+	    }
 	}
     }
 }
