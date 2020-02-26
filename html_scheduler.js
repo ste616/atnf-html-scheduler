@@ -987,13 +987,11 @@ const showProjectDetails = function(ident) {
     addDoubleClickHandler(td,
 			  arraySelectorGen(ident, sn, arrId));
     tr.appendChild(td);
-    if (obs == "atca") {
       var bandId = "slotband-" + ident + "-" + sn;
       td = makeElement("td", sd.bands.join(","), { 'id': bandId });
       addDoubleClickHandler(td,
 			    bandsSelectorGen(ident, sn, bandId));
       tr.appendChild(td);
-    }
     var bandwidthId = "slotbandwidth-" + ident + "-" + sn;
     td = makeElement("td", sd.bandwidth, { 'id': bandwidthId });
     if (obs == "atca") {
