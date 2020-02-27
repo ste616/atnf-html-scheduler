@@ -782,10 +782,16 @@ sub getObs($$$) {
 	    #push @arrays, "any";
 	    my $fs = $obsarr->[$i]->{'frequencies'};
 	    if (ref($fs) eq "HASH") {
-		push @bands, $fs->{'string'};
-	    } elsif (ref($fs) eq "ARRAY") {
-		for (my $j = 0; $j <= $#{$fs}; $j++) {
-		    push @bands, &stripSpacing($fs->[$j]->{'string'});
+		if (ref($fs->{'string'}) eq "ARRAY") {
+		    my @b;
+		    #print Dumper $fs->{'string'};
+		    for (my $j = 0; $j <= $#{$fs->{'string'}}; $j++) {
+			push @b, &stripSpacing($fs->{'string'}->[$j]);
+		    }
+		    push @bands, join(" ", @b);
+		    #print Dumper @bands;
+		} else {
+		    push @bands, $fs->{'string'};
 		}
 	    }
 	    my $insentry = $coverref->{'instrumentSetups'}->{'m'}->{'entry'};
@@ -803,8 +809,8 @@ sub getObs($$$) {
 	    if (!defined $recvs) {
 		$recvs = $insentry->{'receivers'}->{'string'};
 	    }
-	    print "receivers:\n";
-	    print Dumper($recvs);
+	    #print "receivers:\n";
+	    #print Dumper($recvs);
 	    if (ref($recvs) ne "ARRAY") {
 		my $h = $recvs;
 		$recvs = [ $h ];
