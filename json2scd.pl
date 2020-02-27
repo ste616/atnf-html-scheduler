@@ -855,8 +855,6 @@ sub ps_sch_box($$$) {
 		($proj->{'ident'} eq "C3157")) {
 		$supp = "LEGACY";
 	    }
-	    print $proj->{'ident'}."\n";
-	    print Dumper $slot->{'bands'};
 	    $tstring = sprintf " (%s) ((%s)) ((%s)) ((%s)) (%s) (%s) sch_box",
 	    $proj->{'ident'}, $proj->{'PI'}, join(" ", @{$slot->{'bands'}}),
 	    $slot->{'bandwidth'}, $supp, $slot->{'source'};
