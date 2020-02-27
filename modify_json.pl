@@ -22,7 +22,7 @@ my @legacy;
 my $minuteoffset = 0;
 my @changecolour;
 my @addexperiment;
-
+my $fixbands = 0;
 
 GetOptions(
     "input=s" => \$json_input,
@@ -35,7 +35,8 @@ GetOptions(
     "refcopy=s" => \@reference_copies,
     "minuteoffset=i" => \$minuteoffset,
     "changecolor=s{2}" => \@changecolour,
-    "add=s" => \@addexperiment
+    "add=s" => \@addexperiment,
+    "fixband" => \$fixbands
     );
 
 my $changemade = 0;
@@ -140,6 +141,40 @@ if ((defined $refjref) && ($#reference_copies >= 0)) {
 		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled_start'} = 0;
 		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled'} = 0;
 		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled_duration'} = 0;
+	    }
+	}
+    }
+}
+
+# Fix array-type bands from the reference.
+if ((defined $refjref) && ($fixbands == 1)) {
+    for (my $i = 0; $i <= $#{$jref->{'program'}->{'project'}}; $i++) {
+	my $refidx = -1;
+	my $bref;
+	for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}->[$i]->{'slot'}}; $j++) {
+	    if ($jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'bands'}->[0]
+		=~ /ARRAY/) {
+		# This is a bug that we can fix.
+		if ($refidx == -1) {
+		    for (my $k = 0; $k <= $#{$refjref->{'program'}->{'project'}}; $k++) {
+			if ($refjref->{'program'}->{'project'}->[$k]->{'ident'} eq
+			    $jref->{'program'}->{'project'}->[$i]->{'ident'}) {
+			    $refidx = $k;
+			    last;
+			}
+		    }
+		}
+		if ($refidx >= 0) {
+		    if (defined $refjref->{'program'}->{'project'}->[$refidx]->{'slot'}->[$j]->{'bands'}) {
+			$bref = $refjref->{'program'}->{'project'}->[$refidx]->{'slot'}->[$j]->{'bands'};
+		    }
+		    printf("CORRECTING BAND SPECIFICATION FOR SLOT %d OF %s; BAND WAS %s, IS %s\n",
+			   $j, $jref->{'program'}->{'project'}->[$i]->{'ident'},
+			   $jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'bands'}->[0],
+			   join(" ", $bref));
+		    $jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'bands'} = $bref;
+		    $changemade = 1;
+		}
 	    }
 	}
     }
