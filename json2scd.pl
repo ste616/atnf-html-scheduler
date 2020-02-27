@@ -478,6 +478,52 @@ sub firstMonday($) {
     return $time1;
 }
 
+sub splitintodays($$) {
+    my $slotStart = shift;
+    my $slotEnd = shift;
+    my $time1 = shift;
+    my $time2 = shift;
+    my $proj = shift;
+    my $slot = shift;
+    my $day1 = shift;
+    my $day2 = shift;
+    my $rstring = shift;
+    my $config = shift;
+    
+    my $t1 = $slotStart->clone();
+    my $t0 = $t1->clone();
+    $t0->set( hour => 0, minute => 0, second => 0 );
+    if ($t1 < $time1) {
+	$t1 = $time1->clone();
+	$t0 = $time1->clone();
+    }
+    my $t2 = $t0->clone();
+    $t2->add( days => 1 );
+    if ($proj->{'ident'} eq "CONFIG") {
+	my $day2 = floor(($t1->epoch - $time1->epoch) / 86400) + 1;
+	if ($day1 != $day2) {
+	    $rstring .= $day1." ".$day2." (".$config.") config\n";
+	    $rstring .= &getConfigPS($config);
+	}
+	$config = uc($slot->{'array'});
+	$day1 = $day2;
+    }
+    while (($t1 < $slotEnd) && ($t1 < $time1)) {
+	$t1 = $t2->clone();
+	$t2->add( days => 1 );
+    }
+    while (($t2 < $slotEnd) && ($t2 <= $time2)) {
+	$rstring .= &ps_sch_box($proj, $slot, $t1, $t2);
+	$t1 = $t2->clone();
+	$t2->add( days => 1);
+    }
+    $t2 = $slotEnd->clone();
+    if ($t2 <= $time2) {
+	$rstring .= &ps_sch_box($proj, $slot, $t1, $t2);
+    }
+    return ($day1, $day2, $rstring, $config);
+}
+
 sub printps($$) {
     my $prog = shift;
     my $pageNumber = shift;
@@ -504,6 +550,16 @@ sub printps($$) {
     my $day1 = 0;
     my $day2 = 0;
     my $config = &getConfig($prog, $time1);
+
+    # Check if we make a "Previous" or "Next" semester block.
+    my $semstart = &stringToDatetime($prog->{'term'}->{'start'});
+    if ($time1 < $semstart) {
+	($day1, $day2, $rstring, $config) = &splitintodays(
+	    $time1, $semstart, $time1, $time2, 
+	    { 'ident' => "prevsem", 'type' => "MAINT",
+	      'title' => "Previous Semester", 'colour' => "ffcdcd" }, {},
+	    $day1, $day2, $rstring, $config);
+    }
     
     # Cycle through the slots.
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
@@ -521,45 +577,28 @@ sub printps($$) {
 	    $slotEnd->add( hours => $slot->{'scheduled_duration'} );
 	    if ((($slotStart > $time1) && ($slotStart < $time2))  ||
 		(($slotEnd > $time1) && ($slotEnd < $time2))) {
-		my $t1 = $slotStart->clone();
-		my $t0 = $t1->clone();
-		$t0->set( hour => 0, minute => 0, second => 0 );
-		if ($t1 < $time1) {
-		    $t1 = $time1->clone();
-		    $t0 = $time1->clone();
-		}
-		my $t2 = $t0->clone();
-		$t2->add( days => 1 );
-		if ($proj->{'ident'} eq "CONFIG") {
-		    my $day2 = floor(($t1->epoch - $time1->epoch) / 86400) + 1;
-		    if ($day1 != $day2) {
-			$rstring .= $day1." ".$day2." (".$config.") config\n";
-			$rstring .= &getConfigPS($config);
-		    }
-		    $config = uc($slot->{'array'});
-		    $day1 = $day2;
-		}
-		while (($t1 < $slotEnd) && ($t1 < $time1)) {
-		    $t1 = $t2->clone();
-		    $t2->add( days => 1 );
-		}
-		while (($t2 < $slotEnd) && ($t2 <= $time2)) {
-		    $rstring .= &ps_sch_box($proj, $slot, $t1, $t2);
-		    $t1 = $t2->clone();
-		    $t2->add( days => 1);
-		}
-		$t2 = $slotEnd->clone();
-		if ($t2 <= $time2) {
-		    $rstring .= &ps_sch_box($proj, $slot, $t1, $t2);
-		}
+		($day1, $day2, $rstring, $config) = &splitintodays(
+		    $slotStart, $slotEnd, $time1, $time2, $proj, $slot, 
+		    $day1, $day2, $rstring, $config);
 	    }
 	}
     }
+    my $semend = &stringToDatetime($prog->{'term'}->{'end'});
+    if ($time2 > $semend) {
+	($day1, $day2, $rstring, $config) = &splitintodays(
+	    $semend, $time2, $time1, $time2,
+	    { 'ident' => "nextsem", 'type' => "MAINT",
+	      'title' => "Next Semester", 'colour' => "ffcdcd" }, {},
+	    $day1, $day2, $rstring, $config);
+    }
+
+    
     $day2 = 14;
     if ($day1 != $day2) {
 	$rstring .= $day1." ".$day2." (".$config.") config\n";
 	$rstring .= &getConfigPS($config);
     }
+
     
     return $rstring;
 }
@@ -778,9 +817,20 @@ sub ps_sch_box($$$) {
 	} elsif ($proj->{'ident'} eq "MAINT") {
 	    $tstring = " () mnt_box";
 	} elsif ($proj->{'type'} eq "MAINT") {
+	    # Use the colour in the schedule.
+	    my ($r, $g, $b);
+	    $r = (hex "0x".substr($proj->{'colour'}, 0, 2)) / 255.;
+	    $g = (hex "0x".substr($proj->{'colour'}, 2, 2)) / 255.;
+	    $b = (hex "0x".substr($proj->{'colour'}, 4, 2)) / 255.;
+	    # What should the title be.
+	    my $stitle = $proj->{'title'};
+	    if (defined $slot && defined $slot->{'source'} &&
+		$slot->{'source'} =~ /^\!/) {
+		$stitle = substr($slot->{'source'}, 1);
+	    }
 	    $tstring = sprintf " (%s) (%s) (%s) %.1f %.1f %.1f colnopi_box",
-	    $proj->{'title'}, substr($proj->{'title'}, 0, 5), substr($proj->{'title'}, 0, 5),
-	    0.8, 0.8, 1.0;
+	    $stitle, substr($stitle, 0, 5), substr($stitle, 0, 5),
+	    $r, $g, $b;
 	} elsif ($proj->{'ident'} eq "CABB") {
 	    $tstring = sprintf " (%s) () () () () () nasa_box", $slot->{'source'};
 	} elsif ($proj->{'ident'} eq "BL") {
@@ -805,6 +855,8 @@ sub ps_sch_box($$$) {
 		($proj->{'ident'} eq "C3157")) {
 		$supp = "LEGACY";
 	    }
+	    print $proj->{'ident'}."\n";
+	    print Dumper $slot->{'bands'};
 	    $tstring = sprintf " (%s) ((%s)) ((%s)) ((%s)) (%s) (%s) sch_box",
 	    $proj->{'ident'}, $proj->{'PI'}, join(" ", @{$slot->{'bands'}}),
 	    $slot->{'bandwidth'}, $supp, $slot->{'source'};
