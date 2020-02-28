@@ -1617,6 +1617,29 @@ sub writeJSONSchedule($) {
     
 }
 
+sub codeSort {
+    if (($a =~ /^\D+(\d+)$/) &&
+	($b =~ /^\D+(\d+)$/)) {
+	my $na = $a =~ s/^\D+(\d+)$/$1/r;
+	my $nb = $b =~ s/^\D+(\d+)$/$1/r;
+	if ($na < $nb) {
+	    return -1;
+	} elsif ($na == $nb) {
+	    return 0;
+	} else {
+	    return 1;
+	}
+    } else {
+	if ($a =~ /^\D+(\d+)$/) {
+	    return 1;
+	} elsif ($b =~ /^\D+(\d+)$/) {
+	    return -1;
+	} else {
+	    return $a cmp $b;
+	}
+    }
+}
+
 sub writeOPALFile($) {
     my $prog = shift;
 
@@ -1625,7 +1648,11 @@ sub writeOPALFile($) {
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
 	my $proj = $prog->{'project'}->[$i];
 	my $ident = $proj->{'ident'};
-	$codes{$ident} = { 'time' => 0, 'napa' => 0 };
+	if ($proj->{'type'} ne "ASTRO") {
+	    next;
+	}
+	$codes{$ident} = { 'time' => 0, 'napa' => 0, 
+			   'title' => $proj->{'title'}, 'pi' => $proj->{'PI'} };
 	if ($proj->{'title'} =~ /^NAPA/) {
 	    $codes{$ident}->{'napa'} = 1;
 	}
@@ -1636,12 +1663,22 @@ sub writeOPALFile($) {
     }
 
     my @p = keys %codes;
-    my @sp = sort @p;
+    my @sp = sort codeSort @p;
     my $sem = $prog->{'term'}->{'term'}."S";
 
     my $opalfile = sprintf("%s/%s-opal.csv", $obsStrings{'directory'},
 			   lc($obsStrings{'name'}));
+    my $legendfile = sprintf("%s/%s_%s_summary.html", $obsStrings{'directory'},
+			     lc($prog->{'observatory'}->{'observatory'}),
+			     lc($prog->{'term'}->{'term'}));
     open(O, ">".$opalfile) || die "Unable to open $opalfile for writing\n";
+    open(L, ">".$legendfile) || die "Unable to open $legendfile for writing\n";
+    printf L ("<!DOCTYPE html>\n<html>\n<head><title>%s Proposal Summary</title></head>\n",
+	      $prog->{'term'}->{'term'});
+    printf L ("<body>\n<h2>%s Observing Schedule Proposals Legend</h2>\n",
+	      $prog->{'term'}->{'term'});
+    print L "<center><table border=\"0\" cellspacing=\"2\" cellpadding=\"2\">\n";
+    print L "<tr><th>Project Ident</th><th>Project Description (Principal Investigator)</th></tr>\n";
     
     for (my $i = 0; $i <= $#sp; $i++) {
 	my $y = 0;
@@ -1651,7 +1688,15 @@ sub writeOPALFile($) {
 	}
 	printf O ("\"%s\",\"%s\",\"%.1f\",\"%d\"\n",
 		  $sem, $sp[$i], $codes{$sp[$i]}->{'time'}, $y);
+	if ($y == 1) {
+	    printf L ("<tr><td align=\"center\">%s</td><td>%s (%s)</td></tr>\n",
+		      $sp[$i], $codes{$sp[$i]}->{'title'},
+		      $codes{$sp[$i]}->{'pi'});
+	} 
     }
 
+    print L "</table></center><p></p></body></html>\n";
+    
     close(O);
+    close(L);
 }
