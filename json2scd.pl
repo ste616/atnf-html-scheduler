@@ -785,6 +785,15 @@ sub getConfigPS($) {
     return "% no such array\n";
 }
 
+sub bracketise_string($) {
+    my $s = shift;
+
+    if ($s eq "") {
+	return $s;
+    }
+    return "(".$s.")";
+}
+
 sub ps_sch_box($$$) {
     my $proj = shift;
     my $slot = shift;
@@ -843,9 +852,12 @@ sub ps_sch_box($$$) {
 		$slot->{'source'};
 	    }
 	} elsif ($proj->{'ident'} =~ /^PX/) {
-	    $tstring = sprintf " (%s) ((%s)) ((%s)) ((%s)) () (%s) fast_box",
-	    $proj->{'ident'}, $proj->{'PI'}, join(" ", @{$slot->{'bands'}}),
-	    $slot->{'bandwidth'}, $slot->{'source'};
+	    # Don't put brackets around empty strings.
+	    my $band_string = &bracketise_string(join(" ", @{$slot->{'bands'}}));
+	    my $bandwidth_string = &bracketise_string($slot->{'bandwidth'});
+	    $tstring = sprintf " (%s) ((%s)) (%s) (%s) () (%s) fast_box",
+	    $proj->{'ident'}, $proj->{'PI'}, $band_string, $bandwidth_string,
+	    $slot->{'source'};
 	} else {
 	    # Check for Legacy projects.
 	    my $supp = "";
@@ -855,9 +867,11 @@ sub ps_sch_box($$$) {
 		($proj->{'ident'} eq "C3157")) {
 		$supp = "LEGACY";
 	    }
-	    $tstring = sprintf " (%s) ((%s)) ((%s)) ((%s)) (%s) (%s) sch_box",
-	    $proj->{'ident'}, $proj->{'PI'}, join(" ", @{$slot->{'bands'}}),
-	    $slot->{'bandwidth'}, $supp, $slot->{'source'};
+	    my $band_string = &bracketise_string(join(" ", @{$slot->{'bands'}}));
+	    my $bandwidth_string = &bracketise_string($slot->{'bandwidth'});
+	    $tstring = sprintf " (%s) ((%s)) (%s) (%s) (%s) (%s) sch_box",
+	    $proj->{'ident'}, $proj->{'PI'}, $band_string, $bandwidth_string,
+	    $supp, $slot->{'source'};
 	}
 	substr($line, 30, length($tstring)) = $tstring;
 	$rstring .= $line."\n";
