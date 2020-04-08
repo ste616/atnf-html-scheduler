@@ -203,8 +203,30 @@ if ($obs eq "atca") {
 	       \@projects, $semesterDetails, $projectScores,
 	       $first_array_reconfignum, \%colours);
 
+# Output the outreach abstracts.
+&printOutreachAbstracts($obs, $semname, \@projects);
+
 ### SUBROUTINES FOLLOW
 ### SHOULD ALL BE MOVED TO ANOTHER MODULE AT SOME POINT
+
+sub printOutreachAbstracts($$$) {
+    my $obs = shift;
+    my $sem = shift;
+    my $projects = shift;
+    
+    # The base directory.
+    my $bdir = sprintf("%s/%s_outreach", lc($sem), lc($obs));
+    if (!-d $bdir) {
+	system "mkdir $bdir";
+    }
+    for (my $i = 0; $i <= $#{$projects}; $i++) {
+	my $aname = sprintf("%s/%s.html", $bdir, 
+			    lc($projects->[$i]->{'project'}));
+	open(O, ">".$aname);
+	printf O "<p>%s</p>\n", $projects->[$i]->{'outreach'};
+	close(O);
+    }
+}
 
 sub makeMasterDirectory($$) {
     my $semdir = shift;
@@ -1217,7 +1239,8 @@ sub xmlParse($$) {
 		  "service" => &zapper($cover->{'serviceObserving'}->{'content'}),
 		  "comments" => $cmnts,
 		  "other" => &zapper($cover->{'otherInformation'}->{'content'}),
-		  "proptype" => &zapper($cover->{'type'}->{'content'})
+		  "proptype" => &zapper($cover->{'type'}->{'content'}),
+		  "outreach" => &zapper($cover->{'outreachAbstractText'}->{'content'})
 	};
 	my ($principal, $pi_email) = &getPI($cover);
 	$a->{"principal"} = $principal;
