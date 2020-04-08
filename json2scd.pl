@@ -897,17 +897,31 @@ sub timeSort {
 sub sortSlots($$) {
     my $prog = shift;
     my $sortAlpha = shift;
+    my $includeNAPA = shift;
+    if (!defined $includeNAPA) {
+	$includeNAPA = 0;
+    }
 
     my @dets;
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
 	my $proj = $prog->{'project'}->[$i];
+	my $isnapa = 0;
+	if ($proj->{'title'} =~ /^NAPA\:/) {
+	    $isnapa = 1;
+	}
+	my $nscheduled = 0;
 	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
 	    my $slot = $proj->{'slot'}->[$j];
 	    if ($slot->{'scheduled'} == 1) {
 		push @dets, { 'time' => ($slot->{'scheduled_start'} * 1),
-			      'ident' => $proj->{'ident'},
+			      'ident' => $proj->{'ident'}, 'isNAPA' => $isnapa,
 			      'proj' => $proj, 'slot' => $slot };
 	    }
+	}
+	if ($isnapa && ($nscheduled == 0) && $includeNAPA) {
+	    push @dets, { 'time' => 0, 'ident' => $proj->{'ident'},
+			  'isNAPA' => $isnapa, 'proj' => $proj,
+			  'slot' => $proj->{'slot'}->[0] };
 	}
     }
 
@@ -1268,7 +1282,7 @@ sub slotToDayEntries($$$$$$) {
 sub writeHTMLSchedules($) {
     my $prog = shift;
 
-    my @sorted_slots = &sortSlots($prog, 1);
+    my @sorted_slots = &sortSlots($prog, 1, 1);
     my $aestSummaryFile = sprintf("%s/%s-summaryAEST.html",
 				  $obsStrings{'directory'},
 				  lc($obsStrings{'name'}));
@@ -1308,7 +1322,7 @@ sub writeHTMLSchedules($) {
 	'<center><table id="tt" border="1" cellspacing="0"'.
 	'cellpadding="2" cols="6" width="98%">'.
 	'<tr><th valign="top" width="10%">Project<br>Code</th>'.
-	'<th valign="top" width="25%">PI</th>';
+	'<th valign="top" width="25%">Investigators</th>';
     print A $prelines;
     print U $prelines;
     $tformat = '<th valign="top" width="10%">%s Dates</th>'.
@@ -1351,9 +1365,18 @@ sub writeHTMLSchedules($) {
 	    }
 	    if ($i <= $#sorted_slots) {
 		$totalHours = 0;
-		$rowStart = sprintf('<tr><td valign="top">%s</td>'.
-				    '<td valign="top">%s<br></td>',
-				    $proj->{'ident'}, $proj->{'PI'});
+		my $coIlist = $proj->{'co_investigators'};
+		if (!defined $coIlist) {
+		    $coIlist = [];
+		}
+		my $napaQual = "";
+		if ($sorted_slots[$i]->{'isNAPA'} == 1) {
+		    $napaQual = " (NAPA)";
+		}
+		$rowStart = sprintf('<tr><td valign="top">%s%s</td>'.
+				    '<td valign="top">%s<br><em>%s</em><br></td>',
+				    $proj->{'ident'}, $napaQual,
+				    $proj->{'PI'}, join(", ", @{$coIlist}));
 		$rowEnd = sprintf('<td valign="top">%s</td></tr>',
 				  $proj->{'title'});
 		$dateCellAEST = '<td nowrap valign="top">';
@@ -1368,15 +1391,17 @@ sub writeHTMLSchedules($) {
 	}
 	# Add some info to the cells.
 	$totalHours += $slot->{'scheduled_duration'} * 1;
-	my @dateCompsUT = &epoch2webSplit($slot->{'scheduled_start'});
-	my @dateCompsAEST = &epoch2webSplit($slot->{'scheduled_start'} +
-					    (10 * 3600));
-	$dateCellAEST .= $dateCompsAEST[0]."<br>";
-	$timeCellAEST .= $dateCompsAEST[1]."<br>";
-	$dateCellUT .= $dateCompsUT[0]."<br>";
-	$timeCellUT .= $dateCompsUT[1]."<br>";
-	$durationCell .= sprintf("%.1f<br>", 
-				 ($slot->{'scheduled_duration'} * 1));
+	if ($slot->{'scheduled_start'} > 0) {
+	    my @dateCompsUT = &epoch2webSplit($slot->{'scheduled_start'});
+	    my @dateCompsAEST = &epoch2webSplit($slot->{'scheduled_start'} +
+						(10 * 3600));
+	    $dateCellAEST .= $dateCompsAEST[0]."<br>";
+	    $timeCellAEST .= $dateCompsAEST[1]."<br>";
+	    $dateCellUT .= $dateCompsUT[0]."<br>";
+	    $timeCellUT .= $dateCompsUT[1]."<br>";
+	    $durationCell .= sprintf("%.1f<br>", 
+				     ($slot->{'scheduled_duration'} * 1));
+	}
     }
 
     my $gentime = DateTime->now->strftime("%d-%b-%Y");

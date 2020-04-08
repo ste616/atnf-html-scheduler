@@ -587,6 +587,20 @@ sub getPI($) {
 	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'email'}->{'content'}) );
 }
 
+sub getCoIs($) {
+    my $cover_ref = shift;
+
+    my @coIlist;
+    my $clist = $cover_ref->{'coInvestigators'}->{'au.csiro.atnf.opal.domain.Investigator'};
+    if (ref $clist eq "ARRAY") {
+	for (my $i = 0; $i <= $#{$clist}; $i++) {
+	    push @coIlist, $clist->[$i]->{'lastName'}->{'content'};
+	}
+    }
+#    print Dumper($cover_ref->{'coInvestigators'});
+    return \@coIlist;
+}
+
 sub getTitle($) {
     my $cover_ref = shift;
     
@@ -1243,8 +1257,10 @@ sub xmlParse($$) {
 		  "outreach" => &zapper($cover->{'outreachAbstractText'}->{'content'})
 	};
 	my ($principal, $pi_email) = &getPI($cover);
+	my $coIs = &getCoIs($cover);
 	$a->{"principal"} = $principal;
 	$a->{"pi_email"} = $pi_email;
+	$a->{'co_investigators'} = $coIs;
 
 	print "Getting obs table for $proj\n";
 	$a->{"observations"} = &getObs($obs, $obstable, $cover);
@@ -1755,7 +1771,8 @@ sub printFileJson($$$$$$$$$$$) {
 	my $proj = &createProject($p->{'project'}, "ASTRO", $p->{'principal'},
 				  $p->{'comments'}." ".$p->{'other'},
 				  $p->{'title'}, $p->{'impossible'},
-				  $p->{'preferred'}, $colours);
+				  $p->{'preferred'}, $colours,
+				  $p->{'co_investigators'});
 	my $s = $proj->{'slot'};
 	my $o = $p->{'observations'};
 	for (my $j = 0; $j <= $#{$o->{'requested_times'}}; $j++) {
@@ -1866,6 +1883,7 @@ sub createProject($$$$$$$$) {
     my $impossible = shift;
     my $preferred = shift;
     my $colours = shift;
+    my $co_investigators = shift;
 
     my $date_impossible = $impossible;
     my $date_preferred = $preferred;
@@ -1879,11 +1897,14 @@ sub createProject($$$$$$$$) {
 
     # Remove any bad characters from the comments.
     $comments =~ s/\;//g;
-    
+    if (!defined $co_investigators) {
+	$co_investigators = [];
+    }
     my $rob = {
 	'ident' => $ident,
 	'type' => $type,
 	'PI' => $pi,
+	'co_investigators' => $co_investigators,
 	'comments' => $comments,
 	'title' => $title,
 	'excluded_dates' => $date_impossible,

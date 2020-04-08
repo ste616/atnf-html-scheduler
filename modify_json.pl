@@ -23,6 +23,7 @@ my $minuteoffset = 0;
 my @changecolour;
 my @addexperiment;
 my $fixbands = 0;
+my $coi_reference = 0;
 
 GetOptions(
     "input=s" => \$json_input,
@@ -36,7 +37,8 @@ GetOptions(
     "minuteoffset=i" => \$minuteoffset,
     "changecolor=s{2}" => \@changecolour,
     "add=s" => \@addexperiment,
-    "fixband" => \$fixbands
+    "fixband" => \$fixbands,
+    "coinvestigators" => \$coi_reference
     );
 
 my $changemade = 0;
@@ -175,6 +177,25 @@ if ((defined $refjref) && ($fixbands == 1)) {
 		    $jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'bands'} = $bref;
 		    $changemade = 1;
 		}
+	    }
+	}
+    }
+}
+
+# Copy co-investigators from the reference.
+if ((defined $refjref) && ($coi_reference == 1)) {
+    for (my $i = 0; $i <= $#{$jref->{'program'}->{'project'}}; $i++) {
+	my $colist = $jref->{'program'}->{'project'}->[$i]->{'co_investigators'};
+	for (my $k = 0; $k <= $#{$refjref->{'program'}->{'project'}}; $k++) {
+	    if ($refjref->{'program'}->{'project'}->[$k]->{'ident'} eq
+		$jref->{'program'}->{'project'}->[$i]->{'ident'}) {
+		$jref->{'program'}->{'project'}->[$i]->{'co_investigators'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'co_investigators'};
+		printf("COPYING %d CO-INVESTIGATORS FROM PROJECT %s\n",
+		       $#{$jref->{'program'}->{'project'}->[$i]->{'co_investigators'}} + 1,
+		       $refjref->{'program'}->{'project'}->[$k]->{'ident'});
+		$changemade = 1;
+		last;
 	    }
 	}
     }
