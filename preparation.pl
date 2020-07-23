@@ -723,6 +723,9 @@ sub getObs($$$) {
 	$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.ParkesContinuumObservation'};
 	if (!defined $obsarr) {
 	    $obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.ParkesSpectralObservation'};
+	    if (!defined $obsarr) {
+		$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.LbaObservation'};
+	    }
 	}
     }	
     if (ref($obsarr) eq "HASH") {

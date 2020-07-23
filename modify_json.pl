@@ -285,7 +285,7 @@ if ($#changecolour >= 1) {
 # Update the scores.
 if (($grades_file ne "") && (-e $grades_file)) {
     my $projectScores = &parseScoreFile($grades_file, \@legacy);
-    #print Dumper $projectScores;
+    print Dumper $projectScores;
     
     for (my $i = 0; $i <= $#{$jref->{'program'}->{'project'}}; $i++) {
 	my $p = $jref->{'program'}->{'project'}->[$i];
@@ -346,13 +346,29 @@ sub parseScoreFile($$) {
 
     my $s = {};
     open(S, $scorefile) || die "!! cannot open $scorefile\n";
-    while(<S>) {
-	chomp (my $line = $_);
-	$line =~ s/^\s+//g;
-	if ($line =~ /^\<input type\=\"hidden\" id\=.* name\=.* value=\"(.*)\"\>$/) {
-	    my @scorebits = split(/\s+/, $1);
-	    my $ts = ($scorebits[2] eq "-1.0") ? $scorebits[1] : $scorebits[2];
-	    # Over-ride this if it's a Legacy project.
+    if ($scorefile =~ /\.html/) {
+	while(<S>) {
+	    chomp (my $line = $_);
+	    $line =~ s/^\s+//g;
+	    if ($line =~ /^\<input type\=\"hidden\" id\=.* name\=.* value=\"(.*)\"\>$/) {
+		my @scorebits = split(/\s+/, $1);
+		my $ts = ($scorebits[2] eq "-1.0") ? $scorebits[1] : $scorebits[2];
+		# Over-ride this if it's a Legacy project.
+		for (my $i = 0; $i <= $#{$legacy}; $i++) {
+		    if ($legacy->[$i] eq $scorebits[0]) {
+			$ts = "5.0";
+			last;
+		    }
+		}
+		$s->{$scorebits[0]} = $ts * 1.0;
+	    }
+	}
+    } elsif ($scorefile =~ /\.csv/) {
+	while(<S>) {
+	    chomp (my $line = $_);
+	    $line =~ s/\"//g;
+	    my @scorebits = split(/\,/, $line);
+	    my $ts = $scorebits[3];
 	    for (my $i = 0; $i <= $#{$legacy}; $i++) {
 		if ($legacy->[$i] eq $scorebits[0]) {
 		    $ts = "5.0";
