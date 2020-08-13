@@ -24,6 +24,8 @@ my @changecolour;
 my @addexperiment;
 my $fixbands = 0;
 my $coi_reference = 0;
+my @codeclears;
+my $clearall = 0;
 
 GetOptions(
     "input=s" => \$json_input,
@@ -38,7 +40,9 @@ GetOptions(
     "changecolor=s{2}" => \@changecolour,
     "add=s" => \@addexperiment,
     "fixband" => \$fixbands,
-    "coinvestigators" => \$coi_reference
+    "coinvestigators" => \$coi_reference,
+    "clear=s" => \@codeclears,
+    "clearall" => \$clearall
     );
 
 my $changemade = 0;
@@ -143,6 +147,36 @@ if ((defined $refjref) && ($#reference_copies >= 0)) {
 		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled_start'} = 0;
 		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled'} = 0;
 		$jref->{'program'}->{'project'}->[$jidx]->{'slot'}->[$j]->{'scheduled_duration'} = 0;
+	    }
+	}
+    }
+}
+
+# Check whether we want to clear some codes.
+if ($clearall == 1) {
+    # We copy all the codes into the clearance list.
+    @codeclears = ();
+    for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}}; $j++) {
+	push @codeclears, $jref->{'program'}->{'project'}->[$j];
+    }
+}
+
+
+# Clear allocations.
+if ($#codeclears >= 0) {
+    for (my $i = 0; $i <= $#codeclears; $i++) {
+	for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}}; $j++) {
+	    if ($jref->{'program'}->{'project'}->[$j] eq $codeclears[$i]) {
+		# Unschedule all the slots.
+		$changemade = 1;
+		printf("CLEARING SCHEDULED SLOTS FOR PROJECT %s\n",
+		       $jref->{'program'}->{'project'}->[$j]->{'ident'});
+		for (my $k = 0; $k <= $#{$jref->{'program'}->{'project'}->[$j]->{'slot'}}; $k++) {
+		    $jref->{'program'}->{'project'}->[$j]->{'slot'}->[$k]->{'scheduled_start'} = 0;
+		    $jref->{'program'}->{'project'}->[$j]->{'slot'}->[$k]->{'scheduled'} = 0;
+		    $jref->{'program'}->{'project'}->[$j]->{'slot'}->[$k]->{'scheduled_duration'} = 0;
+		}
+		last;
 	    }
 	}
     }
