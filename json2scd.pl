@@ -452,6 +452,7 @@ sub writePostscriptSchedule($) {
     close(U);
 
     for (my $i = 0; $i < $numberOfPages; $i++) {
+	#print "page $i\n";
 	print P "%%Page: ". ($i + 1)." ".($i + 1)."\n";
 	print P $preUrl."\n";
 	print P &printps($prog, $i);
@@ -532,12 +533,14 @@ sub printps($$) {
     my $pageLength = $days * 86400;
     
     my $time1 = &firstMonday($prog);
+    #print $time1."\n";
     my $rstring = "";
     # This is the time at the top of the page.
     $time1->add( days => ($pageNumber * $days) );
     # This is the time at the bottom of the page.
     my $time2 = $time1->clone();
     $time2->add( days => $days );
+    #print $time2."\n";
 
     my $version = $prog->{'term'}->{'version'};
     my $today = DateTime->now;
@@ -553,7 +556,9 @@ sub printps($$) {
 
     # Check if we make a "Previous" or "Next" semester block.
     my $semstart = &stringToDatetime($prog->{'term'}->{'start'});
+    #print $semstart."\n";
     if ($time1 < $semstart) {
+	#print " making previous semester block\n";
 	($day1, $day2, $rstring, $config) = &splitintodays(
 	    $time1, $semstart, $time1, $time2, 
 	    { 'ident' => "prevsem", 'type' => "MAINT",
@@ -584,7 +589,9 @@ sub printps($$) {
 	}
     }
     my $semend = &stringToDatetime($prog->{'term'}->{'end'});
+    #print $semend."\n";
     if ($time2 > $semend) {
+	#print " making next semester block\n";
 	($day1, $day2, $rstring, $config) = &splitintodays(
 	    $semend, $time2, $time1, $time2,
 	    { 'ident' => "nextsem", 'type' => "MAINT",
@@ -595,11 +602,13 @@ sub printps($$) {
     
     $day2 = 14;
     if ($day1 != $day2) {
+	#print " getting config $config\n";
 	$rstring .= $day1." ".$day2." (".$config.") config\n";
 	$rstring .= &getConfigPS($config);
     }
 
     
+    #print $rstring."\n";
     return $rstring;
 }
 
@@ -753,6 +762,7 @@ sub getConfig($$) {
 
     # Find the config at the time.
     my $cfg = "";
+    my $fcfg = "";
     my $cfgdiff = 1e9;
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
 	if ($prog->{'project'}->[$i]->{'ident'} ne "CONFIG") {
@@ -764,6 +774,11 @@ sub getConfig($$) {
 	    if ($slot->{'scheduled_start'} == 0) {
 		next;
 	    }
+	    #print " checking array ".$slot->{'array'}." starting at ";
+	    #print $slot->{'scheduled_start'}." (".$dt->epoch.")\n";
+	    if ($fcfg eq "") {
+		$fcfg = $slot->{'array'};
+	    }
 	    my $d = $dt->epoch - ($slot->{'scheduled_start'} + 36000);
 	    if (($d > 0) && ($d < $cfgdiff)) {
 		$cfgdiff = $d;
@@ -772,6 +787,10 @@ sub getConfig($$) {
 	}
     }
 
+    #print " returning config $cfg\n";
+    if ($cfg eq "") {
+	$cfg = $fcfg;
+    }
     return uc($cfg);
 }
 
