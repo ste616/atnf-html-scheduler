@@ -507,6 +507,7 @@ sub splitintodays($$) {
 	    $rstring .= &getConfigPS($config);
 	}
 	$config = uc($slot->{'array'});
+	$config =~ s/\s+/ /g;
 	$day1 = $day2;
     }
     while (($t1 < $slotEnd) && ($t1 < $time1)) {
@@ -791,6 +792,7 @@ sub getConfig($$) {
     if ($cfg eq "") {
 	$cfg = $fcfg;
     }
+    $cfg =~ s/\s+/ /g;
     return uc($cfg);
 }
 

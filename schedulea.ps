@@ -6,6 +6,7 @@
 %%EndComments
 %end part A scheduleA.ps
 
+%(/n/ste616/usr/schedules/outputs/gonzo.ps) run % use internal gonzo
 
 %start of Part C - scheduleC.ps
 /version (schedule.ps v.4 Oct 1999) def
@@ -35,6 +36,24 @@
 /dwid wid leftmar sub rightmar sub def
 /dht ht topmar sub botmar sub def
 
+% A line breaking algorithm
+/wordbreak ( ) def
+/BreakIntoLines
+{
+    /proc exch def
+    /textstring exch def
+    /restoftext textstring def
+    { restoftext wordbreak search
+	{ /nextword exch def pop
+	    /restoftext exch def
+	    nextword proc
+	}
+	{ pop exit }
+	ifelse
+    } loop
+    restoftext proc
+} def
+		
 
 /doy		% Given day, mon, year returns day-of-year on stack
 { /doy_year exch def
@@ -159,6 +178,21 @@
  pc_str stringwidth pop neg pc_dx add 2 div pc_dy pc_pts sub 2 div RM
  pc_str show
  
+ M %return to original point
+} def
+
+/putcenar	% dx dy (string) font fontsize putcen
+{ /pc_pts exch def
+ /pc_fnt exch def
+ /pc_str exch def
+ /pc_dy exch def
+ /pc_dx exch def
+ CP % remember where we are
+ pc_pts pc_fnt SF
+ %% This routine is used to break the array string by space onto separate lines
+ /yline 0 def
+ pc_str { /tstr exch def pc_dx pc_dy yline add tstr pc_fnt pc_pts putcen /yline yline 18 sub def } BreakIntoLines
+
  M %return to original point
 } def
 
@@ -719,10 +753,10 @@
  x3 y4 cd2ds sub M
  CP x4 x3 sub 0 RL M
  14 fh SF car stringwidth pop x4 x3 sub lt 
-   { x4 x3 sub cd2ds cd1ds sub car fh 14 putcen }
+   { x4 x3 sub cd2ds cd1ds sub car fh 14 putcenar }
    { 12 fh SF car stringwidth pop x4 x3 sub lt
-   	{ x4 x3 sub cd2ds cd1ds sub car fh 12 putcen }
-   	{ x4 x3 sub cd2ds cd1ds sub car fh 10 putcen } ifelse 
+   	{ x4 x3 sub cd2ds cd1ds sub car fh 12 putcenar }
+   	{ x4 x3 sub cd2ds cd1ds sub car fh 10 putcenar } ifelse 
    } ifelse
  stroke
 } def
