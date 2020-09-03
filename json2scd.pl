@@ -927,7 +927,7 @@ sub sortSlots($$) {
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
 	my $proj = $prog->{'project'}->[$i];
 	my $isnapa = 0;
-	if ($proj->{'title'} =~ /^NAPA\:/) {
+	if ($proj->{'title'} =~ /^NAPA/) {
 	    $isnapa = 1;
 	}
 	my $nscheduled = 0;
