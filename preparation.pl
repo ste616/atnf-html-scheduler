@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use URI;
-use Web::Scraper;
+#use Web::Scraper;
 use Encode;
 use DateTime;
 use JSON;

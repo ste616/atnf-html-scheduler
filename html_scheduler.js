@@ -86,13 +86,17 @@ const configDescriptor = { 'atca': {
   'h168': [ 15, "any", "hybrid", "h168", "h75/168" ],
   'h75': [ 16, "any", "hybrid", "h75", "h75/168" ]
 }, 'parkes': {
-  'uwl': [ 0, "any", "uwl" ],
-  'mb': [ 1, "any", "multi", "mb" ],
-  'mars': [ 2, "any", "mars" ],
-  'k': [ 3, "any", "13mm", "k" ],
-  'ku': [ 4, "any", "ku" ],
-  '10/50': [ 5, "any", '10/50' ],
-  'vlbi': [ 6, "any" ]
+    'uwl + mb': [ 0, "any", "uwl", "mb" ],
+    'mb': [ 1, "any", "multi", "mb" ],
+    'mars': [ 2, "any", "mars" ],
+    'k': [ 3, "any", "13mm", "k" ],
+    'ku': [ 4, "any", "ku" ],
+    '10/50': [ 5, "any", '10/50' ],
+    'vlbi': [ 6, "any" ],
+    'uwl + 13mm': [ 7, "any", "uwl", "13mm", "k" ],
+    'uwl + 13mm + mars': [ 8, "any", "uwl", "mars", "13mm", "k" ],
+    'uwl + mars': [ 9, "any", "uwl", "mars" ],
+    'uwl': [ 10, "any", "uwl" ]
 } };
 
 // An object to hold all our measurements.
