@@ -1,0 +1,2 @@
+./preparation.pl --semester 2021APR --zip 2021APRS-proposals.zip --map propmap_2021apr.html --obs atca --clean --legacy C3145 --legacy C007 --last C3404 --arrays 6A,6B,1.5B,750D,EW352,H214,H168,H75 --first 6D --big 150 --firstnum 505 --grades TACgrades2021apr.html
+

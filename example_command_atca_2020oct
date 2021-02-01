@@ -1,0 +1,1 @@
+./preparation.pl --semester 2020OCT --zip 2020OCTS-proposals.zip --map propmap_2020oct.html --obs atca --clean --legacy C3157 --legacy C3145 --legacy C007 --last C3377 --arrays 6A,6D,1.5A,1.5D,750B,750C,EW367,EW352,H168 --first 6B --big 150 --firstnum 500 --grades TACgrades2020oct.html

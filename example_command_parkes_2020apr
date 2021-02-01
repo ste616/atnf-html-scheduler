@@ -1,0 +1,1 @@
+./preparation.pl --semester 2020APR --zip 2020APRS-proposals.zip --map propmap_2020apr.html --obs parkes --clean --last P1037 --first UWL --grades TACgrades2020apr.html --add "BL,Siemon,5,85,10,uwl,1400,DFB4/CASPSR/MEDUSA/HIPSR,new discoveries,00:00:00,00:00:00" --funded PX500 --funded PX501 --funded BL --maintenance 640 --calibration 125 --arrays "UWL,VLBI"
