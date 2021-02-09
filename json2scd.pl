@@ -582,7 +582,10 @@ sub printps($$) {
 	    my $slotEnd = $slotStart->clone();
 	    $slotEnd->add( hours => $slot->{'scheduled_duration'} );
 	    if ((($slotStart > $time1) && ($slotStart < $time2))  ||
-		(($slotEnd > $time1) && ($slotEnd < $time2))) {
+		(($slotEnd > $time1) && ($slotEnd < $time2)) ||
+		## This next one is when a project goes for a whole
+		## fortnight, starting before the page, and ending after.
+		(($slotStart < $time1) && ($slotEnd > $time2))) {
 		($day1, $day2, $rstring, $config) = &splitintodays(
 		    $slotStart, $slotEnd, $time1, $time2, $proj, $slot, 
 		    $day1, $day2, $rstring, $config);
