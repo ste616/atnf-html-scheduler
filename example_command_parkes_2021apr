@@ -1,0 +1,1 @@
+./preparation.pl --semester 2021APR --zip 2021APRS-proposals.zip --map propmap_2021apr.html --obs parkes --clean --last P1097 --first "UWL MARS" --grades TACgrades2021apr.html --calibration 125 --arrays "UWL MARS,UWL 13MM,UWL CRYOPAF" --funded PX500 --funded PX501 --funded BL --add "BL,Siemon,5,85,10,uwl,1400,DFB4/CASPSR/MEDUSA/HIPSR,new discoveries,00:00:00,00:00:00"

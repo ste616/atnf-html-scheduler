@@ -1,0 +1,1 @@
+./preparation.pl --semester 2020OCT --zip 2020OCTS-proposals.zip --map propmap_2020oct.html --obs parkes --clean --last P1069 --first UWL --grades TACgrades2020oct.html --calibration 125 --arrays "UWL,VLBI" --funded PX500 --funded PX501
