@@ -865,11 +865,15 @@ sub ps_sch_box($$$) {
 	    $stitle, substr($stitle, 0, 5), substr($stitle, 0, 5),
 	    $r, $g, $b;
 	} elsif ($proj->{'ident'} eq "CABB") {
-	    $tstring = sprintf " (%s) () () () () () nasa_box", $slot->{'source'};
+	    my $sstring = $slot->{'source'};
+	    if ($slot->{'source'} =~ /^\!/) {
+		$sstring =~ s/^\!//;
+	    }
+	    $tstring = sprintf " (%s) () () () () () nasa_box", $sstring;
 	} elsif ($proj->{'ident'} eq "BL") {
 	    if ($slot->{'source'} =~ /^\!/) {
 		my $sstring = $slot->{'source'} =~ s/^\!//;
-		$tstring = sprintf " (%s) () () () () () bl_box";
+		$tstring = sprintf " (%s) () () () () () bl_box", $sstring;
 	    } else {
 		$tstring = sprintf " (BL) () ((%s)) ((%s)) () (%s) bl_box",
 		join(" ", @{$slot->{'bands'}}), $slot->{'bandwidth'},
