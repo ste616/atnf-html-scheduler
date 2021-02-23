@@ -40,6 +40,9 @@ if ($infile =~ /\.json$/) {
     my $prog = $jref->{'program'};
 
     &fillObsStrings($prog);
+
+    # Sort the slots.
+    &slotSorter($prog);
     
     # Write the SCD file.
     &writeScd($prog);
@@ -89,6 +92,18 @@ if ($infile =~ /\.json$/) {
     printf O "%s\n", $json->pretty->encode($jref);
     close(O);
     
+}
+
+sub slotSorter($) {
+    my $prog = shift;
+
+    for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
+	if ($prog->{'project'}->[$i]->{'ident'} eq "CONFIG") {
+	    my @slots = @{$prog->{'project'}->[$i]->{'slot'}};
+	    my @sslots = sort { $a->{'scheduled_start'} <=> $b->{'scheduled_start'} } @slots;
+	    $prog->{'project'}->[$i]->{'slot'} = \@sslots;
+	}
+    }
 }
 
 sub parseScd($$) {
