@@ -26,6 +26,7 @@ my $fixbands = 0;
 my $coi_reference = 0;
 my @codeclears;
 my $clearall = 0;
+my $copy_affiliations = 0;
 
 GetOptions(
     "input=s" => \$json_input,
@@ -42,7 +43,8 @@ GetOptions(
     "fixband" => \$fixbands,
     "coinvestigators" => \$coi_reference,
     "clear=s" => \@codeclears,
-    "clearall" => \$clearall
+    "clearall" => \$clearall,
+    "copyaffiliations" => \$copy_affiliations
     );
 
 my $changemade = 0;
@@ -228,6 +230,29 @@ if ((defined $refjref) && ($coi_reference == 1)) {
 		printf("COPYING %d CO-INVESTIGATORS FROM PROJECT %s\n",
 		       $#{$jref->{'program'}->{'project'}->[$i]->{'co_investigators'}} + 1,
 		       $refjref->{'program'}->{'project'}->[$k]->{'ident'});
+		$changemade = 1;
+		last;
+	    }
+	}
+    }
+}
+
+# Copy affiliations from the reference.
+if ((defined $refjref) && ($copy_affiliations == 1)) {
+    for (my $i = 0; $i <= $#{$jref->{'program'}->{'project'}}; $i++) {
+	for (my $k = 0; $k <= $#{$refjref->{'program'}->{'project'}}; $k++) {
+	    if ($refjref->{'program'}->{'project'}->[$k]->{'ident'} eq
+		$jref->{'program'}->{'project'}->[$i]->{'ident'}) {
+		printf("COPYING AFFILIATIONS FROM PROJECT %s\n",
+		       $refjref->{'program'}->{'project'}->[$k]->{'ident'});
+		$jref->{'program'}->{'project'}->[$i]->{'pi_affiliation'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'pi_affiliation'};
+		$jref->{'program'}->{'project'}->[$i]->{'pi_country'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'pi_country'};
+		$jref->{'program'}->{'project'}->[$i]->{'coI_affiliations'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'coI_affiliations'};
+		$jref->{'program'}->{'project'}->[$i]->{'coI_countries'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'coI_countries'};
 		$changemade = 1;
 		last;
 	    }

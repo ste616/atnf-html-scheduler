@@ -584,21 +584,27 @@ sub getPI($) {
     # Get the name of the PI from the XML hash of the cover sheet,
     # and their email address.
     return ( &stripSpacing($cover_ref->{'principalInvestigator'}->{'lastName'}->{'content'}),
-	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'email'}->{'content'}) );
+	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'email'}->{'content'}),
+	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'affiliation'}->{'code'}->{'content'}),
+	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'affiliation'}->{'country'}->{'name'}->{'content'}) );
 }
 
 sub getCoIs($) {
     my $cover_ref = shift;
 
     my @coIlist;
+    my @coIaffiliation;
+    my @coIcountry;
     my $clist = $cover_ref->{'coInvestigators'}->{'au.csiro.atnf.opal.domain.Investigator'};
     if (ref $clist eq "ARRAY") {
 	for (my $i = 0; $i <= $#{$clist}; $i++) {
 	    push @coIlist, $clist->[$i]->{'lastName'}->{'content'};
+	    push @coIaffiliation, $clist->[$i]->{'affiliation'}->{'code'}->{'content'};
+	    push @coIcountry, $clist->[$i]->{'affiliation'}->{'country'}->{'name'}->{'content'};
 	}
     }
 #    print Dumper($cover_ref->{'coInvestigators'});
-    return \@coIlist;
+    return (\@coIlist, \@coIaffiliation, \@coIcountry);
 }
 
 sub getTitle($) {
@@ -1259,11 +1265,15 @@ sub xmlParse($$) {
 		  "proptype" => &zapper($cover->{'type'}->{'content'}),
 		  "outreach" => &zapper($cover->{'outreachAbstractText'}->{'content'})
 	};
-	my ($principal, $pi_email) = &getPI($cover);
-	my $coIs = &getCoIs($cover);
+	my ($principal, $pi_email, $pi_affiliation, $pi_country) = &getPI($cover);
+	my ($coIs, $coIaffiliations, $coIcountries) = &getCoIs($cover);
 	$a->{"principal"} = $principal;
 	$a->{"pi_email"} = $pi_email;
 	$a->{'co_investigators'} = $coIs;
+	$a->{"pi_affiliation"} = $pi_affiliation;
+	$a->{"pi_country"} = $pi_country;
+	$a->{"coI_affiliations"} = $coIaffiliations;
+	$a->{"coI_countries"} = $coIcountries;
 
 	print "Getting obs table for $proj\n";
 	$a->{"observations"} = &getObs($obs, $obstable, $cover);
