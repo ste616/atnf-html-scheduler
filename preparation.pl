@@ -756,11 +756,11 @@ sub getObs($$$) {
 	}
 	# Get the LSTs as well.
 	my $lst_start = $obsarr->[$i]->{'lstStart'};
-	if (ref $lst_start eq "HASH") {
+	if ((ref $lst_start eq "HASH") || (!defined $lst_start)) {
 	    $lst_start = "00:00";
 	}
 	my $lst_end = $obsarr->[$i]->{'lstEnd'};
-	if ($lst_end eq "Never") {
+	if (($lst_end eq "Never") || (!defined $lst_end)) {
 	    $lst_end = "23:59";
 	}
 	push @lsts, [ $lst_start, $lst_end ];
@@ -829,12 +829,12 @@ sub getObs($$$) {
 	    if (ref($fs) eq "HASH") {
 		if (ref($fs->{'string'}) eq "ARRAY") {
 		    my @b;
-		    #print Dumper $fs->{'string'};
+		    print Dumper $fs->{'string'};
 		    for (my $j = 0; $j <= $#{$fs->{'string'}}; $j++) {
 			push @b, &stripSpacing($fs->{'string'}->[$j]);
 		    }
 		    push @bands, join(" ", @b);
-		    #print Dumper @bands;
+		    print Dumper @bands;
 		} else {
 		    push @bands, $fs->{'string'};
 		}
@@ -1108,6 +1108,11 @@ sub roundRequestedTimes($$$$$$) {
     }
 
     my $nrep = 1;
+    #print " rqt = $rqt time up = $time_up\n";
+    if ($time_up == 0) {
+	# Something is horribly wrong, but we let the scheduler deal with it.
+	return ( 1, $rqt );
+    }
     if ($rqt > $time_up) {
 	# The source isn't up for the entire time.
 	while (($rqt / $nrep) > $time_up) {
