@@ -245,10 +245,10 @@ if ((defined $refjref) && ($copy_affiliations == 1)) {
 		$jref->{'program'}->{'project'}->[$i]->{'ident'}) {
 		printf("COPYING AFFILIATIONS FROM PROJECT %s\n",
 		       $refjref->{'program'}->{'project'}->[$k]->{'ident'});
-		$jref->{'program'}->{'project'}->[$i]->{'pi_affiliation'} =
-		    $refjref->{'program'}->{'project'}->[$k]->{'pi_affiliation'};
-		$jref->{'program'}->{'project'}->[$i]->{'pi_country'} =
-		    $refjref->{'program'}->{'project'}->[$k]->{'pi_country'};
+		$jref->{'program'}->{'project'}->[$i]->{'PI_affiliation'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'PI_affiliation'};
+		$jref->{'program'}->{'project'}->[$i]->{'PI_country'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'PI_country'};
 		$jref->{'program'}->{'project'}->[$i]->{'coI_affiliations'} =
 		    $refjref->{'program'}->{'project'}->[$k]->{'coI_affiliations'};
 		$jref->{'program'}->{'project'}->[$i]->{'coI_countries'} =

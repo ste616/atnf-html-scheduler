@@ -69,6 +69,9 @@ if ($infile =~ /\.json$/) {
     # Create the file that goes back into OPAL.
     &writeOPALFile($prog);
 
+    # Write out statistics for the Annual Report.
+    &writeStatistics($prog);
+    
     close(P);
 } elsif ($infile =~ /\.scd$/) {
     # We've been given an SCD file, we change to JSON.
@@ -991,6 +994,85 @@ sub format_int($) {
 	$df =~ s/^0//;
     }
     return $d.$df;
+}
+
+sub writeStatistics($) {
+    my $prog = shift;
+
+    my $statsFile = sprintf("%s/%s-statistics.txt",
+			    $obsStrings{'directory'},
+			    lc($obsStrings{'name'}));
+    open(S, ">".$statsFile) || die "Unable to open $statsFile ".
+	"for writing\n";
+
+    # Assemble the statistics.
+    my $pi_allocation_cass = 0;
+    my $pi_allocation_aus = 0;
+    my $pi_allocation_os = 0;
+    my $all_allocation_cass = 0;
+    my $all_allocation_aus = 0;
+    my $all_allocation_os = 0;
+
+    my @sorted_slots = &sortSlots($prog, 1);
+    
+    for (my $i = 0; $i <= $#sorted_slots; $i++) {
+	my $slot = $sorted_slots[$i]->{'slot'};
+	my $proj = $sorted_slots[$i]->{'proj'};
+	if (($proj->{"type"} ne "ASTRO") ||
+	    ($proj->{"ident"} eq "VLBI")) {
+	    next;
+	}
+	my $num_investigators = ($#{$proj->{'co_investigators'}} + 2);
+	#print $proj->{'ident'}." ".$proj->{"PI_affiliation"}." ".$proj->{"PI_country"}."\n";
+	if (($proj->{"PI_affiliation"} eq "CASS") ||
+	    ($proj->{"PI_affiliation"} eq "ATNF")) {
+	    #print "  ATNF\n";
+	    $pi_allocation_cass += $slot->{'scheduled_duration'} * 1;
+	    $all_allocation_cass += $slot->{'scheduled_duration'} / $num_investigators;
+	} elsif ($proj->{"PI_country"} eq "Australia") {
+	    #print "  Aus\n";
+	    $pi_allocation_aus += $slot->{'scheduled_duration'} * 1;
+	    $all_allocation_aus += $slot->{'scheduled_duration'} / $num_investigators;
+	} else {
+	    #print "  OS\n";
+	    $pi_allocation_os += $slot->{'scheduled_duration'} * 1;
+	    $all_allocation_os += $slot->{'scheduled_duration'} / $num_investigators;
+	}
+	for (my $j = 0; $j<= $#{$proj->{'co_investigators'}}; $j++) {
+	    if (($proj->{"coI_affiliations"}->[$j] eq "CASS") ||
+		($proj->{"coI_affiliations"}->[$j] eq "ATNF")) {
+		$all_allocation_cass += $slot->{'scheduled_duration'} / $num_investigators;
+	    } elsif ($proj->{"coI_countries"}->[$j] eq "Australia") {
+		$all_allocation_aus += $slot->{'scheduled_duration'} / $num_investigators;
+	    } else {
+		$all_allocation_os += $slot->{'scheduled_duration'} / $num_investigators;
+	    }
+	}
+    }
+
+    # Write it out.
+    print S "Time allocation by PI (%):\n";
+    printf S ("CASS/ATNF = %.2f\n", (100.0 * ($pi_allocation_cass / 
+					      ($pi_allocation_cass + $pi_allocation_aus +
+					       $pi_allocation_os))));
+    printf S ("Other Aus = %.2f\n", (100.0 * ($pi_allocation_aus / 
+					      ($pi_allocation_cass + $pi_allocation_aus +
+					       $pi_allocation_os))));
+    printf S ("O/S = %.2f\n", (100.0 * ($pi_allocation_os / 
+					($pi_allocation_cass + $pi_allocation_aus +
+					 $pi_allocation_os))));
+    print S "Time allocation by all users (%):\n";
+    printf S ("CASS/ATNF = %.2f\n", (100.0 * ($all_allocation_cass /
+					      ($all_allocation_cass + $all_allocation_aus +
+					       $all_allocation_os))));
+    printf S ("Other Aus = %.2f\n", (100.0 * ($all_allocation_aus /
+					      ($all_allocation_cass + $all_allocation_aus +
+					       $all_allocation_os))));
+    printf S ("O/S = %.2f\n", (100.0 * ($all_allocation_os /
+					($all_allocation_cass + $all_allocation_aus +
+					 $all_allocation_os))));
+    
+    close(S);
 }
 
 sub writeScheduleSummary($) {
