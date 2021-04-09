@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use URI;
-#use Web::Scraper;
+use Web::Scraper;
 use Encode;
 use DateTime;
 use JSON;
@@ -1785,7 +1785,9 @@ sub printFileJson($$$$$$$$$$$) {
 				  $p->{'comments'}." ".$p->{'other'},
 				  $p->{'title'}, $p->{'impossible'},
 				  $p->{'preferred'}, $colours,
-				  $p->{'co_investigators'});
+				  $p->{'co_investigators'}, $p->{'pi_affiliation'},
+				  $p->{'pi_country'}, $p->{'coI_affiliations'},
+				  $p->{'coI_countries'});
 	my $s = $proj->{'slot'};
 	my $o = $p->{'observations'};
 	for (my $j = 0; $j <= $#{$o->{'requested_times'}}; $j++) {
@@ -1814,7 +1816,7 @@ sub printFileJson($$$$$$$$$$$) {
     }
     my $proj = &createProject("MAINT", "MAINT", $maint_pi,
 			      "", "Maintenance/Test", $holidays, "",
-			      $colours);
+			      $colours, [], "CASS", "Australia");
     push @{$u->{'project'}}, $proj;
     my $s = $proj->{'slot'};
     for (my $i = 0; $i <= $#{$maint}; $i++) {
@@ -1835,7 +1837,7 @@ sub printFileJson($$$$$$$$$$$) {
     }
     # And the VLBI time.
     $proj = &createProject("VLBI", "ASTRO", "Phillips", "", "VLBI", "", "",
-			   $colours);
+			   $colours, [], "CASS", "Australia");
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
     for (my $i = 0; $i <= $#{$vlbi}; $i++) {
@@ -1853,7 +1855,7 @@ sub printFileJson($$$$$$$$$$$) {
 	$config_pi = "Reeves";
     }
     $proj = &createProject("CONFIG", "CONFIG", $config_pi, "", "Reconfig",
-			   $holidays, "", $colours);
+			   $holidays, "", $colours, [], "CASS", "Australia");
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
     my $configDuration = 24;
@@ -1869,7 +1871,7 @@ sub printFileJson($$$$$$$$$$$) {
     if ($obs eq "atca") {
 	# And some CABB reconfigurations.
 	$proj = &createProject("CABB", "NASA", "Stevens", "", "CABB", "", "",
-			       $colours);
+			       $colours, [], "CASS", "Australia");
 	push @{$u->{'project'}}, $proj;
 	$s = $proj->{'slot'};
 	for (my $i = 0; $i < 30; $i++) {
@@ -1897,6 +1899,10 @@ sub createProject($$$$$$$$) {
     my $preferred = shift;
     my $colours = shift;
     my $co_investigators = shift;
+    my $pi_affiliation = shift;
+    my $pi_country = shift;
+    my $coI_affiliations = shift;
+    my $coI_countries = shift;
 
     my $date_impossible = $impossible;
     my $date_preferred = $preferred;
@@ -1913,11 +1919,21 @@ sub createProject($$$$$$$$) {
     if (!defined $co_investigators) {
 	$co_investigators = [];
     }
+    if (!defined $coI_affiliations) {
+	$coI_affiliations = [];
+    }
+    if (!defined $coI_countries) {
+	$coI_countries = [];
+    }
     my $rob = {
 	'ident' => $ident,
 	'type' => $type,
-	'PI' => $pi,
-	'co_investigators' => $co_investigators,
+	    'PI' => $pi,
+	    'PI_affiliation' => $pi_affiliation,
+	    'PI_country' => $pi_country,
+	    'co_investigators' => $co_investigators,
+	    'coI_affiliations' => $coI_affiliations,
+	    'coI_countries' => $coI_countries,
 	'comments' => $comments,
 	'title' => $title,
 	'excluded_dates' => $date_impossible,
