@@ -45,19 +45,24 @@ if ($infile =~ /\.json$/) {
     &slotSorter($prog);
     
     # Write the SCD file.
+    #print " SCD output\n";
     &writeScd($prog);
     
     # Write the PS file.
+    #print " postscript output\n";
     &writePostscriptSchedule($prog);
     
     # Write the schedule summary.
+    #print " schedule summary\n";
     &writeScheduleSummary($prog);
 
     # Write out a file for the usage stats and the
     # maintenance text file.
+    #print " text schedules\n";
     &writeTextSchedules($prog);
 
     # Write out the HTML summaries.
+    #print " HTML schedules\n";
     &writeHTMLSchedules($prog);
 
     # Create the graphical schedule pages.
@@ -362,6 +367,7 @@ sub writeScd($) {
     print O "</Term>\n";
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
 	my $proj = $prog->{'project'}->[$i];
+	#print "  SCD writer: project ".$proj->{'ident'}."\n";
 	print O "<Project>\n";
 	print O "Ident=".$proj->{'ident'}."\n";
 	print O "Title=".$proj->{'title'}."\n";
@@ -371,6 +377,7 @@ sub writeScd($) {
 	print O "Comments=0\n";
 	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
 	    my $slot = $proj->{'slot'}->[$j];
+	    #print "   SCD writer: slot ".$j."\n";
 	    print O "<Slot>\n";
 	    print O "Array=".uc($slot->{'array'})."\n";
 	    print O "AltArray1=none\nAltArray2=none\n";
@@ -420,11 +427,13 @@ sub writeScd($) {
 	    if ($isscheduled eq "true") {
 		$ss = &epoch2timeString($slot->{'scheduled_start'}, 0);
 	    }
+	    #print "   SCD writer: scheduled at ".$ss."\n";
 	    print O "Start1=".$ss."\n";
 	    print O "Start2=2000/01/02 00:00:00\n";
 	    print O "Scheduled=".$isscheduled."\n";
 	    print O "Locked=false\n";
 	    my $c = &commentWriter($proj->{'comments'});
+	    #print "   SCD writer: comment written\n";
 	    print O "NumComments=".$c->{'nlines'}."\n";
 	    if ($c->{'nlines'} > 0) {
 		print O $c->{'string'}."\n";
@@ -641,6 +650,7 @@ sub commentWriter($) {
     # lines.
     my $rval = { 'string' => "", 'nlines' => 0 };
     $istring =~ s/^\s+//g;
+    $istring =~ s/[^[:ascii:]]//g;
     if ($istring eq "") {
 	return $rval;
     }
@@ -648,6 +658,7 @@ sub commentWriter($) {
     my $max = 70;
 
     while ($istring) {
+	#print "    Comment writer: ".$istring." length = ".(length $istring)."\n";
 	if (length $istring <= $max) {
 	    $rval->{'string'} .= $istring;
 	    $rval->{'nlines'} += 1;
