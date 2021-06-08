@@ -1716,9 +1716,12 @@ sub writeJSONSchedule($) {
 
     my $json_file = sprintf ("%s/%s_maint.json", $obsStrings{'directory'},
 			     lc($obsStrings{'name'}));
+    my $rrs_file = sprintf ("%s/override_grades_%s.json", $obsStrings{'directory'},
+			    $prog->{'term'}->{'term'});
     my @sorted_slots = &sortSlots($prog, 0);
 
     my @json_maint;
+    my %json_override;
     my $ctime = &stringToDatetime($prog->{'term'}->{'start'})->subtract(
 	hours => 10 );
     my $config = &getConfig($prog, $ctime);
@@ -1804,7 +1807,31 @@ sub writeJSONSchedule($) {
     open(O, ">".$json_file) || die "Unable to open $json_file for writing\n";
     printf O "%s\n", $json->pretty->encode(\@json_maint);
     close(O);
-    
+
+    for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
+	my $proj = $prog->{'project'}->[$i];
+	my $pr = { "emails" => [ $proj->{'PI_email'} ],
+		   "slots" => [], "score" => -1 };
+	if (defined $proj->{'coI_emails'}) {
+	    push @{$pr->{'emails'}}, @{$proj->{'coI_emails'}};
+	}
+	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
+	    my $slot = $proj->{'slot'}->[$j];
+	    if ($slot->{'rating'} > $pr->{'score'}) {
+		$pr->{'score'} = $slot->{'rating'};
+	    }
+	    if ($slot->{'scheduled'} == 1) {
+		push @{$pr->{'slots'}}, { 'start_epoch' => $slot->{'scheduled_start'} * 1,
+					  'end_epoch' => ($slot->{'scheduled_start'} +
+							  $slot->{'scheduled_duration'} * 3600) };
+	    }
+	}
+	$json_override{$proj->{'ident'}} = $pr;
+    }
+    # Make the JSON string.
+    open(O, ">".$rrs_file) || die "Unable to open $rrs_file for writing\n";
+    printf O "%s\n", $json->pretty->encode(\%json_override);
+    close(O);
 }
 
 sub codeSort {
