@@ -27,6 +27,7 @@ my $coi_reference = 0;
 my @codeclears;
 my $clearall = 0;
 my $copy_affiliations = 0;
+my $copy_emails = 0;
 
 GetOptions(
     "input=s" => \$json_input,
@@ -44,7 +45,8 @@ GetOptions(
     "coinvestigators" => \$coi_reference,
     "clear=s" => \@codeclears,
     "clearall" => \$clearall,
-    "copyaffiliations" => \$copy_affiliations
+    "copyaffiliations" => \$copy_affiliations,
+    "copyemails" => \$copy_emails
     );
 
 my $changemade = 0;
@@ -259,6 +261,25 @@ if ((defined $refjref) && ($copy_affiliations == 1)) {
 	}
     }
 }
+# Copy emails from the reference.
+if ((defined $refjref) && ($copy_emails == 1)) {
+    for (my $i = 0; $i <= $#{$jref->{'program'}->{'project'}}; $i++) {
+	for (my $k = 0; $k <= $#{$refjref->{'program'}->{'project'}}; $k++) {
+	    if ($refjref->{'program'}->{'project'}->[$k]->{'ident'} eq
+		$jref->{'program'}->{'project'}->[$i]->{'ident'}) {
+		printf("COPYING EMAILS FROM PROJECT %s\n",
+		       $refjref->{'program'}->{'project'}->[$k]->{'ident'});
+		$jref->{'program'}->{'project'}->[$i]->{'PI_email'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'PI_email'};
+		$jref->{'program'}->{'project'}->[$i]->{'coI_emails'} =
+		    $refjref->{'program'}->{'project'}->[$k]->{'coI_emails'};
+		$changemade = 1;
+		last;
+	    }
+	}
+    }
+}
+
 
 # Add any new projects.
 if ($#addexperiment >= 0) {
