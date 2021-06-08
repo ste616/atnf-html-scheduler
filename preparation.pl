@@ -595,16 +595,18 @@ sub getCoIs($) {
     my @coIlist;
     my @coIaffiliation;
     my @coIcountry;
+    my @coIemails;
     my $clist = $cover_ref->{'coInvestigators'}->{'au.csiro.atnf.opal.domain.Investigator'};
     if (ref $clist eq "ARRAY") {
 	for (my $i = 0; $i <= $#{$clist}; $i++) {
 	    push @coIlist, $clist->[$i]->{'lastName'}->{'content'};
 	    push @coIaffiliation, $clist->[$i]->{'affiliation'}->{'code'}->{'content'};
 	    push @coIcountry, $clist->[$i]->{'affiliation'}->{'country'}->{'name'}->{'content'};
+	    push @coIemails, $clist->[$i]->{'email'}->{'content'};
 	}
     }
 #    print Dumper($cover_ref->{'coInvestigators'});
-    return (\@coIlist, \@coIaffiliation, \@coIcountry);
+    return (\@coIlist, \@coIaffiliation, \@coIcountry, \@coIemails);
 }
 
 sub getTitle($) {
@@ -671,7 +673,7 @@ sub addExtraProjects($$) {
 	    push @{$projects}, {
 		"project" => $details[0], "title" => "Added project",
 		"preferred" => "", "impossible" => "",
-		"service" => "", "comment" => "",
+		"service" => "", "comment" => "", "help" => "None",
 		"other" => "", "proptype" => "ASTRO", 
 		"principal" => $details[1], "pi_email" => "",
 		"observations" => {
@@ -1264,14 +1266,15 @@ sub xmlParse($$) {
 	my $a = { "project" => $proj, "title" => &getTitle($cover),
 		  "preferred" => "",
 		  "impossible" => "",
-		  "service" => &zapper($cover->{'serviceObserving'}->{'content'}),
+		      "service" => &zapper($cover->{'serviceObserving'}->{'content'}),
+		      "help" => &zapper($cover->{'helpRequired'}->{'content'}),
 		  "comments" => $cmnts,
 		  "other" => &zapper($cover->{'otherInformation'}->{'content'}),
 		  "proptype" => &zapper($cover->{'type'}->{'content'}),
 		  "outreach" => &zapper($cover->{'outreachAbstractText'}->{'content'})
 	};
 	my ($principal, $pi_email, $pi_affiliation, $pi_country) = &getPI($cover);
-	my ($coIs, $coIaffiliations, $coIcountries) = &getCoIs($cover);
+	my ($coIs, $coIaffiliations, $coIcountries, $coIemails) = &getCoIs($cover);
 	$a->{"principal"} = $principal;
 	$a->{"pi_email"} = $pi_email;
 	$a->{'co_investigators'} = $coIs;
@@ -1279,7 +1282,8 @@ sub xmlParse($$) {
 	$a->{"pi_country"} = $pi_country;
 	$a->{"coI_affiliations"} = $coIaffiliations;
 	$a->{"coI_countries"} = $coIcountries;
-
+	$a->{"coI_emails"} = $coIemails;
+	
 	print "Getting obs table for $proj\n";
 	$a->{"observations"} = &getObs($obs, $obstable, $cover);
 
@@ -1328,7 +1332,7 @@ sub semesterTimeSummary($$$$) {
     # Make a summary of amount of time requested as a function of array,
     # band, and type.
     my %array_requests;
-    my (%otype, %omap, %amap, %ttotal);
+    my (%otype, %omap, %amap, %ttotal, %helptypes);
     my $band_totals = &initBandRef($obs);
     if ($obs eq "atca") {
 	%otype = ( "total" => 0, "normal" => 0, "napa" => 0, "large" => 0,
@@ -1371,6 +1375,11 @@ sub semesterTimeSummary($$$$) {
     }
     for (my $i = 0; $i <= $#{$projects}; $i++) {
 	$otype{'total'} += 1;
+	if (!defined $helptypes{$projects->[$i]->{'help'}}) {
+	    $helptypes{$projects->[$i]->{'help'}} = 1;
+	} else {
+	    $helptypes{$projects->[$i]->{'help'}} += 1;
+	}
 	my $exclude = 0;
 	for (my $j = 0; $j <= $#{$exprojects}; $j++) {
 	    if (lc($projects->[$i]->{'project'}) eq lc($exprojects->[$j])) {
@@ -1530,7 +1539,8 @@ sub semesterTimeSummary($$$$) {
 	'band_totals' => $band_totals,
 	'total' => $gtotal,
 	'types' => \%otype,
-	'total_times' => \%ttotal
+	    'total_times' => \%ttotal,
+	    'help_types' => \%helptypes
     };
 
     
@@ -1627,6 +1637,11 @@ sub printSummary($$) {
 					 $s->{'types'}->{'total'}), $tdisp;
     }
 
+    printf "II Help requests:\n";
+    foreach my $ht (keys %{$s->{'help_types'}}) {
+	printf "  %s: %d\n", $ht, $s->{'help_types'}->{$ht};
+    }
+    
     # Print out the semester statistics.
     printf "II Semester %s summary:\n", $p->{'name'};
     my $thours = $p->{'length'} * 24;
@@ -1791,8 +1806,8 @@ sub printFileJson($$$$$$$$$$$) {
 				  $p->{'title'}, $p->{'impossible'},
 				  $p->{'preferred'}, $colours,
 				  $p->{'co_investigators'}, $p->{'pi_affiliation'},
-				  $p->{'pi_country'}, $p->{'coI_affiliations'},
-				  $p->{'coI_countries'});
+				  $p->{'pi_country'}, $p->{'pi_email'}, $p->{'coI_affiliations'},
+				  $p->{'coI_countries'}, $p->{'coI_emails'}, $p->{'help'});
 	my $s = $proj->{'slot'};
 	my $o = $p->{'observations'};
 	for (my $j = 0; $j <= $#{$o->{'requested_times'}}; $j++) {
@@ -1814,14 +1829,17 @@ sub printFileJson($$$$$$$$$$$) {
     }
     # Put the maintenance time in.
     my $maint_pi = "";
+    my $maint_email = "";
     if ($obs eq "atca") {
 	$maint_pi = "Mirtschin/Wilson";
+	$maint_email = "Tim.Wilson\@csiro.au";
     } elsif ($obs eq "parkes") {
 	$maint_pi = "Smith/Priesig";
+	$maint_email = "Mal.Smith\@csiro.au";
     }
     my $proj = &createProject("MAINT", "MAINT", $maint_pi,
 			      "", "Maintenance/Test", $holidays, "",
-			      $colours, [], "CASS", "Australia");
+			      $colours, [], "CASS", "Australia", $maint_email);
     push @{$u->{'project'}}, $proj;
     my $s = $proj->{'slot'};
     for (my $i = 0; $i <= $#{$maint}; $i++) {
@@ -1842,7 +1860,7 @@ sub printFileJson($$$$$$$$$$$) {
     }
     # And the VLBI time.
     $proj = &createProject("VLBI", "ASTRO", "Phillips", "", "VLBI", "", "",
-			   $colours, [], "CASS", "Australia");
+			   $colours, [], "CASS", "Australia", "Chris.Phillips\@csiro.au");
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
     for (my $i = 0; $i <= $#{$vlbi}; $i++) {
@@ -1854,13 +1872,16 @@ sub printFileJson($$$$$$$$$$$) {
     }
     # And the reconfigurations.
     my $config_pi = "";
+    my $config_email = "";
     if ($obs eq "atca") {
 	$config_pi = "Stevens";
+	$config_email = "Jamie.Stevens\@csiro.au";
     } elsif ($obs eq "parkes") {
 	$config_pi = "Reeves";
+	$config_email = "Ken.Reeves\@csiro.au";
     }
     $proj = &createProject("CONFIG", "CONFIG", $config_pi, "", "Reconfig",
-			   $holidays, "", $colours, [], "CASS", "Australia");
+			   $holidays, "", $colours, [], "CASS", "Australia", $config_email);
     push @{$u->{'project'}}, $proj;
     $s = $proj->{'slot'};
     my $configDuration = 24;
@@ -1876,7 +1897,7 @@ sub printFileJson($$$$$$$$$$$) {
     if ($obs eq "atca") {
 	# And some CABB reconfigurations.
 	$proj = &createProject("CABB", "NASA", "Stevens", "", "CABB", "", "",
-			       $colours, [], "CASS", "Australia");
+			       $colours, [], "CASS", "Australia", "Jamie.Stevens\@csiro.au");
 	push @{$u->{'project'}}, $proj;
 	$s = $proj->{'slot'};
 	for (my $i = 0; $i < 30; $i++) {
@@ -1906,8 +1927,11 @@ sub createProject($$$$$$$$) {
     my $co_investigators = shift;
     my $pi_affiliation = shift;
     my $pi_country = shift;
+    my $pi_email = shift;
     my $coI_affiliations = shift;
     my $coI_countries = shift;
+    my $coI_emails = shift;
+    my $help_required = shift || "None";
 
     my $date_impossible = $impossible;
     my $date_preferred = $preferred;
@@ -1930,20 +1954,26 @@ sub createProject($$$$$$$$) {
     if (!defined $coI_countries) {
 	$coI_countries = [];
     }
+    if (!defined $coI_emails) {
+	$coI_emails = [];
+    }
     my $rob = {
 	'ident' => $ident,
 	'type' => $type,
 	    'PI' => $pi,
 	    'PI_affiliation' => $pi_affiliation,
 	    'PI_country' => $pi_country,
+	    'PI_email' => $pi_email,
 	    'co_investigators' => $co_investigators,
 	    'coI_affiliations' => $coI_affiliations,
 	    'coI_countries' => $coI_countries,
-	'comments' => $comments,
-	'title' => $title,
-	'excluded_dates' => $date_impossible,
-	'preferred_dates' => $date_preferred,
-	'prefers_night' => 0,
+	    'coI_emails' => $coI_emails,
+	    'comments' => $comments,
+	    'title' => $title,
+	    'excluded_dates' => $date_impossible,
+	    'preferred_dates' => $date_preferred,
+	    'prefers_night' => 0,
+	    'help_required' => $help_required,
 	'slot' => []
     };
 
