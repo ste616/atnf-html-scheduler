@@ -1349,6 +1349,7 @@ sub semesterTimeSummary($$$$) {
 		  "750d" => "750m", "any750" => "750m", "ew367" => "compact",
 		  "anycompact" => "compact", "ew352" => "compact",
 		  "h75/168" => [ "h75", "h168" ],
+		  "h75/h168" => [ "h75", "h168" ],
 		  "any 750 or greater" => [ "750m", "1.5km", "6km" ],
 		  "any" => "any" );
 	%ttotal = ( "normal" => 0, "large" => 0, "napa" => 0, "continuum" => 0,
@@ -1455,7 +1456,7 @@ sub semesterTimeSummary($$$$) {
 			$bands[$l] =~ s/[\.\,\s]//g;
 			$ptotaltime += $dt;
 			if (defined $array_requests{$ta}->{$bands[$l]}) {
-			    #printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
+			    printf "++ Adding %.2f hrs in band %s\n", $dt, $bands[$k];
 			    $array_requests{$ta}->{$bands[$l]} += $dt;
 			    $band_totals->{$bands[$l]} += $dt;
 			    $ttotal{$et} += $dt;
