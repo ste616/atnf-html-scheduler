@@ -332,9 +332,14 @@ sub downloadScores($$) {
     my $oscorefile = shift;
 
     printf "== Downloading scores information from OPAL...\n";
-    my $scorefile = $semester."/scores.html";
+    my $scorefile = $semester."/scores";
 
     if (($oscorefile ne "") && (-e $oscorefile)) {
+	if ($oscorefile =~ /.html/) {
+	    $scorefile .= ".html";
+	} elsif ($oscorefile =~ /.csv/) {
+	    $scorefile .= ".csv";
+	}
 	printf "== Copying score file %s to %s ...", $oscorefile, $scorefile;
 	system "cp \"".$oscorefile."\" \"".$scorefile."\"";
 	if (-e $scorefile) {
@@ -448,20 +453,53 @@ sub parseScoreFile($$) {
 
     my $s = {};
     open(S, $scorefile) || die "!! cannot open $scorefile\n";
-    while(<S>) {
-	chomp (my $line = $_);
-	$line =~ s/^\s+//g;
-	if ($line =~ /^\<input type\=\"hidden\" id\=.* name\=.* value=\"(.*)\"\>$/) {
-	    my @scorebits = split(/\s+/, $1);
-	    my $ts = ($scorebits[2] eq "-1.0") ? $scorebits[1] : $scorebits[2];
-	    # Over-ride this if it's a Legacy project.
+#    while(<S>) {
+#	chomp (my $line = $_);
+#	$line =~ s/^\s+//g;
+#	if ($line =~ /^\<input type\=\"hidden\" id\=.* name\=.* value=\"(.*)\"\>$/) {
+#	    my @scorebits = split(/\s+/, $1);
+#	    my $ts = ($scorebits[2] eq "-1.0") ? $scorebits[1] : $scorebits[2];
+#	    # Over-ride this if it's a Legacy project.
+#	    for (my $i = 0; $i <= $#{$legacy}; $i++) {
+#		if ($legacy->[$i] eq $scorebits[0]) {
+#		    $ts = "5.0";
+#		    last;
+#		}
+#	    }
+#	    $s->{$scorebits[0]} = $ts;
+#	}
+#    }
+    if ($scorefile =~ /\.html/) {
+	while(<S>) {
+	    chomp (my $line = $_);
+	    $line =~ s/^\s+//g;
+	    if ($line =~ /^\<input type\=\"hidden\" id\=.* name\=.* value=\"(.*)\"\>$/) {
+		my @scorebits = split(/\s+/, $1);
+		my $ts = ($scorebits[2] eq "-1.0") ? $scorebits[1] : $scorebits[2];
+		# Over-ride this if it's a Legacy project.
+		for (my $i = 0; $i <= $#{$legacy}; $i++) {
+		    if ($legacy->[$i] eq $scorebits[0]) {
+			$ts = "5.0";
+			last;
+		    }
+		}
+		$s->{$scorebits[0]} = $ts * 1.0;
+	    }
+	}
+    } elsif ($scorefile =~ /\.csv/) {
+	while(<S>) {
+	    chomp (my $line = $_);
+	    $line =~ s/\"//g;
+	    my @scorebits = split(/\,/, $line);
+	    my $ts = $scorebits[3];
 	    for (my $i = 0; $i <= $#{$legacy}; $i++) {
 		if ($legacy->[$i] eq $scorebits[0]) {
 		    $ts = "5.0";
 		    last;
 		}
 	    }
-	    $s->{$scorebits[0]} = $ts;
+	    $s->{$scorebits[0]} = $ts * 1.0;
+	    print "Project ".$scorebits[0]." has grade ".$s->{$scorebits[0]}."\n";
 	}
     }
     close(S);
