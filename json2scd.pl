@@ -1282,10 +1282,14 @@ sub writeTextSchedules($) {
 			  $config);
 		my @edate = &epoch2webSplit($slot->{'scheduled_start'} + (10 * 3600) +
 					    $slot->{'scheduled_duration'} * 3600);
+		my $sptext = "Maintenance";
+		if ($slot->{'source'} =~ /^\!/) {
+		    $sptext = substr($slot->{'source'}, 1);
+		}
 		push @sphtml_lines, &slotToDayEntries(
 		    $slot->{'scheduled_start'},
 		    $slot->{'scheduled_start'} + ($slot->{'scheduled_duration'} * 3600),
-		    "<b>Maintenance                   </b>",
+		    "<b>".$sptext."                   </b>",
 		    ".", ".", ".");
 	    }
 	} else {
@@ -1404,12 +1408,12 @@ sub slotToDayEntries($$$$$$) {
     # Start and end times.
     my $st = DateTime->from_epoch(epoch => $stime + (10 * 3600));
     my $et = DateTime->from_epoch(epoch => $etime + (10 * 3600));
+    my $sjt = DateTime->from_epoch(epoch => $stime);
+    my $ejt = DateTime->from_epoch(epoch => $etime);
     my $addt = 0;
-    for (my $i = $st->doy(), $addt = 0; $i <= $et->doy(); $i++, $addt += 24) {
+    for (my $i = floor($st->mjd()), $addt = 0; $i <= floor($et->mjd()); $i++, $addt += 24) {
 	my $ct = DateTime->from_epoch(epoch => $stime + (($addt + 10) * 3600));
 	my $cep = $stime + ($addt * 3600);
-	push @{$rv->{'dates'}}, $ct->strftime("%d %b");
-	push @{$rv->{'days'}}, $ct->strftime("%a");
 	my $ststring;
 	my $slstring;
 	my $etstring;
@@ -1434,12 +1438,16 @@ sub slotToDayEntries($$$$$$) {
 	    my $cdf = $ct->hour() * 3600 + $ct->minute() * 60 + $ct->second();
 	    $elstring = &epoch2lst($cep + (86400 - $cdf));
 	}
-	push @{$rv->{'times'}}, sprintf("%s - %s %s",
-					$ststring, $etstring, $projstring);
-	push @{$rv->{'lsts'}}, sprintf("%s - %s", $slstring, $elstring);
-	push @{$rv->{'observers'}}, $obsstring;
-	push @{$rv->{'friends'}}, $friendstring;
-	push @{$rv->{'receivers'}}, $receiverstring;
+	if ($ststring ne $etstring) {
+	    push @{$rv->{'dates'}}, $ct->strftime("%d %b");
+	    push @{$rv->{'days'}}, $ct->strftime("%a");
+	    push @{$rv->{'times'}}, sprintf("%s - %s %s",
+					    $ststring, $etstring, $projstring);
+	    push @{$rv->{'lsts'}}, sprintf("%s - %s", $slstring, $elstring);
+	    push @{$rv->{'observers'}}, $obsstring;
+	    push @{$rv->{'friends'}}, $friendstring;
+	    push @{$rv->{'receivers'}}, $receiverstring;
+	}
     }
     return $rv;
 }
