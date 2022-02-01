@@ -2039,6 +2039,10 @@ sub createSlot($$$$$$$$$$) {
 
     my @bands = split(/\s+/, $bands);
     my @pos = split(/\,/, $position);
+
+    if ($rating <= 0) {
+	$rating = 1.0;
+    }
     
     return {
 	'array' => $array, 'bands' => \@bands, 'bandwidth' => $bandwidth,

@@ -320,7 +320,7 @@ sub fillObsStrings($) {
 	$obsStrings{'short'} = "PK";
 	$obsStrings{'directory'} = "parkes-".
 	    $prog->{'term'}->{'term'};
-	$obsStrings{'full'} = "Parkes Radiotelescope";
+	$obsStrings{'full'} = "Murriyang, the CSIRO Parkes Radiotelescope";
     }
     
 }
@@ -878,21 +878,6 @@ sub ps_sch_box($$$) {
 	    }
 	} elsif ($proj->{'ident'} eq "MAINT") {
 	    $tstring = " () mnt_box";
-	} elsif ($proj->{'type'} eq "MAINT") {
-	    # Use the colour in the schedule.
-	    my ($r, $g, $b);
-	    $r = (hex "0x".substr($proj->{'colour'}, 0, 2)) / 255.;
-	    $g = (hex "0x".substr($proj->{'colour'}, 2, 2)) / 255.;
-	    $b = (hex "0x".substr($proj->{'colour'}, 4, 2)) / 255.;
-	    # What should the title be.
-	    my $stitle = $proj->{'title'};
-	    if (defined $slot && defined $slot->{'source'} &&
-		$slot->{'source'} =~ /^\!/) {
-		$stitle = substr($slot->{'source'}, 1);
-	    }
-	    $tstring = sprintf " (%s) (%s) (%s) %.1f %.1f %.1f colnopi_box",
-	    $stitle, substr($stitle, 0, 5), substr($stitle, 0, 5),
-	    $r, $g, $b;
 	} elsif ($proj->{'ident'} eq "CABB") {
 	    my $sstring = $slot->{'source'};
 	    if ($slot->{'source'} =~ /^\!/) {
@@ -915,6 +900,34 @@ sub ps_sch_box($$$) {
 	    $tstring = sprintf " (%s) ((%s)) (%s) (%s) () (%s) fast_box",
 	    $proj->{'ident'}, $proj->{'PI'}, $band_string, $bandwidth_string,
 	    $slot->{'source'};
+	} elsif (($proj->{'type'} eq "MAINT") ||
+		 (($proj->{'type'} eq "ASTRO") &&
+		  (defined $proj->{'colour'}))) {
+	    # Use the colour in the schedule.
+	    my ($r, $g, $b);
+	    $r = (hex "0x".substr($proj->{'colour'}, 0, 2)) / 255.;
+	    $g = (hex "0x".substr($proj->{'colour'}, 2, 2)) / 255.;
+	    $b = (hex "0x".substr($proj->{'colour'}, 4, 2)) / 255.;
+	    # What should the title be.
+	    my $stitle = $proj->{'title'};
+	    if ($proj->{'type'} eq "ASTRO") {
+		$stitle = $proj->{'ident'};
+	    }
+	    if (defined $slot && defined $slot->{'source'} &&
+		$slot->{'source'} =~ /^\!/) {
+		$stitle = substr($slot->{'source'}, 1);
+	    }
+	    if ($proj->{'type'} eq "MAINT") {
+		$tstring = sprintf " (%s) (%s) (%s) %.1f %.1f %.1f colnopi_box",
+		    $stitle, substr($stitle, 0, 5), substr($stitle, 0, 5),
+		    $r, $g, $b;
+	    } elsif ($proj->{'type'} eq "ASTRO") {
+		my $band_string = &bracketise_string(join(" ", @{$slot->{'bands'}}));
+		my $bandwidth_string = &bracketise_string($slot->{'bandwidth'});
+		$tstring = sprintf " (%s) ((%s)) (%s) (%s) (%s) (%s) %.1f %.1f %.1f colsch_box",
+		    $proj->{'ident'}, $proj->{'PI'}, $band_string, $bandwidth_string,
+		    "", $slot->{'source'}, $r, $g, $b;
+	    }
 	} else {
 	    # Check for Legacy projects.
 	    my $supp = "";
@@ -1275,11 +1288,15 @@ sub writeTextSchedules($) {
 			".", ".", ".");
 		}
 	    } else {
-		printf M ("%17s, %17s, Maintenance/test, %s\n",
+		my $smtext = "Maintenance/test";
+		if ($slot->{'source'} =~ /^\!/) {
+		    $smtext = substr($slot->{'source'}, 1);
+		}
+		printf M ("%17s, %17s, %s, %s\n",
 			  &epoch2maint($slot->{'scheduled_start'}),
 			  &epoch2maint($slot->{'scheduled_start'} +
 				       ($slot->{'scheduled_duration'} * 3600)),
-			  $config);
+			  $smtext, $config);
 		my @edate = &epoch2webSplit($slot->{'scheduled_start'} + (10 * 3600) +
 					    $slot->{'scheduled_duration'} * 3600);
 		my $sptext = "Maintenance";
