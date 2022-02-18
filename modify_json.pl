@@ -444,11 +444,19 @@ sub parseScoreFile($$) {
 	    }
 	}
     } elsif ($scorefile =~ /\.csv/) {
+	my $scoremode = 0;
 	while(<S>) {
 	    chomp (my $line = $_);
+	    if ($scoremode == 0) {
+		if ($line =~ /^Ident\,Semester\,TAC_rating1/) {
+		    $scoremode = 2;
+		} elsif ($line =~ /^Semester\,Project\,PI\,Grade/) {
+		    $scoremode = 3;
+		}
+	    }
 	    $line =~ s/\"//g;
 	    my @scorebits = split(/\,/, $line);
-	    my $ts = $scorebits[3];
+	    my $ts = $scorebits[$scoremode];
 	    for (my $i = 0; $i <= $#{$legacy}; $i++) {
 		if ($legacy->[$i] eq $scorebits[0]) {
 		    $ts = "5.0";

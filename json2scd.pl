@@ -7,6 +7,7 @@ use JSON;
 use DateTime;
 use POSIX;
 use Astro::Time;
+use Storable qw(dclone);
 use strict;
 
 my $json = JSON->new->allow_nonref;
@@ -47,29 +48,32 @@ if ($infile =~ /\.json$/) {
     # Write the SCD file.
     #print " SCD output\n";
     &writeScd($prog);
+
+    # Truncate the schedule if required for release.
+    my $truncprog = &truncateProgram($prog);
     
     # Write the PS file.
     #print " postscript output\n";
-    &writePostscriptSchedule($prog);
+    &writePostscriptSchedule($truncprog);
     
     # Write the schedule summary.
     #print " schedule summary\n";
-    &writeScheduleSummary($prog);
+    &writeScheduleSummary($truncprog);
 
     # Write out a file for the usage stats and the
     # maintenance text file.
     #print " text schedules\n";
-    &writeTextSchedules($prog);
+    &writeTextSchedules($truncprog);
 
     # Write out the HTML summaries.
     #print " HTML schedules\n";
-    &writeHTMLSchedules($prog);
+    &writeHTMLSchedules($truncprog);
 
     # Create the graphical schedule pages.
-    &writeGraphicalSchedules($prog);
+    &writeGraphicalSchedules($truncprog);
 
     # Create the JSON schedule output.
-    &writeJSONSchedule($prog);
+    &writeJSONSchedule($truncprog);
 
     # Create the file that goes back into OPAL.
     &writeOPALFile($prog);
@@ -112,6 +116,51 @@ sub slotSorter($) {
 	    $prog->{'project'}->[$i]->{'slot'} = \@sslots;
 	}
     }
+}
+
+sub truncateProgram($) {
+    my $prog = shift;
+
+    # Check whether we need to truncate.
+    if ((!defined $prog->{'releasedates'}) ||
+	((!defined $prog->{'releasedates'}->{'start'}) &&
+	 (!defined $prog->{'releasedates'}->{'end'}))) {
+	# We release the entire schedule.
+	return $prog;
+    }
+
+    my $srelease = &stringToDatetime($prog->{'term'}->{'start'});
+    if (defined $prog->{'releasedates'}->{'start'}) {
+	$srelease = &stringToDatetime($prog->{'releasedates'}->{'start'});
+    }
+    my $erelease = &stringToDatetime($prog->{'term'}->{'end'});
+    if (defined $prog->{'releasedates'}->{'end'}) {
+	$erelease = &stringToDatetime($prog->{'releasedates'}->{'end'});
+    }
+    my $sreleasee = $srelease->epoch();
+    my $ereleasee = $erelease->epoch();
+    
+    # Now work out which slots to keep.
+    my $truncprog = dclone($prog);
+
+    for (my $i = 0; $i <= $#{$truncprog->{'project'}}; $i++) {
+	my @nslots;
+	#print Dumper $truncprog->{'project'}->[$i];
+	for (my $j = 0; $j <= $#{$truncprog->{'project'}->[$i]->{'slot'}}; $j++) {
+	    #print Dumper $truncprog->{'project'}->[$i]->{'slot'}->[$j];
+	    if (((($truncprog->{'project'}->[$i]->{'slot'}->[$j]->{'scheduled_start'} >
+		   $sreleasee) &&
+		  ($truncprog->{'project'}->[$i]->{'slot'}->[$j]->{'scheduled_start'} <
+		   $ereleasee)) ||
+		 ($truncprog->{'project'}->[$i]->{'slot'}->[$j]->{'scheduled_duration'} == 0)) ||
+		($truncprog->{'project'}->[$i]->{'ident'} eq "CONFIG")) {
+		push @nslots, $truncprog->{'project'}->[$i]->{'slot'}->[$j];
+	    }
+	}
+	$truncprog->{'project'}->[$i]->{'slot'} = \@nslots;
+    }
+
+    return $truncprog;
 }
 
 sub parseScd($$) {
@@ -457,8 +506,13 @@ sub writePostscriptSchedule($) {
     my $outps = $pfx.".ps";
 
     # Make the Postscript output.
-    my $t = &stringToDatetime($prog->{'term'}->{'start'});
     my $te = &stringToDatetime($prog->{'term'}->{'end'});
+    if (defined $prog->{'releasedates'}) {
+	if (defined $prog->{'releasedates'}->{'end'}) {
+	    $te = &stringToDatetime($prog->{'releasedates'}->{'end'});
+	}
+    }
+    my $t = &firstMonday($prog);
     my $dur = $te->epoch() - $t->epoch();
     my $days = 14;
     my $totalDays = $dur / 86400;
@@ -479,7 +533,7 @@ sub writePostscriptSchedule($) {
     close(U);
 
     for (my $i = 0; $i < $numberOfPages; $i++) {
-	#print "page $i\n";
+	#print "page $i / $numberOfPages\n";
 	print P "%%Page: ". ($i + 1)." ".($i + 1)."\n";
 	print P $preUrl."\n";
 	print P &printps($prog, $i);
@@ -500,6 +554,10 @@ sub firstMonday($) {
     my $prog = shift;
 
     my $time1 = &stringToDatetime($prog->{'term'}->{'start'});
+    if ((defined $prog->{'releasedates'}) &&
+	(defined $prog->{'releasedates'}->{'start'})) {
+	$time1 = &stringToDatetime($prog->{'releasedates'}->{'start'});
+    }
     my $d = $time1->day_of_week();
     $time1->subtract( days => (($d + 6) % 7) );
 
@@ -593,6 +651,21 @@ sub printps($$) {
 	      'title' => "Previous Semester", 'colour' => "ffcdcd" }, {},
 	    $day1, $day2, $rstring, $config);
     }
+
+    # Check if we make a "Not released" block.
+    if (defined $prog->{'releasedates'}) {
+	if (defined $prog->{'releasedates'}->{'start'}) {
+	    my $srelease = &stringToDatetime($prog->{'releasedates'}->{'start'});
+	    if ((($time1 < $srelease) && ($time2 > $srelease)) ||
+		($time2 < $srelease)) {
+		($day1, $day2, $rstring, $config) = &splitintodays(
+		    $time1, $srelease, $time1, $time2,
+		    { 'ident' => "notreleased", 'type' => "MAINT",
+		      'title' => "Not Released", 'colour' => "ff9999" }, {},
+		    $day1, $day2, $rstring, $config);
+	    }
+	}
+    }
     
     # Cycle through the slots.
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
@@ -619,7 +692,25 @@ sub printps($$) {
 	    }
 	}
     }
+
     my $semend = &stringToDatetime($prog->{'term'}->{'end'});
+    
+    # Check if we make a "Not released" block.
+    if (defined $prog->{'releasedates'}) {
+	if (defined $prog->{'releasedates'}->{'end'}) {
+	    my $erelease = &stringToDatetime($prog->{'releasedates'}->{'end'});
+	    if ((($time1 < $erelease) && ($time2 > $erelease)) ||
+		($time1 > $erelease)) {
+		($day1, $day2, $rstring, $config) = &splitintodays(
+		    $erelease, $semend, $time1, $time2,
+		    { 'ident' => "notreleased", 'type' => "MAINT",
+		      'title' => "Not Released", 'colour' => "ff9999" }, {},
+		    $day1, $day2, $rstring, $config);
+	    }
+	}
+    }
+
+    
     #print $semend."\n";
     if ($time2 > $semend) {
 	#print " making next semester block\n";
@@ -902,7 +993,8 @@ sub ps_sch_box($$$) {
 	    $slot->{'source'};
 	} elsif (($proj->{'type'} eq "MAINT") ||
 		 (($proj->{'type'} eq "ASTRO") &&
-		  (defined $proj->{'colour'}))) {
+		  (defined $proj->{'colour'}) &&
+		  ($proj->{'colour'} ne "cdcdcd"))) {
 	    # Use the colour in the schedule.
 	    my ($r, $g, $b);
 	    $r = (hex "0x".substr($proj->{'colour'}, 0, 2)) / 255.;
@@ -913,9 +1005,13 @@ sub ps_sch_box($$$) {
 	    if ($proj->{'type'} eq "ASTRO") {
 		$stitle = $proj->{'ident'};
 	    }
-	    if (defined $slot && defined $slot->{'source'} &&
-		$slot->{'source'} =~ /^\!/) {
-		$stitle = substr($slot->{'source'}, 1);
+	    my $ssource = "";
+	    if (defined $slot && defined $slot->{'source'}) {
+		$ssource = $slot->{'source'};
+		if ($slot->{'source'} =~ /^\!/) {
+		    $stitle = substr($slot->{'source'}, 1);
+		    $ssource = $stitle;
+		}
 	    }
 	    if ($proj->{'type'} eq "MAINT") {
 		$tstring = sprintf " (%s) (%s) (%s) %.1f %.1f %.1f colnopi_box",
@@ -925,8 +1021,8 @@ sub ps_sch_box($$$) {
 		my $band_string = &bracketise_string(join(" ", @{$slot->{'bands'}}));
 		my $bandwidth_string = &bracketise_string($slot->{'bandwidth'});
 		$tstring = sprintf " (%s) ((%s)) (%s) (%s) (%s) (%s) %.1f %.1f %.1f colsch_box",
-		    $proj->{'ident'}, $proj->{'PI'}, $band_string, $bandwidth_string,
-		    "", $slot->{'source'}, $r, $g, $b;
+		    $stitle, $proj->{'PI'}, $band_string, $bandwidth_string,
+		    "", $ssource, $r, $g, $b;
 	    }
 	} else {
 	    # Check for Legacy projects.
@@ -1539,6 +1635,12 @@ sub writeHTMLSchedules($) {
 	if ($i <= $#sorted_slots) {
 	    $slot = $sorted_slots[$i]->{'slot'};
 	    $proj = $sorted_slots[$i]->{'proj'};
+	}
+	if ((lc($obsStrings{'name'}) eq "parkes") &&
+	    (($proj->{'ident'} eq "MAINT") ||
+	     ($proj->{'ident'} eq "MISC"))) {
+	    # Don't include these on the summary pages.
+	    next;
 	}
 	if (($i > $#sorted_slots) || ($proj->{'ident'} ne $ident)) {
 	    # We have to end the previous row and start a new one.

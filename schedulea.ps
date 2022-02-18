@@ -876,9 +876,14 @@ x1 y4 ds sub M
  /s_month mon month def
  s_date 3 s_month putinterval
  /s_day {dd mon year dayofWeek} def
+ /c_doy 4 string def
+ c_doy 0 (    ) putinterval
+ /n_doy {dd mon year doy} def
+ n_doy 10 c_doy cvrs
  
  x2 x1 sub ds s_day fh psB putleft
  x2 x1 sub ds s_date fh psB putright
+ x2 x1 sub ds3 c_doy fh psb putright
  0 ds neg RM
 
  /s_doy dd 1 add mon year doy def
