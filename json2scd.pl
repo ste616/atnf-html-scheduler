@@ -76,10 +76,10 @@ if ($infile =~ /\.json$/) {
     &writeJSONSchedule($truncprog);
 
     # Create the file that goes back into OPAL.
-    &writeOPALFile($prog);
+    &writeOPALFile($truncprog);
 
     # Write out statistics for the Annual Report.
-    &writeStatistics($prog);
+    &writeStatistics($truncprog);
     
     close(P);
 } elsif ($infile =~ /\.scd$/) {
@@ -148,7 +148,7 @@ sub truncateProgram($) {
 	#print Dumper $truncprog->{'project'}->[$i];
 	for (my $j = 0; $j <= $#{$truncprog->{'project'}->[$i]->{'slot'}}; $j++) {
 	    #print Dumper $truncprog->{'project'}->[$i]->{'slot'}->[$j];
-	    if (((($truncprog->{'project'}->[$i]->{'slot'}->[$j]->{'scheduled_start'} >
+	    if (((($truncprog->{'project'}->[$i]->{'slot'}->[$j]->{'scheduled_start'} >=
 		   $sreleasee) &&
 		  ($truncprog->{'project'}->[$i]->{'slot'}->[$j]->{'scheduled_start'} <
 		   $ereleasee)) ||
@@ -668,6 +668,7 @@ sub printps($$) {
     }
     
     # Cycle through the slots.
+    my $lastTime = $time1;
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
 	my $proj = $prog->{'project'}->[$i];
 	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
@@ -681,6 +682,9 @@ sub printps($$) {
 	    $slotStart->add( hours => 10 );
 	    my $slotEnd = $slotStart->clone();
 	    $slotEnd->add( hours => $slot->{'scheduled_duration'} );
+	    if ($slotEnd > $lastTime) {
+		$lastTime = $slotEnd;
+	    }
 	    if ((($slotStart > $time1) && ($slotStart < $time2))  ||
 		(($slotEnd > $time1) && ($slotEnd < $time2)) ||
 		## This next one is when a project goes for a whole
@@ -700,7 +704,10 @@ sub printps($$) {
 	if (defined $prog->{'releasedates'}->{'end'}) {
 	    my $erelease = &stringToDatetime($prog->{'releasedates'}->{'end'});
 	    if ((($time1 < $erelease) && ($time2 > $erelease)) ||
-		($time1 > $erelease)) {
+		($time1 >= $erelease)) {
+		if ($lastTime > $erelease) {
+		    $erelease = $lastTime;
+		}
 		($day1, $day2, $rstring, $config) = &splitintodays(
 		    $erelease, $semend, $time1, $time2,
 		    { 'ident' => "notreleased", 'type' => "MAINT",
@@ -1611,11 +1618,12 @@ sub writeHTMLSchedules($) {
 	'<th valign="top" width="25%">Investigators</th>';
     print A $prelines;
     print U $prelines;
-    $tformat = '<th valign="top" width="10%">%s Dates</th>'.
+    $tformat = '<th valign="top" width="7%">%s Dates</th>'.
 	'<th valid="top" width="10%">%s Start time</th>';
     printf A ($tformat, "AEST", "AEST");
     printf U ($tformat, "UT", "UT");
-    $prelines = '<th valign="top" width="10%">Duration (hrs)</th>'.
+    $prelines = '<th valign="top" width="5%">Duration (hrs)</th>'.
+	'<th nowrap valign="top" width="8%">LST Range</th>'.
 	'<th nowrap valign="top" width="35%">Title</th></tr>';
     print A $prelines;
     print U $prelines;
@@ -1626,6 +1634,7 @@ sub writeHTMLSchedules($) {
     my $dateCellAEST;
     my $timeCellAEST;
     my $durationCell;
+    my $lstCell;
     my $dateCellUT;
     my $timeCellUT;
     my $totalHours;
@@ -1648,12 +1657,13 @@ sub writeHTMLSchedules($) {
 		$dateCellAEST .= "Total</td>";
 		$timeCellAEST .= "</td>";
 		$durationCell .= sprintf("%.1f</td>", $totalHours);
+		$lstCell .= "</td>";
 		print A $rowStart.$dateCellAEST.$timeCellAEST.
-		    $durationCell.$rowEnd;
+		    $durationCell.$lstCell.$rowEnd;
 		$dateCellUT .= "Total</td>";
 		$timeCellUT .= "</td>";
 		print U $rowStart.$dateCellUT.$timeCellUT.
-		    $durationCell.$rowEnd;
+		    $durationCell.$lstCell.$rowEnd;
 	    }
 	    if ($i <= $#sorted_slots) {
 		$totalHours = 0;
@@ -1676,6 +1686,7 @@ sub writeHTMLSchedules($) {
 		$dateCellUT = '<td nowrap valign="top">';
 		$timeCellUT = '<td nowrap valign="top" align="center">';
 		$durationCell = '<td nowrap valign="top" align="right">';
+		$lstCell = '<td nowrap valign="top" align="center">';
 		$ident = $proj->{'ident'};
 	    } else {
 		last;
@@ -1693,6 +1704,10 @@ sub writeHTMLSchedules($) {
 	    $timeCellUT .= $dateCompsUT[1]."<br>";
 	    $durationCell .= sprintf("%.1f<br>", 
 				     ($slot->{'scheduled_duration'} * 1));
+	    $lstCell .= &epoch2lst($slot->{'scheduled_start'}).' - '.
+		&epoch2lst($slot->{'scheduled_start'} + ($slot->{'scheduled_duration'} * 3600)).
+		"<br>";
+	    
 	}
     }
 
