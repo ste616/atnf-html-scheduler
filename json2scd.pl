@@ -2007,11 +2007,22 @@ sub writeOPALFile($) {
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
 	my $proj = $prog->{'project'}->[$i];
 	my $ident = $proj->{'ident'};
-	if ($proj->{'type'} ne "ASTRO") {
+	if (($proj->{'type'} ne "ASTRO") ||
+	    ($proj->{'ident'} eq "VLBI") ||
+	    ($proj->{'ident'} eq "BL") ||
+	    ($proj->{'ident'} =~ /^PX50[01]/)) {
 	    next;
 	}
-	$codes{$ident} = { 'time' => 0, 'napa' => 0, 
-			   'title' => $proj->{'title'}, 'pi' => $proj->{'PI'} };
+	#print Dumper $proj;
+	my $coistring = $proj->{'PI'};
+	for (my $j = 0; $j <= $#{$proj->{'co_investigators'}}; $j++) {
+	    $coistring .= ",".$proj->{'co_investigators'}->[$j];
+	}
+	$codes{$ident} = {
+	    'time' => 0, 'napa' => 0, 
+		'title' => $proj->{'title'}, 'pi' => $proj->{'PI'},
+		'investigators' => $coistring
+	};
 	if ($proj->{'title'} =~ /^NAPA/) {
 	    $codes{$ident}->{'napa'} = 1;
 	}
@@ -2030,8 +2041,12 @@ sub writeOPALFile($) {
     my $legendfile = sprintf("%s/%s_%s_summary.html", $obsStrings{'directory'},
 			     lc($prog->{'observatory'}->{'observatory'}),
 			     lc($prog->{'term'}->{'term'}));
+    my $annreport_file = sprintf("%s/%s_%s_annualreport.csv", $obsStrings{'directory'},
+				 lc($prog->{'observatory'}->{'observatory'}),
+				 lc($prog->{'term'}->{'term'}));
     open(O, ">".$opalfile) || die "Unable to open $opalfile for writing\n";
     open(L, ">".$legendfile) || die "Unable to open $legendfile for writing\n";
+    open(R, ">".$annreport_file) || die "Unable to open $annreport_file for writing\n";
     printf L ("<!DOCTYPE html>\n<html>\n<head><title>%s Proposal Summary</title></head>\n",
 	      $prog->{'term'}->{'term'});
     printf L ("<body>\n<h2>%s Observing Schedule Proposals Legend</h2>\n",
@@ -2051,6 +2066,13 @@ sub writeOPALFile($) {
 	    printf L ("<tr><td align=\"center\">%s</td><td>%s (%s)</td></tr>\n",
 		      $sp[$i], $codes{$sp[$i]}->{'title'},
 		      $codes{$sp[$i]}->{'pi'});
+	    my $ntitle = $codes{$sp[$i]}->{'title'};
+	    if ($ntitle =~ /^NAPA\:\s(.*)$/) {
+		$ntitle = $1;
+	    }
+	    printf R ("\"%s\",\"%s\",%s\n", 
+		      $codes{$sp[$i]}->{'investigators'},
+		      $ntitle, $sp[$i]);
 	} 
     }
 
@@ -2058,4 +2080,5 @@ sub writeOPALFile($) {
     
     close(O);
     close(L);
+    close(R);
 }
