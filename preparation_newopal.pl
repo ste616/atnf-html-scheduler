@@ -1273,58 +1273,72 @@ sub translateCoord($$$$$) {
     my ($p1, $p2, $x1, $x2, $c) = @_;
     # Turn the XML-format coordinates into something more friendly.
 
-    my $coordtype = ($c eq "Galactic") ? 3 : 1;
+    my $coordtype = ($c eq "galactic") ? 3 : 1;
 
     my ($ra_string, $dec_string);
     my $pi = 3.141592654;
     
     if ($coordtype == 1) {
 	# We have p1 = RA, p2 = Dec
-	$p1 *= 24.0 / (2 * $pi);
-	$p2 *= 180 / $pi;
-	my $rah = floor($p1);
-	$p1 -= $rah;
-	$p1 *= 60.0;
-	my $ram = floor($p1);
-	$p1 -= $ram;
-	$p1 *= 60.0;
-	my $ras = $p1;
-	my $raf = "%02d:%02d:%0";
-	if ($x1 > 0) {
-	    $raf .= (3 + $x1).".".$x1."f";
-	} else {
-	    $raf .= "2.0f";
-	    $ras = floor($ras);
-	}
-	$ra_string = sprintf $raf, $rah, $ram, $ras;
-
-	my $decs = ($p2 < 0) ? -1 : 1;
-	$p2 *= $decs;
-	my $decd = floor($p2);
-	$p2 -= $decd;
-	$p2 *= 60.0;
-	my $decm = floor($p2);
-	$p2 -= $decm;
-	$p2 *= 60.0;
-	my $decsec = $p2;
-	my $decf = "%+03d:%02d:%0";
-	if ($x2 > 0) {
-	    $decf .= (3 + $x2).".".$x2."f";
-	} else {
-	    $decf .= "2.0f";
-	    $decsec = floor($decsec);
-	}
-	$decd *= $decs;
-	$dec_string = sprintf $decf, $decd, $decm, $decsec;
+	$ra_string = $p1;
+	$dec_string = $p2;
+#	$p1 *= 24.0 / (2 * $pi);
+#	$p2 *= 180 / $pi;
+#	my $rah = floor($p1);
+#	$p1 -= $rah;
+#	$p1 *= 60.0;
+#	my $ram = floor($p1);
+#	$p1 -= $ram;
+#	$p1 *= 60.0;
+#	my $ras = $p1;
+#	my $raf = "%02d:%02d:%0";
+#	if ($x1 > 0) {
+#	    $raf .= (3 + $x1).".".$x1."f";
+#	} else {
+#	    $raf .= "2.0f";
+#	    $ras = floor($ras);
+#	}
+#	$ra_string = sprintf $raf, $rah, $ram, $ras;
+#
+#	my $decs = ($p2 < 0) ? -1 : 1;
+#	$p2 *= $decs;
+#	my $decd = floor($p2);
+#	$p2 -= $decd;
+#	$p2 *= 60.0;
+#	my $decm = floor($p2);
+#	$p2 -= $decm;
+#	$p2 *= 60.0;
+#	my $decsec = $p2;
+#	my $decf = "%+03d:%02d:%0";
+#	if ($x2 > 0) {
+#	    $decf .= (3 + $x2).".".$x2."f";
+#	} else {
+#	    $decf .= "2.0f";
+#	    $decsec = floor($decsec);
+#	}
+#	$decd *= $decs;
+#	$dec_string = sprintf $decf, $decd, $decm, $decsec;
     } elsif ($coordtype == 3) {
 	# We have p1 = Lon, p2 = Lat
-	$p1 *= 180 / $pi;
-	$p2 *= 180 / $pi;
+	#$p1 *= 180 / $pi;
+	#$p2 *= 180 / $pi;
 	my ($ra, $dec) = (`cotra radec=$p1,$p2 type=galactic` =~ m{J2000:\s+(\S+)\s+(\S+)});
 	$ra =~ s/\.\d+$//;
 	$dec =~ s/\.\d+$//;
 	$ra_string = $ra;
 	$dec_string = $dec;
+    }
+    if ($ra_string eq "") {
+	$ra_string = "00:00:00";
+    }
+    if ($ra_string =~ /^.*\s+.*\s+.*$/) {
+	$ra_string =~ s/\s+/\:/g;
+    }
+    if ($dec_string eq "") {
+	$dec_string = "00:00:00";
+    }
+    if ($dec_string =~ /^.*\s+.*\s+.*$/) {
+	$dec_string =~ s/\s+/\:/g;
     }
     return ($ra_string, $dec_string);
 }

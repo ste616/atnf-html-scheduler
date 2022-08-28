@@ -28,6 +28,7 @@ my @codeclears;
 my $clearall = 0;
 my $copy_affiliations = 0;
 my $copy_emails = 0;
+my $copy_positions = 0;
 
 GetOptions(
     "input=s" => \$json_input,
@@ -46,7 +47,8 @@ GetOptions(
     "clear=s" => \@codeclears,
     "clearall" => \$clearall,
     "copyaffiliations" => \$copy_affiliations,
-    "copyemails" => \$copy_emails
+    "copyemails" => \$copy_emails,
+    "copypositions" => \$copy_positions
     );
 
 my $changemade = 0;
@@ -274,6 +276,36 @@ if ((defined $refjref) && ($copy_emails == 1)) {
 		$jref->{'program'}->{'project'}->[$i]->{'coI_emails'} =
 		    $refjref->{'program'}->{'project'}->[$k]->{'coI_emails'};
 		$changemade = 1;
+		last;
+	    }
+	}
+    }
+}
+# Copy positions from the reference.
+if ((defined $refjref) && ($copy_positions == 1)) {
+    for (my $i = 0; $i <= $#{$jref->{'program'}->{'project'}}; $i++) {
+	for (my $k = 0; $k <= $#{$refjref->{'program'}->{'project'}}; $k++) {
+	    if ($refjref->{'program'}->{'project'}->[$k]->{'ident'} eq
+		$jref->{'program'}->{'project'}->[$i]->{'ident'}) {
+		# We have to copy positions slot by slot.
+		printf("FROM PROJECT %s:\n", $jref->{'program'}->{'project'}->[$i]->{'ident'});
+		for (my $j = 0; $j <= $#{$jref->{'program'}->{'project'}->[$i]->{'slot'}}; $j++) {
+		    for (my $l = 0; $l <= $#{$refjref->{'program'}->{'project'}->[$k]->{'slot'}}; $l++) {
+			if ($jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'source'} eq
+			    $refjref->{'program'}->{'project'}->[$k]->{'slot'}->[$l]->{'source'}) {
+			    printf("COPYING POSITION FOR SOURCE %s FROM REFERENCE %s %s\n",
+				   $jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'source'},
+				   $refjref->{'program'}->{'project'}->[$k]->{'slot'}->[$l]->{'position'}->{'ra'},
+				   $refjref->{'program'}->{'project'}->[$k]->{'slot'}->[$l]->{'position'}->{'dec'});
+			    $jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'position'}->{'ra'} =
+				$refjref->{'program'}->{'project'}->[$k]->{'slot'}->[$l]->{'position'}->{'ra'};
+			    $jref->{'program'}->{'project'}->[$i]->{'slot'}->[$j]->{'position'}->{'dec'} =
+				$refjref->{'program'}->{'project'}->[$k]->{'slot'}->[$l]->{'position'}->{'dec'};
+			    $changemade = 1;
+			    last;
+			}
+		    }
+		}
 		last;
 	    }
 	}

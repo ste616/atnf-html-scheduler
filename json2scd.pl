@@ -106,6 +106,8 @@ if ($infile =~ /\.json$/) {
     
 }
 
+print " done!\n";
+
 sub slotSorter($) {
     my $prog = shift;
 
@@ -650,6 +652,7 @@ sub printps($$) {
 	    { 'ident' => "prevsem", 'type' => "MAINT",
 	      'title' => "Previous Semester", 'colour' => "ffcdcd" }, {},
 	    $day1, $day2, $rstring, $config);
+	$time1 = $semstart;
     }
 
     # Check if we make a "Not released" block.
@@ -1203,6 +1206,16 @@ sub writeStatistics($) {
 
     # Write it out.
     print S "Time allocation by PI (%):\n";
+    if (($pi_allocation_cass + $pi_allocation_aus + $pi_allocation_os) == 0) {
+	$pi_allocation_cass = 1;
+	$pi_allocation_aus = 1;
+	$pi_allocation_os = 1;
+    }
+    if (($all_allocation_cass + $all_allocation_aus + $all_allocation_os) == 0) {
+	$all_allocation_cass = 1;
+	$all_allocation_aus = 1;
+	$all_allocation_os = 1;
+    }
     printf A ("Total times PI = %.2f\n", ($pi_allocation_cass + $pi_allocation_aus +
 					      $pi_allocation_os));
     printf S ("CASS/ATNF = %.2f\n", (100.0 * ($pi_allocation_cass / 
