@@ -652,8 +652,9 @@ sub printps($$) {
 	    { 'ident' => "prevsem", 'type' => "MAINT",
 	      'title' => "Previous Semester", 'colour' => "ffcdcd" }, {},
 	    $day1, $day2, $rstring, $config);
-	$time1 = $semstart;
+	#$time1 = $semstart;
     }
+    #print "1 day1 = $day1\n";
 
     # Check if we make a "Not released" block.
     if (defined $prog->{'releasedates'}) {
@@ -661,14 +662,20 @@ sub printps($$) {
 	    my $srelease = &stringToDatetime($prog->{'releasedates'}->{'start'});
 	    if ((($time1 < $srelease) && ($time2 > $srelease)) ||
 		($time2 < $srelease)) {
+		# Check that we don't overlap the previous semester blocks.
+		my $snrtime = $time1;
+		if ($time1 < $semstart) {
+		    $snrtime = $semstart;
+		}
 		($day1, $day2, $rstring, $config) = &splitintodays(
-		    $time1, $srelease, $time1, $time2,
+		    $snrtime, $srelease, $time1, $time2,
 		    { 'ident' => "notreleased", 'type' => "MAINT",
 		      'title' => "Not Released", 'colour' => "ff9999" }, {},
 		    $day1, $day2, $rstring, $config);
 	    }
 	}
     }
+    #print "2 day1 = $day1\n";
     
     # Cycle through the slots.
     my $lastTime = $time1;
@@ -685,9 +692,6 @@ sub printps($$) {
 	    $slotStart->add( hours => 10 );
 	    my $slotEnd = $slotStart->clone();
 	    $slotEnd->add( hours => $slot->{'scheduled_duration'} );
-	    if ($slotEnd > $lastTime) {
-		$lastTime = $slotEnd;
-	    }
 	    if ((($slotStart > $time1) && ($slotStart < $time2))  ||
 		(($slotEnd > $time1) && ($slotEnd < $time2)) ||
 		## This next one is when a project goes for a whole
@@ -696,9 +700,13 @@ sub printps($$) {
 		($day1, $day2, $rstring, $config) = &splitintodays(
 		    $slotStart, $slotEnd, $time1, $time2, $proj, $slot, 
 		    $day1, $day2, $rstring, $config);
+		if ($slotEnd > $lastTime) {
+		    $lastTime = $slotEnd;
+		}
 	    }
 	}
     }
+    #print "3 day1 = $day1\n";
 
     my $semend = &stringToDatetime($prog->{'term'}->{'end'});
     
@@ -711,6 +719,7 @@ sub printps($$) {
 		if ($lastTime > $erelease) {
 		    $erelease = $lastTime;
 		}
+		print "outputting not released from $erelease until $semend\n";
 		($day1, $day2, $rstring, $config) = &splitintodays(
 		    $erelease, $semend, $time1, $time2,
 		    { 'ident' => "notreleased", 'type' => "MAINT",
@@ -719,6 +728,7 @@ sub printps($$) {
 	    }
 	}
     }
+    #print "4 day1 = $day1\n";
 
     
     #print $semend."\n";
@@ -730,6 +740,7 @@ sub printps($$) {
 	      'title' => "Next Semester", 'colour' => "ffcdcd" }, {},
 	    $day1, $day2, $rstring, $config);
     }
+    #print "5 day1 = $day1\n";
 
     
     $day2 = 14;
@@ -977,8 +988,8 @@ sub ps_sch_box($$$) {
 	    } else {
 		$tstring = sprintf " (%s) cfg_box", $slot->{'source'};
 	    }
-	} elsif ($proj->{'ident'} eq "MAINT") {
-	    $tstring = " () mnt_box";
+#	} elsif ($proj->{'ident'} eq "MAINT") {
+#	    $tstring = " () mnt_box";
 	} elsif ($proj->{'ident'} eq "CABB") {
 	    my $sstring = $slot->{'source'};
 	    if ($slot->{'source'} =~ /^\!/) {
@@ -2023,7 +2034,10 @@ sub writeOPALFile($) {
 	if (($proj->{'type'} ne "ASTRO") ||
 	    ($proj->{'ident'} eq "VLBI") ||
 	    ($proj->{'ident'} eq "BL") ||
-	    ($proj->{'ident'} =~ /^PX50[01]/)) {
+	    ($proj->{'ident'} eq "MISC") ||
+	    ($proj->{'ident'} eq "POINTING") ||
+	    ($proj->{'ident'} eq "ST")) {
+	    #($proj->{'ident'} =~ /^PX50[01]/)) {
 	    next;
 	}
 	#print Dumper $proj;

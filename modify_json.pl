@@ -484,6 +484,8 @@ sub parseScoreFile($$) {
 		    $scoremode = 2;
 		} elsif ($line =~ /^Semester\,Project\,PI\,Grade/) {
 		    $scoremode = 3;
+		} elsif ($line =~ /^\"Project\,Semester\,PI\,Grade\"/) {
+		    $scoremode = 3;
 		}
 	    }
 	    $line =~ s/\"//g;
