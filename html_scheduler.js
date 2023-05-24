@@ -29,6 +29,7 @@ var previouslySelectedSlot = null;
 var obs = null;
 var semester = null;
 var authenticated = 0;
+var numDays = 0;
 // This contains all the nodes for each project in the table.
 var tableRows = {};
 // This contains all the block Konva objects.
@@ -38,17 +39,9 @@ var transformerTop = null;
 var transformerBottom = null;
 
 // Some constants we need.
-// The observatory coordinates.
-const coordinates = {
-  'atca': { 'longitude': 149.5501388, 'latitude': -30.3128846 },
-  'parkes': { 'longitude': 148.2635101, 'latitude': -32.9984064 }
-};
-const elLimit = { 'atca': 12, 'parkes': 30 };
-// The number of days to display (basically half a leap year, plus a few.
-const nDays = (366 / 2) + 7;
+// The observatories that we know about (this will be filled by a server call.
+var observatoriesObject = {};
 // Time limits for certain projects.
-const legacyProjects = [ "C3132", "C3145", "C3152", "C3157" ];
-const legacyLimit = 400; // Hours.
 const projectLimit = 300; // Hours
 // The colour of the border to use for the blocks, when not highlighted.
 const normalBlockColour = "black";
@@ -61,7 +54,6 @@ const localKey = "atnfSchedule";
 const observatoryKey = "atnfObservatory";
 const semesterKey = "atnfSemester";
 const spath = "/cgi-bin/obstools/web_scheduler/scheduler.pl";
-const obsNames = { 'atca': "ATCA", 'parkes': "Parkes" };
 
 // An object to describe config compatibility.
 // The keys are the available configs, which we can use later to
@@ -101,7 +93,9 @@ const configDescriptor = { 'atca': {
 
 // An object to hold all our measurements.
 var meas = {
-  // The width of a half-hour (the smallest increment we schedule to).
+    // The width of a quarter-hour (now the smallest increment we schedule to).
+    quarterHourWidth: 6,
+  // The width of a half-hour (used to be the smallest increment we schedule to).
   halfHourWidth: 12,
   // The margin around the schedule box.
   marginLeft: 20,
@@ -129,8 +123,6 @@ var meas = {
 meas.dayWidth = 48 * meas.halfHourWidth;
 // The canvas width.
 meas.width = meas.dayWidth + 3 * meas.marginLeft + meas.elementWidth + meas.dayLabelWidth + meas.arrayLabelWidth;
-// The canvas height.
-meas.height = nDays * meas.dayHeight + 2 * meas.marginTop;
 
 
 
@@ -160,7 +152,7 @@ const calculateSiderealRestrictions = function(raStr, decStr, d) {
   var ra = stringToDegrees(raStr, true);
   var dec = stringToDegrees(decStr, false);
   var sourceRiseSets = calculateSourceStuff([ ra, dec ], d,
-					   elLimit[obs]);
+					   observatoriesObject[obs].elevationLimit);
   return sourceRiseSets;
 };
 
@@ -169,7 +161,8 @@ const calculateSiderealRestrictions = function(raStr, decStr, d) {
 // Use the elevation limit ellimit.
 const calculateSourceStuff = function(c, d, ellimit) {
   var mjd = date2mjd(d);
-  var haset = haset_azel(c[1], coordinates[obs].latitude, ellimit);
+    var haset = haset_azel(c[1], observatoriesObject[obs].latitude,
+			   observatoriesObject[obs].elevationLimit);
   var riseHour = (c[0] - haset) / 15;
   var setHour = (c[0] + haset) / 15;
   var r = lstToDaytime(riseHour, setHour, (c[0] / 15), d);
@@ -386,7 +379,7 @@ const lstToDaytime = function(lstRise, lstSet, ra, d) {
   } else {
     midHour = ra;
   }
-  var zlst = 24 * mjd2lst(mjd, (coordinates[obs].longitude / 360.0), 0);
+  var zlst = 24 * mjd2lst(mjd, (observatoriesObject[obs].longitude / 360.0), 0);
   var riseDayHour = hoursUntilLst(zlst, riseHour);
   var setDayHour = hoursUntilLst(zlst, setHour);
   var midDayHour = hoursUntilLst(zlst, midHour);
@@ -666,28 +659,22 @@ const getObservatory = function() {
   } else {
     // Has this been changed?
     if (cobs != obs) {
-      // The user wants a different observatory.
+	// The user wants a different observatory.
+	console.log("user changed observatory");
       obs = cobs;
       localChecked = false;
       localModificationTime = null;
-      serverModificationTime = null;
-      checkServerTime(pageInitBootstrap);
-      checkLocalTime(pageInitBootstrap);
+	serverModificationTime = null;
+	semester = null;
+	emptyDomNode("termSelected");
+	getSemester();
+	checkServerTime(pageInitBootstrap);
+	checkLocalTime(pageInitBootstrap);
     }
   }
   // Store this value.
   window.localStorage.setItem(observatoryKey, obs);
 
-  // Display the correct slot selection header.
-  var ah = document.getElementById("atcaSlotSelectionHeader");
-  var ph = document.getElementById("parkesSlotSelectionHeader");
-  if (obs == "atca") {
-    domAddClasses(ph, "invisible");
-    domRemoveClasses(ah, "invisible");
-  } else if (obs == "parkes") {
-    domAddClasses(ah, "invisible");
-    domRemoveClasses(ph, "invisible");
-  }
 };
 
 // Determine the semester to show.
@@ -697,8 +684,13 @@ const getSemester = function() {
   if (ts.selectedIndex != -1) {
     csem = ts.options[ts.selectedIndex].value;
   }
-  var ssem = window.localStorage.getItem(semesterKey);
-  var n = new Date();
+    if (obs == null) {
+	console.log("can't get semester, obs not set");
+	return;
+    }
+  var ssem = window.localStorage.getItem(semesterKey + "_" + obs);
+    console.log("cached semester is " + ssem);
+    var n = new Date();
   if (semester == null) {
     // We've likely just been loaded.
     // Check if the saved semester is valid.
@@ -722,16 +714,19 @@ const getSemester = function() {
       localModificationTime = null;
       serverModificationTime = null;
       checkServerTime(pageInitBootstrap);
-      checkLocalTime(pageInitBootstrap);
+      //checkLocalTime(pageInitBootstrap);
     }
   }
 
   // Store this value.
   if (semester != null) {
-    window.localStorage.setItem(semesterKey, JSON.stringify({
+    window.localStorage.setItem(semesterKey + "_" + obs, JSON.stringify({
       'time': n.getTime(), 'semester': semester
     }));
   }
+    checkLocalTime(pageInitBootstrap);
+
+    
 };
 
 const isElementVisible = function(el) {
@@ -890,7 +885,7 @@ const getAuthenticated = function(callback) {
 const setSemester = function(ssem) {
   var n = new Date();
   var ts = document.getElementById("termSelected");
-  window.localStorage.setItem(semesterKey, JSON.stringify({
+  window.localStorage.setItem(semesterKey + "_" + obs, JSON.stringify({
     'time': n.getTime(), 'semester': ssem
   }));
   // Go to the server and ask for the list of possible semesters.
@@ -986,6 +981,16 @@ const showProjectDetails = function(ident) {
       td = makeElement("td", arrString, {
 	'id': arrId
       });
+    } else {
+	var arrString = "";
+	if (sd.array instanceof Array) {
+	    arrString = sd.array.join(",").toUpperCase();
+	} else {
+	    arrString = sd.array.toUpperCase();
+	}
+	td = makeElement("td", arrString, {
+	    'id': arrId
+	});
     }
     // Add a double-click handler on the array.
     addDoubleClickHandler(td,
@@ -1451,15 +1456,15 @@ const drawBlock = function(proj, slot) {
       };
       var modeText = new Konva.Text(modeTextOpts);
       var supportTextOpts = null;
-      if (legacyProjects.indexOf(proj.ident) >= 0) {
-	supportTextOpts = {
-	  x: blockOpts.x,
-	  y: (blockOpts.y + blockOpts.height),
-	  text: "LEGACY",
-	  fontSize: meas.supportFontSize,
-	  fill: "black", "type": "legacy"
-	};
-      }
+      //if (legacyProjects.indexOf(proj.ident) >= 0) {
+      //	supportTextOpts = {
+      //	  x: blockOpts.x,
+      //	  y: (blockOpts.y + blockOpts.height),
+      //	  text: "LEGACY",
+      //	  fontSize: meas.supportFontSize,
+      //	  fill: "black", "type": "legacy"
+      //	};
+      //}
       var supportText = null;
       if (supportTextOpts != null) {
 	supportText = new Konva.Text(supportTextOpts);
@@ -1678,6 +1683,20 @@ const drawDay = function(n, d, g, dd, c, t, g2) {
 // Function that draws the hour labels at the top of the schedule.
 // Need to supply the group g to draw to.
 const drawHourLabels = function(g) {
+    var timezoneLabel = new Konva.Text({
+	x: meas.marginLeft,
+	y: meas.timeLabelHeight,
+	text: observatoriesObject[obs].timezoneLabel, fontSize: 20
+    });
+    timezoneLabel.offsetY(timezoneLabel.height() * 1.1);
+    g.add(timezoneLabel);
+    var utcTimezoneLabel = new Konva.Text({
+	x: meas.marginLeft,
+	y: meas.timeLabelHeight,
+	text: "UTC", fontSize: 20
+    });
+    utcTimezoneLabel.offsetY(utcTimezoneLabel.height() * 2.2);
+    g.add(utcTimezoneLabel);
   for (var j = 0; j <= 24; j += 2) {
     var hourLabel = new Konva.Text({
       x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
@@ -1685,10 +1704,17 @@ const drawHourLabels = function(g) {
     });
     hourLabel.offsetX(hourLabel.width() / 2);
     hourLabel.offsetY(hourLabel.height() * 1.1);
-    g.add(hourLabel);
+      g.add(hourLabel);
+      var td = 0;
+      if (observatoriesObject[obs].timezoneDiffHours > 0) {
+	  td = 24 - observatoriesObject[obs].timezoneDiffHours;
+      } else {
+	  td = -1 * observatoriesObject[obs].timezoneDiffHours;
+      }
+
     var utcLabel = new Konva.Text({
       x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
-      y: meas.timeLabelHeight, text: "" + ((j + 14) % 24), fontSize: 20
+	y: meas.timeLabelHeight, text: "" + ((j + td) % 24), fontSize: 20
     });
     utcLabel.offsetX(utcLabel.width() / 2);
     utcLabel.offsetY(utcLabel.height() * 2.2);
@@ -1711,9 +1737,9 @@ const drawNightTimes = function(t, g) {
     eveningPos.push(y);
   }
   morningPos.push(meas.marginLeft + meas.dayLabelWidth);
-  morningPos.push(meas.marginTop + (nDays - 1) * meas.dayHeight);
+  morningPos.push(meas.marginTop + (numDays - 1) * meas.dayHeight);
   eveningPos.push(meas.marginLeft + meas.dayLabelWidth + 48 * meas.halfHourWidth);
-  eveningPos.push(meas.marginTop + (nDays - 1) * meas.dayHeight);
+  eveningPos.push(meas.marginTop + (numDays - 1) * meas.dayHeight);
   var morningPoly = new Konva.Line({
     points: morningPos, fill: "#888888", stroke: "#888888", strokeWidth: 0,
     closed: true, opacity: 0.7
@@ -1771,7 +1797,7 @@ const highlightBlock = function(proj, slot) {
 // Draw an LST line on a particular day.
 const lstDraw = function(n, d, l, p, g) {
   // Calculate the LST at midnight this day.
-  var zlst = 24 * mjd2lst(date2mjd(d), (149.5501388 / 360.0), 0);
+  var zlst = 24 * mjd2lst(date2mjd(d), (observatoriesObject[obs].longitude / 360.0), 0);
   var midHours = hoursUntilLst(zlst, l);
   var topHours = midHours + (2 / 60);
   var bottomHours = midHours - (2 / 60);
@@ -1838,51 +1864,50 @@ const setupCanvas = function(data) {
   var re = /^(\d\d\d\d)(\D\D\D)$/g;
   var rmatch = re.exec(data.program.term.term);
   var semester = rmatch[2]
-  var year = parseInt(rmatch[1]);
+    var year = parseInt(rmatch[1]);
 
-  // Get the date for the first day of the schedule.
-  var semesterStartMonth = -1;
-  var pdate = null;
-  if (semester == "APR") {
-    semesterStartMonth = 4;
-    pdate = luxon.DateTime.utc(year, (semesterStartMonth - 1), 31, 14, 0, 0);
-  } else if (semester == "OCT") {
-    semesterStartMonth = 10;
-    pdate = luxon.DateTime.utc(year, (semesterStartMonth - 1), 30, 14, 0, 0);
-  }
+    var nre = /^(\d\d\d\d)\-(\d\d)\-(\d\d)$/g;
+    var nrmatch_start = nre.exec(data.program.term.start)
+    var start_year = parseInt(nrmatch_start[1]);
+    var start_month = parseInt(nrmatch_start[2]);
+    var start_day = parseInt(nrmatch_start[3]);
+    //console.log(start_year + "   " + start_month + "   " + start_day);
+    
+    var pdate = luxon.DateTime.utc(start_year, start_month, start_day, 0, 0, 0).
+	minus({hours:observatoriesObject[obs].timezoneDiffHours});
   semesterStart = pdate.toJSDate();
-  //semesterStart.setFullYear(year, (semesterStartMonth - 1), 1);  
-  //semesterStart.setHours(0);
-  //console.log("setting time now");
-  //semesterStart = dateWithTimeZone("Australia/Sydney", year, (semesterStartMonth - 1), 1, 0, 0, 0);
-  console.log(semesterStart);
-  console.log(semesterStart.getTimezoneOffset());
-  //if (semesterStart.getTimezoneOffset() < -600) {
-    // We start in daylight savings.
-    //semesterStart.setHours(1);
-  //}
-  //semesterStart.setHours(14);
+  //console.log(semesterStart);
+  //console.log(semesterStart.getTimezoneOffset());
   // Subtract a few days.
   scheduleFirst = new Date();
-  scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
+    scheduleFirst.setTime(semesterStart.getTime() - 3 * 86400 * 1000);
+
+    // Work out the last date.
+    nre = /^(\d\d\d\d)\-(\d\d)\-(\d\d)$/g;
+    var nrmatch_end = nre.exec(data.program.term.end);
+    console.log(nrmatch_end);
+    var end_year = parseInt(nrmatch_end[1]);
+    var end_month = parseInt(nrmatch_end[2]);
+    var end_day = parseInt(nrmatch_end[3]);
+    var end_pdate = luxon.DateTime.utc(end_year, end_month, end_day, 0, 0, 0).
+	minus({hours:observatoriesObject[obs].timezoneDiffHours});
+    var termLengthInDays = end_pdate.diff(pdate, "days").toObject();
+    numDays = termLengthInDays.days;
+    console.log("this term has length " + numDays + " days");
+    // Add some slop.
+    numDays += 7;
+
+    // The canvas height.
+    meas.height = numDays * meas.dayHeight + 2 * meas.marginTop;
+    
   // Make all the dates.
   var allSunDates = [];
-  for (var i = -1; i <= nDays; i++) {
+  for (var i = -1; i <= numDays; i++) {
     var pdate = new Date();
     pdate.setTime(scheduleFirst.getTime() + i * 86400 * 1000);
-    /*if (pdate.getHours() != 0) {
-      // We've likely moved into or out of daylight savings.
-      if (pdate.getHours() == 23) {
-	// We've moved out of daylight savings.
-	pdate.setTime(pdate.getTime() + 3600 * 1000);
-      } else {
-	// Moved into daylight savings.
-	pdate.setTime(pdate.getTime() - 3600 * 1000);
-      }
-    }*/
     allSunDates.push(pdate);
   }
-  allDates = allSunDates.slice(1, nDays);
+  allDates = allSunDates.slice(1, numDays);
   scheduleLast = new Date();
   scheduleLast.setTime(allDates[allDates.length - 1].getTime() + 86400 * 1000);
   
@@ -2197,7 +2222,8 @@ const loadFile = function(callback, forceServer) {
     printMessage("Loading local schedule.");
     callback(null, getLocalSchedule());
   } else if ((loadLocal == false) && (authenticated == 1)) {
-    var msg = "Loading server schedule for " + obsNames[obs];
+      var msg = "Loading server schedule for " + //obsNames[obs];
+	  observatoriesObject[obs].name;
     // We get the file from a CGI script.
     var xhr = new XMLHttpRequest();
     var gstring = "?request=load&observatory=" + obs;
@@ -2423,7 +2449,7 @@ const summariseSemester = function() {
 	    'maintenance': 0,
 	    'vlbi': 0,
 	    'calibration': 0,
-	    'legacy': 0,
+	    //'legacy': 0,
 	    'available': 0,
 	    'scheduled': 0,
 	    'requested': 0,
@@ -2472,6 +2498,18 @@ const summariseSemester = function() {
 			      { 'mars': "MARS" }, { "k": "K" },
 			      { 'ku': "KU" }, { '10/50': "10/50cm" } ]
 	};
+  } else {
+      r = { 'arrays': [],
+	    'timeSummary': {
+		'total': 0,
+		'maintenance': 0,
+		'available': 0,
+		'scheduled': 0,
+		'requested': 0,
+		'lowScore': 6,
+		'nReconfigure': 0,
+	    }, 'arrayLabels': []
+	  };
   }
 
   // The total time available for the semester (in hours).
@@ -2482,6 +2520,7 @@ const summariseSemester = function() {
   var minScore = 0.0;
   var maxScore = 5.0;
   var scoreInterval = 0.1;
+    var all_configs = [ "any" ];
   for (var score = minScore; score <= maxScore; score += scoreInterval) {
     if (obs == "atca") {
       r.arrays.push({ 'score': Math.floor(score * 10) / 10,
@@ -2496,7 +2535,33 @@ const summariseSemester = function() {
       r.arrays.push({ 'score': Math.floor(score * 10) / 10,
 		      'uwl': 0, 'mb': 0, 'ku': 0, 'k': 0, '10/50': 0,
 		      'mars': 0 });
+    } else {
+	// We get the configurations available from the schedule.
+	if (score == minScore) {
+	    r.arrayLabels.push({ "any": "any" });
+	    for (var i = 0; i < scheduleData.program.project.length; i++) {
+		if (scheduleData.program.project[i].ident == "CONFIG") {
+		    for (var j = 0; j < scheduleData.program.project[i].slot.length; j++) {
+			if (all_configs.includes(scheduleData.program.project[i].slot[j].array) ==
+			    false) {
+			    all_configs.push(scheduleData.program.project[i].slot[j].array);
+			    var cfglabel = {};
+			    cfglabel[scheduleData.program.project[i].slot[j].array] =
+				scheduleData.program.project[i].slot[j].array;
+			    r.arrayLabels.push(cfglabel);
+			}
+		    }
+		    break;
+		}
+	    }
+	}
+	var sp = { 'score': Math.floor(score * 10) / 10 };
+	for (var i = 0; i < all_configs.length; i++) {
+	    sp[all_configs[i]] = 0;
+	}
+	r.arrays.push(sp);
     }
+
   }
   
   var allProjects = scheduleData.program.project;
@@ -2506,10 +2571,10 @@ const summariseSemester = function() {
     if (allProjects[i].ident == "C007") {
       isCalibration = true;
     }
-    var isLegacy = false;
-    if (legacyProjects.indexOf(allProjects[i].ident.toUpperCase()) >= 0) {
-      isLegacy = true;
-    }
+    //var isLegacy = false;
+    //if (legacyProjects.indexOf(allProjects[i].ident.toUpperCase()) >= 0) {
+    //  isLegacy = true;
+    //}
     var isVlbi = false;
     if (allProjects[i].ident == "VLBI") {
       isVlbi = true;
@@ -2541,17 +2606,16 @@ const summariseSemester = function() {
 	continue;
       }
 
-      if (!isCalibration && !isLegacy && !isMaintenance && !isVlbi && !isNapa &&
+      if (!isCalibration && !isMaintenance && !isVlbi && !isNapa &&
 	  !isFunded) {
 	r.timeSummary.requested += slots[j].requested_duration;
 	r.timeSummary.scheduled += slots[j].scheduled_duration;
 	projectTotalTime += slots[j].scheduled_duration;
-      } else if (isCalibration) {
+      } else if ((isCalibration) &&
+		 (r.timeSummary.hasOwnProperty("calibration"))) {
 	r.timeSummary.calibration += slots[j].scheduled_duration;
-      } else if (isLegacy) {
-	r.timeSummary.legacy += slots[j].scheduled_duration;
-	projectTotalTime += slots[j].scheduled_duration;
-      } else if (isVlbi) {
+      } else if ((isVlbi) &&
+		 (r.timeSummary.hasOwnProperty("vlbi"))) {
 	r.timeSummary.vlbi += slots[j].scheduled_duration;
       } else if (isMaintenance) {
 	r.timeSummary.maintenance += slots[j].scheduled_duration;
@@ -2561,14 +2625,11 @@ const summariseSemester = function() {
 		   (slots[j].scheduled == 1)) {
 	  r.timeSummary.nCabb += 1;
 	}
-      } else if (isFunded) {
+      } else if ((isFunded) &&
+		 (r.timeSummary.hasOwnProperty("funded"))) {
 	r.timeSummary.funded += slots[j].scheduled_duration;
       }
 
-      if ((!isLegacy && (projectTotalTime >= projectLimit)) ||
-	  (isLegacy && (projectTotalTime >= legacyLimit))) {
-	continue;
-      }
 
       // Add to the correct array.
       if (!isMaintenance && !isVlbi && !isNapa) {
@@ -2625,12 +2686,28 @@ const summariseSemester = function() {
 		  if (typeof ps[k] != "undefined") {
 		      larr = ps[k].toLowerCase();
 		  }
-	      if (typeof r['arrays'][sarr][larr] != "undefined") {
-		r['arrays'][sarr][larr] += slots[j].requested_duration;
-	      } else {
-		  console.log("found array string " + larr);
+		  if (typeof r['arrays'][sarr][larr] != "undefined") {
+		      r['arrays'][sarr][larr] += slots[j].requested_duration;
+		  } else {
+		      console.log("found array string " + larr);
+		  }
 	      }
-	    }
+	  } else {
+	      var ps = slots[j].array;
+	      if (!Array.isArray(slots[j].array)) {
+		  ps = [ slots[j].array ];
+	      }
+	      for (var k = 0; k < ps.length; k++) {
+		  var larr = "any";
+		  if (typeof ps[k] != "undefined") {
+		      larr = ps[k].toLowerCase();
+		  }
+		  if (typeof r['arrays'][sarr][larr] != "undefined") {
+		      r['arrays'][sarr][larr] += slots[j].requested_duration;
+		  } else {
+		      console.log("found array string " + larr);
+		  }
+	      }
 	  }
 	}
       }
@@ -2647,6 +2724,51 @@ const versionChanged = function() {
 
   scheduleData.program.term.version = versionNumber;
   updateLocalSchedule();
+};
+
+const releaseChanged = function() {
+    // One of the start or end release dates has changed.
+    var sr = document.getElementById("startrelease");
+    var er = document.getElementById("endrelease");
+
+    var sv = sr.value;
+    var ev = er.value;
+
+    // Check it looks valid.
+    const dtreg = /^20[0-2]\d\-[0-1]\d\-[0-3]\d$/;
+    const nospaces = /\s/g;
+    sv.replaceAll(nospaces, '');
+    ev.replaceAll(nospaces, '');
+    var valid_sv = ((sv != "") && (dtreg.test(sv)));
+    var valid_ev = ((ev != "") && (dtreg.test(ev)));
+
+    if ((valid_sv || valid_ev) &&
+	(scheduleData.program.hasOwnProperty('releasedates') == false)) {
+	scheduleData.program.releasedates = {};
+    } else if ((!valid_sv && !valid_ev) &&
+	       (scheduleData.program.hasOwnProperty('releasedates'))) {
+	delete(scheduleData.program.releasedates);
+	return;
+    }
+
+    if (valid_sv) {
+	console.log(sv);
+	console.log("is a date");
+	scheduleData.program.releasedates.start = sv;
+    } else if (scheduleData.program.releasedates.hasOwnProperty('start')) {
+	console.log(sv);
+	console.log("is not a date");
+	delete(scheduleData.program.releasedates.start);
+    }
+    if (valid_ev) {
+	console.log(ev);
+	console.log("is a date");
+	scheduleData.program.releasedates.end = ev;
+    } else if (scheduleData.program.releasedates.hasOwnProperty('end')) {
+	console.log(ev);
+	console.log("is not a date");
+	delete(scheduleData.program.releasedates.end);
+    }
 };
 
 const downloadSchedule = function() {
@@ -2770,20 +2892,29 @@ const slotSelectorGen = function(sn) {
 const arraySelectorGen = function(ident, slotnum, tdid) {
   // We call a function to display a dropdown box.
   return function() {
-    // Get the list of configurations.
-    var arrs = Object.keys(configDescriptor[obs]);
-    arrs.sort(function(a, b) {
-      return (configDescriptor[obs][a][0] - configDescriptor[obs][b][0]);
-    });
-    arrs = arrs.map(function(v) {
-      return v.toUpperCase();
-    });
-    // These are our options.
-    slotChangeDisplay(tdid, arrs, {
-      'callback': slotChangeFulfillment,
-      'payload': { 'ident': ident, 'slotnum': slotnum,
-		   'type': "array" }
-    }, "select");
+      // Get the list of configurations.
+      if (configDescriptor[obs]) {
+	  var arrs = Object.keys(configDescriptor[obs]);
+	  arrs.sort(function(a, b) {
+	      return (configDescriptor[obs][a][0] - configDescriptor[obs][b][0]);
+	  });
+	  arrs = arrs.map(function(v) {
+	      return v.toUpperCase();
+	  });
+	  // These are our options.
+	  slotChangeDisplay(tdid, arrs, {
+	      'callback': slotChangeFulfillment,
+	      'payload': { 'ident': ident, 'slotnum': slotnum,
+			   'type': "array" }
+	  }, "select");
+      } else {
+	  // We are free-form.
+	  slotChangeDisplay(tdid, null, {
+	      'callback': slotChangeFulfillment,
+	      'payload': { 'ident': ident, 'slotnum': slotnum,
+			   'type': "array" }
+	  }, "input");
+      }
   };
 };
 
@@ -3122,8 +3253,9 @@ var savedDomNodes = {};
 // Display the status of the entire semester.
 const updateSemesterSummary = function() {
   // Get our helper to make the summary.
-  var semsum = summariseSemester();
-  //console.log(semsum);
+    var semsum = summariseSemester();
+    console.log("semester summary");
+  console.log(semsum);
   
   // Step 1: show the demand for each array type.
   // Have we already made the table?
@@ -3148,7 +3280,9 @@ const updateSemesterSummary = function() {
     r.appendChild(th);
     th = makeElement("th", "Days");
     r.appendChild(th);
-    var showLabels = {};
+      var showLabels = {};
+      console.log("making array demand table");
+      console.log(semsum.arrayLabels);
     for (var i = 0; i < semsum.arrayLabels.length; i++) {
       var label = "";
       var tm = semsum.arrays[0];
@@ -3164,6 +3298,9 @@ const updateSemesterSummary = function() {
 	    }
 	  } else if (obs == "parkes") {
 	    label = semsum.arrayLabels[i][k];
+	  } else {
+	      label = semsum.arrayLabels[i][k];
+	      console.log(label);
 	  }
 	}
       }
@@ -3261,24 +3398,24 @@ const updateSemesterSummary = function() {
       'id': "sst-scheduled-time" });
     makeTableCell("th", "Remaining (h):", r);
     savedDomNodes.remainingTime = makeTableCell("td", "NN", r, {
-      'id': "sst-remaining-time" });
-    r = makeElement("tr");
-    semesterStateTable.appendChild(r);
-    makeTableCell("th", "Calibration:", r);
-    savedDomNodes.calibrationTime = makeTableCell("td", "NN", r, {
-      'id': "sst-calibration-allocation" });
-    if (obs == "atca") {
-      makeTableCell("th", "Legacy:", r);
-      savedDomNodes.legacyTime = makeTableCell("td", "NN", r, {
-	'id': "sst-legacy-allocation" });
-    } else if (obs == "parkes") {
-      makeTableCell("th", "Funded:", r);
-      savedDomNodes.fundedTime = makeTableCell("td", "NN", r, {
-	'id': "sst-funded-allocation" });
-    }
-    makeTableCell("th", "VLBI:", r);
-    savedDomNodes.vlbiTime = makeTableCell("td", "NN", r, {
-      'id': "sst-vlbi-allocation" });
+	'id': "sst-remaining-time" });
+      if ((obs == "atca") || (obs == "parkes")) {
+	  r = makeElement("tr");
+	  semesterStateTable.appendChild(r);
+	  makeTableCell("th", "Calibration:", r);
+	  savedDomNodes.calibrationTime = makeTableCell("td", "NN", r, {
+	      'id': "sst-calibration-allocation" });
+	  if (obs == "atca") {
+	      console.log("atca is here");
+	  } else if (obs == "parkes") {
+	      makeTableCell("th", "Funded:", r);
+	      savedDomNodes.fundedTime = makeTableCell("td", "NN", r, {
+		  'id': "sst-funded-allocation" });
+	  }
+	  makeTableCell("th", "VLBI:", r);
+	  savedDomNodes.vlbiTime = makeTableCell("td", "NN", r, {
+	      'id': "sst-vlbi-allocation" });
+      }
     r = makeElement("tr");
     semesterStateTable.appendChild(r);
     makeTableCell("th", "Maintenance:", r);
@@ -3299,9 +3436,9 @@ const updateSemesterSummary = function() {
   if (obs == "atca") {
     savedDomNodes.availableTime.innerHTML =
       semsum.timeSummary.available - semsum.timeSummary.scheduled -
-      semsum.timeSummary.calibration - semsum.timeSummary.legacy -
+      semsum.timeSummary.calibration - //semsum.timeSummary.legacy -
       semsum.timeSummary.vlbi - semsum.timeSummary.maintenance;
-    savedDomNodes.legacyTime.innerHTML = semsum.timeSummary.legacy;
+    //savedDomNodes.legacyTime.innerHTML = semsum.timeSummary.legacy;
     savedDomNodes.cabbTime.innerHTML = semsum.timeSummary.nCabb;
   } else if (obs == "parkes") {
     console.log(semsum.timeSummary.available + " hours available");
@@ -3311,12 +3448,18 @@ const updateSemesterSummary = function() {
       semsum.timeSummary.calibration - semsum.timeSummary.funded -
       semsum.timeSummary.vlbi - semsum.timeSummary.maintenance;
     savedDomNodes.fundedTime.innerHTML = semsum.timeSummary.funded;
+  } else {
+      savedDomNodes.availableTime.innerHTML =
+	  semsum.timeSummary.available - semsum.timeSummary.scheduled -
+	  semsum.timeSummary.maintenance;
   }
   savedDomNodes.scheduledTime.innerHTML = semsum.timeSummary.scheduled;
   savedDomNodes.remainingTime.innerHTML = (semsum.timeSummary.requested -
 					   semsum.timeSummary.scheduled);
-  savedDomNodes.calibrationTime.innerHTML = semsum.timeSummary.calibration;
-  savedDomNodes.vlbiTime.innerHTML = semsum.timeSummary.vlbi;
+    if ((obs == "atca") || (obs == "parkes")) {
+	savedDomNodes.calibrationTime.innerHTML = semsum.timeSummary.calibration;
+	savedDomNodes.vlbiTime.innerHTML = semsum.timeSummary.vlbi;
+    }
   savedDomNodes.maintenanceTime.innerHTML = semsum.timeSummary.maintenance;
   savedDomNodes.reconfigTime.innerHTML = semsum.timeSummary.nReconfigure;
 
@@ -3338,18 +3481,27 @@ const posTime = function(x, y) {
   // The hour can be gotten from the x location.
   var nHalfHours = Math.floor((x - (meas.marginLeft + meas.dayLabelWidth)) /
 			      meas.halfHourWidth);
+    var nQuarterHours = Math.floor((x - (meas.marginLeft + meas.dayLabelWidth)) /
+				   meas.quarterHourWidth);
   if (nHalfHours < 0) {
     nHalfHours = 0;
   } else if (nHalfHours >= 47) {
     nHalfHours = 47;
   }
+    if (nQuarterHours < 0) {
+	nQuarterHours = 0;
+    } else if (nQuarterHours >= 95) {
+	nQuarterHours = 95;
+    }
 
   // Get the time stamp here.
   var epoch = (allDates[nDays].getTime() / 1000) +
       (nHalfHours * 1800);
+    epoch = (allDates[nDays].getTime() / 1000) +
+	(nQuarterHours * 900);
   console.log("clicked at ");
   
-  var r = { 'day': nDays, 'hour': (nHalfHours / 2), 'timestamp': epoch };
+  var r = { 'day': nDays, 'hour': (nQuarterHours / 4), 'timestamp': epoch };
   console.log(r);
   return r;
 
@@ -3399,12 +3551,13 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
       }
     }
   }
-  // Check for weekends for certain projects.
+    // Check for weekends for certain projects.
+    /*
   if ((ident == "MAINT") || (ident == "CONFIG")) {
     if ((ld.weekday == 6) || (ld.weekday == 7)) {
       excluded = true;
     }
-  }
+  } */
   if ((excluded) && (!force)) {
     printMessage("Attempted to schedule " + ident +
 		 " on an unsuitable date.", "error");
@@ -3465,9 +3618,9 @@ const scheduleInsert = function(ident, slotNumber, time, force, duration) {
       startHour = time.hour;
     }
     // Round it to the nearest half hour.
-    startHour = Math.round(2 * startHour) / 2;
+    startHour = Math.round(4 * startHour) / 4;
     // Work out if it's closer to go back or forwards.
-    if ((Math.abs(startHour - time.hour) > (slot.requested_duration / 2)) &&
+    if ((Math.abs(startHour - time.hour) > (slot.requested_duration / 4)) &&
 	(startHour < time.hour)) {
       // We've wrapped days.
       d = allDates[time.day + 1];
@@ -3806,6 +3959,25 @@ const pageInit = function(status, data) {
 
   // Display the schedule version.
   fillInput("scheduleVersion", scheduleData.program.term.version);
+
+    // Display the correct slot selection header.
+  var ah = document.getElementById("atcaSlotSelectionHeader");
+    var ph = document.getElementById("parkesSlotSelectionHeader");
+    var gh = document.getElementById("generalSlotSelectionHeader");
+    console.log("slot selection " + obs);
+  if (obs == "atca") {
+      domAddClasses(ph, "invisible");
+      domAddClasses(gh, "invisible");
+    domRemoveClasses(ah, "invisible");
+  } else if (obs == "parkes") {
+      domAddClasses(ah, "invisible");
+      domAddClasses(gh, "invisible");
+    domRemoveClasses(ph, "invisible");
+  } else {
+      domAddClasses(ah, "invisible");
+      domAddClasses(ph, "invisible");
+      domRemoveClasses(gh, "invisible");
+  }
   
   // Work out the semester time details.
   semesterStart = new Date(scheduleData.program.term.start);
@@ -3815,7 +3987,16 @@ const pageInit = function(status, data) {
   console.log(scheduleData.program.term);
   console.log(semesterStart);
   console.log(semesterEnd);
-  
+
+    if (scheduleData.program.hasOwnProperty('releasedates')) {
+	if (scheduleData.program.releasedates.hasOwnProperty('start')) {
+	    fillInput("startrelease", scheduleData.program.releasedates.start);
+	}
+	if (scheduleData.program.releasedates.hasOwnProperty('end')) {
+	    fillInput("endrelease", scheduleData.program.releasedates.end);
+	}
+    }
+    
   setupCanvas(scheduleData);
   updateProjectTable();
   updateSemesterSummary();
@@ -3884,7 +4065,7 @@ const displayModificationTimes = function() {
 
 const getLocalSchedule = function() {
   // Try to get the schedule from our local storage.
-  if ((obs == null) || (semester == null)) {
+    if ((obs == null) || (semester == null)) {
     // We haven't saved anything yet if this is the case.
     return null;
   }
@@ -4354,9 +4535,53 @@ const staticEventHandlers = function() {
   addChangeHandler(ts, getSemester);
 
   var pt = document.getElementById("projectselectedTitle");
-  addDoubleClickHandler(pt, titleChanger);
+    addDoubleClickHandler(pt, titleChanger);
+
+    var sr = document.getElementById("startrelease");
+    addChangeHandler(sr, releaseChanged);
+
+    var er = document.getElementById("endrelease");
+    addChangeHandler(er, releaseChanged);
 };
 staticEventHandlers();
+
+const getObservatoryList = function() {
+    // The list of observatories on the page.
+    var oe = document.getElementById("observatory");
+
+    var sobs = window.localStorage.getItem(observatoryKey);
+    
+    // Go to the server and ask for the list of possible observatories.
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', spath + "?request=listobservatories", true);
+    xhr.responseType = "json";
+    xhr.onload = function() {
+	var status = xhr.status;
+	if (status == 200) {
+	    emptyDomNode("observatory");
+	    var observatories = xhr.response.observatories;
+	    console.log(observatories);
+	    console.log(sobs);
+	    obs = observatories[0].id;
+	    for (var i = 0; i < observatories.length; i++) {
+		observatoriesObject[observatories[i].id] = observatories[i];
+		var o = document.createElement("option");
+		o.setAttribute("value", observatories[i].id);
+		o.innerHTML = observatories[i].name;
+		if (observatories[i].id == sobs) {
+		    o.setAttribute("selected", "selected");
+		    obs = sobs;
+		}
+		oe.appendChild(o);
+	    }
+	    // We now find the semester for this observatory.
+	    checkServerTime(getSemester);
+	} else {
+	    console.log("failure while getting list of observatories");
+	}
+    }
+    xhr.send();
+};
 
 
 // Start the process by loading the file.
@@ -4368,10 +4593,10 @@ const serverAuthCallback = function() {
   checkServerTime(pageInitBootstrap);
 };
 
-getObservatory();
-getSemester();
-getAuthenticated(serverAuthCallback);
-checkLocalTime(pageInitBootstrap);
+getAuthenticated(getObservatoryList);
+//getSemester();
+//getAuthenticated(serverAuthCallback);
+//checkLocalTime(pageInitBootstrap);
 
 const stateChange = function() {
   var s = showLineState();

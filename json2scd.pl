@@ -360,20 +360,49 @@ sub parseScd($$) {
 sub fillObsStrings($) {
     my $prog = shift;
 
-    if (lc($prog->{'observatory'}->{'observatory'}) eq "atca") {
-	$obsStrings{'name'} = "ATCA";
-	$obsStrings{'short'} = "CA";
-	$obsStrings{'directory'} = "atca-".
-	    $prog->{'term'}->{'term'};
-	$obsStrings{'full'} = "Australia Telescope Compact Array";
-    } elsif (lc($prog->{'observatory'}->{'observatory'}) eq "parkes") {
-	$obsStrings{'name'} = "Parkes";
-	$obsStrings{'short'} = "PK";
-	$obsStrings{'directory'} = "parkes-".
-	    $prog->{'term'}->{'term'};
-	$obsStrings{'full'} = "Murriyang, the CSIRO Parkes Radiotelescope";
+    # Use the observatories JSON.
+    my $infile = "/n/ste616/usr/schedules/.observatories";
+    open(J, $infile) || die "Unable to open $infile\n";
+    my $jstring = do { local $/; <J> };
+    close(J);
+    my $jref = $json->decode($jstring);
+
+    for (my $i = 0; $i <= $#{$jref->{'observatories'}}; $i++) {
+	if (lc($prog->{'observatory'}->{'observatory'}) eq
+	    lc($jref->{'observatories'}->[$i]->{'id'})) {
+	    $obsStrings{'name'} = $jref->{'observatories'}->[$i]->{'name'};
+	    $obsStrings{'short'} = $jref->{'observatories'}->[$i]->{'shortName'};
+	    $obsStrings{'directory'} = lc($jref->{'observatories'}->[$i]->{'id'})."-".
+		$prog->{'term'}->{'term'};
+	    $obsStrings{'full'} = $jref->{'observatories'}->[$i]->{'fullName'};
+	    $obsStrings{'timezoneLabel'} = $jref->{'observatories'}->[$i]->{'timezoneLabel'};
+	    $obsStrings{'timezoneHours'} = $jref->{'observatories'}->[$i]->{'timezoneDiffHours'};
+	    last;
+	}
     }
-    
+
+#    return;
+#    if (lc($prog->{'observatory'}->{'observatory'}) eq "atca") {
+#	$obsStrings{'name'} = "ATCA";
+#	$obsStrings{'short'} = "CA";
+#	$obsStrings{'directory'} = "atca-".
+#	    $prog->{'term'}->{'term'};
+#	$obsStrings{'full'} = "Australia Telescope Compact Array";
+#    } elsif (lc($prog->{'observatory'}->{'observatory'}) eq "parkes") {
+#	$obsStrings{'name'} = "Parkes";
+#	$obsStrings{'short'} = "PK";
+#	$obsStrings{'directory'} = "parkes-".
+#	    $prog->{'term'}->{'term'};
+#	$obsStrings{'full'} = "Murriyang, the CSIRO Parkes Radiotelescope";
+#    } else {
+#	$obsStrings{'name'} = $prog->{'observatory'}->{'observatory'};
+#	$obsStrings{'short'} = $obsStrings{'name'};
+#	$obsStrings{'short'} =~ s/^(..).*/$1/;
+#	$obsStrings{'directory'} = $obsStrings{'name'}."-".
+#	    $prog->{'term'}->{'term'};
+#	$obsStrings{'full'} = $obsStrings{'name'};
+#    }
+#    
 }
 
 sub outfilePrefix($) {
@@ -530,9 +559,16 @@ sub writePostscriptSchedule($) {
     open(U, "prepage.ps");
     my $preUrl = do { local $/; <U> };
     close(U);
-    open(U, "postpage.ps");
-    my $postUrl = do { local $/; <U> };
-    close(U);
+#    open(U, "postpage.ps");
+#    my $postUrl = do { local $/; <U> };
+    #    close(U);
+    my $firstutc = 0;
+    if ($obsStrings{'timezoneHours'} > 0) {
+	$firstutc = 24.0 - $obsStrings{'timezoneHours'};
+    } else {
+	$firstutc = -1.0 * $obsStrings{'timezoneHours'};
+    }
+    my $postUrl = sprintf ("(%s) %d postpage", $obsStrings{'timezoneLabel'}, $firstutc);
 
     for (my $i = 0; $i < $numberOfPages; $i++) {
 	#print "page $i / $numberOfPages\n";
@@ -942,7 +978,7 @@ sub getConfig($$) {
 
 sub getConfigPS($) {
     my $config = shift;
-    chomp(my $resline = `grep $config Confign.txt`);
+    chomp(my $resline = `grep -s $config Confign.txt`);
     if ($resline ne "") {
 	my @rels = split(/\t/, $resline);
 	return "(".$rels[0].") (".$rels[1].") (".$rels[2].") array\n";

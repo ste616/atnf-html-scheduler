@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html mainfest="offline.manifest">
+<html manifest="offline.manifest">
   <head><title>ATNF HTML Scheduler</title>
     <script src="konva.min.js"></script>
     <script src="luxon.min.js"></script>
@@ -113,6 +113,7 @@
 	<table>
 	  <tr><td rowspan="2"><span id="onlineState"></span></td>
 	    <th>Observatory</th><th>Semester</th><th>Version</th>
+	    <th colspan="3">Release Dates</th>
 	    <th>Local Save</th><th>Server Save</th>
 	    <td><button id="savebutton">Save</button></td>
 	    <td rowspan="2"><button id="revertbutton">Revert</button></td></tr>
@@ -123,6 +124,8 @@
 	    </select></td>
 	    <td><select id="termSelected"></select></td>
 	    <td><input type="text" size="3" id="scheduleVersion"></td>
+	    <td><input type="text" size="7" id="startrelease" placeholder="yyyy-mm-dd"></td>
+	    <td>-</td><td><input type="text" size="7" id="endrelease" placeholder="yyyy-mm-dd"></td>
 	    <td><span id="localSaveTime">None</span></td>
 	    <td><span id="serverSaveTime">None</span></td>
 	    <td><button id="downloadbutton">Download</button></td>
@@ -143,6 +146,10 @@
 		<th>Source</th><th>Time</th></tr>
 	      <tr id="parkesSlotSelectionHeader" class="invisible">
 		<th>&nbsp;</th><th>Receiver</th><th>Band</th><th>Backend</th><th>Source</th>
+		<th>Time</th>
+	      </tr>
+	      <tr id="generalSlotSelectionHeader" class="invisible">
+		<th>&nbsp;</th><th>Config</th><th>Band</th><th>Backend</th><th>Source</th>
 		<th>Time</th>
 	      </tr>
 	    </thead>

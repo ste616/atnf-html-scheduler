@@ -177,10 +177,21 @@ my %jo = ( 'observatory' => $obs );
 
 sub get_categories($) {
     my $cover = shift;
-    my $cstrings = $cover->{'categories'}->{'unserializable-parents'}->{'collection'}->{'string'};
+    #print Dumper $cover;
+    #my $cstrings = $cover->{'categories'}->{'unserializable-parents'}->{'collection'}->{'string'};
+    my $cstrings = $cover->{'categories'}->{'string'};
     if (ref $cstrings ne "ARRAY") {
 	$cstrings = [ $cstrings ];
     }
+    # Check for other categories.
+#    if (defined $cover->{'otherCategory'} &&
+#	defined $cover->{'otherCategory'}->{'content'}) {
+#	push @{$cstrings}, $cover->{'otherCategory'};
+#    }
+    
+    #print Dumper $cstrings;
+
+    #exit;
     return $cstrings;
 }
 
@@ -228,6 +239,9 @@ sub get_coversheets() {
 sub get_abstracts($) {
     my $cs = shift;
 
+    #print $cs->{'abstractText'}->{'content'}."\n";
+    
+    
     return { 'abstract' => $cs->{'abstractText'}->{'content'},
 	     'outreach' => $cs->{'outreachAbstractText'}->{'content'} };
 }

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+  <head><title>ATNF HTML Scheduler Modification Tool</title>
+    <script src="konva.min.js"></script>
+    <script src="luxon.min.js"></script>
+    <style>
+      body { font-family: sans-serif; }
+      #observatoryModify { border: 2px solid black; margin: 5px; }
+      table { border: 1px solid black; width: 100%; }
+      td { border: 1px dotted black; text-align: center; }
+      th { background-color: black; color: white; text-align: center; }
+      #scheduleStatus { border: 2px solid blue; margin: 5px; }
+      #termModify { border: 2px solid blue; margin: 5px; }
+      #projectModify { border: 2px solid green; margin: 5px; }
+      #projectSlotModify { border: 2px solid green; margin: 5px; }
+      .inputError { border: 1px solid red; }
+      .clickEnabled { cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="observatoryModify">
+      <table>
+	<tr><th>Observatory</th><th>Name</th><th>Code</th><th>Full Name</th><th>Longitude</th><th>Latitude</th>
+	  <th>Timezone (hrs)</th><th>Timezone</th><th>Elevation Limit</th><th></th>
+	</tr>
+	<tr>
+	  <td><select id="observatory"></select></td>
+	  <td><input type="text" size="10" id="observatoryName"></td>
+	  <td><input type="text" size="3" id="observatoryShortName"></td>
+	  <td><input type="text" size="20" id="observatoryFullName"></td>
+	  <td><input type="text" size="10" id="observatoryLongitude"></td>
+	  <td><input type="text" size="10" id="observatoryLatitude"></td>
+	  <td><input type="text" size="3" id="observatoryTimezoneHours"></td>
+	  <td><input type="text" size="5" id="observatoryTimezone"></td>
+	  <td><input type="text" size="3" id="observatoryElevationLimit"></td>
+	  <td><button id="observatoryModifyButton">Modify</button></td>
+	</tr>
+      </table>
+    </div>
+    <div id="scheduleStatus">
+      <table>
+	<tr><th>Schedule:</th><td id="currentSchedule"></td><th>Modification Time:</th>
+	  <td id="scheduleModificationTime"></td><th>Number of modifications:</th>
+	  <td id="scheduleNumModifications"></td>
+	  <td><button id="scheduleUndoModification">Undo</button>
+	  <td><button id="scheduleServerSave">Save to Server</button>
+	</tr>
+      </table>
+    </div>
+    <div id="termModify">
+      <table>
+	<tr><th>Observatory</th><th>Term</th><th>Name</th><th>Start YYYY-MM-DD</th>
+	  <th>End YYYY-MM-DD</th><th>First Config</th><th>Config Owner</th><th></th></tr>
+	<tr>
+	  <td><select id="termObservatory"></select></td>
+	  <td><select id="termSelect"></select></td>
+	  <td><input type="text" size="10" id="termName"></td>
+	  <td><input type="text" size="12" id="termStartDate"></td>
+	  <td><input type="text" size="12" id="termEndDate"></td>
+	  <td><input type="text" size="12" id="termFirstConfig"></td>
+	  <td><input type="text" size="12" id="termConfigOwner"></td>
+	  <td><button id="termModifyButton">Modify</button></td>
+	</tr>
+      </table>
+    </div>
+    <div id="projectModify">
+      <table>
+	<tr><th>Project</th><th>Code</th><th>Score</th><th>PI Surname</th><th>PI Email</th>
+	  <th>Title</th><th>Type</th><th>Colour</th><th>Comments</th><th></th><th></th></tr>
+	<tr id="projectModifyRow">
+	  <td><select id="projectSelect"></select></td>
+	  <td><input type="text" size="10" id="projectCode"></td>
+	  <td><input type="text" size="3" id="projectScore"></td>
+	  <td><input type="text" size="12" id="projectPISurname"></td>
+	  <td><input type="text" size="20" id="projectPIEmail"></td>
+	  <td><input type="text" size="20" id="projectTitle"></td>
+	  <td><select id="projectType">
+	      <option value="ASTRO">Astronomy</option>
+	      <option value="MAINT">Maintenance</option>
+	      <option value="CONFIG">Configuration</option>
+	      <option value="NASA">NASA</option>
+	  </select></td>
+	  <td><select id="projectColourStandard">
+	      <option value="cdcdcd">Astro</option>
+	      <option value="cdcdff">Maint</option>
+	      <option value="ffff8d">Config</option>
+	      <option value="ffcdff">BL</option>
+	      <option value="ff33e9">Training</option>
+	      <option value="ff0000">Misc</option>
+	      <option value="a215e8">Space</option>
+	      <option value="ffc000">Purchased</option>
+	      <option value="ffcdcd">CABB</option>
+	      <option value="other">Other</option>
+	    </select><input type="text" size="10" id="projectColour"></td>
+	  <td><textarea id="projectComments" rows="4" cols="30"></textarea></td>
+	  <td><button id="projectModifyButton">Modify</button></td>
+	  <td><button id="projectDeleteButton">Delete</button></td>
+	</tr>
+      </table>
+    </div>
+    <div id="projectSlotModify">
+      <table>
+	<tr><th>Slots</th><th>Source Name</th><th>RA</th><th>Dec</th><th>LST Start</th>
+	  <th>LST End</th><th>Bands</th><th>Bandwidth</th><th>Duration (h)</th>
+	  <th>Config</th><th>Num Slots</th><th></th></tr>
+	<tr><th>Add Slots</th>
+	  <td><input type="text" size="15" id="addSlotSourceName"></td>
+	  <td><input type="text" size="15" id="addSlotRA"></td>
+	  <td><input type="text" size="15" id="addSlotDec"></td>
+	  <td><input type="text" size="10" id="addSlotLSTStart"></td>
+	  <td><input type="text" size="10" id="addSlotLSTEnd"></td>
+	  <td><input type="text" size="20" id="addSlotBands"></td>
+	  <td><input type="text" size="10" id="addSlotBandwidth"></td>
+	  <td><input type="text" size="5" id="addSlotDuration"></td>
+	  <td><input type="text" size="20" id="addSlotConfig"></td>
+	  <td><input type="text" size="5" id="addSlotNumSlots"></td>
+	  <td><button id="addSlotButton">Add Slots</button></td>
+	</tr>
+	<tr><td><select id="slotModifySelect" multiple></select></td>
+	  <td><input type="text" size="15" id="modifySlotSourceName"></td>
+	  <td><input type="text" size="15" id="modifySlotRA"></td>
+	  <td><input type="text" size="15" id="modifySlotDec"></td>
+	  <td><input type="text" size="10" id="modifySlotLSTStart"></td>
+	  <td><input type="text" size="10" id="modifySlotLSTEnd"></td>
+	  <td><input type="text" size="20" id="modifySlotBands"></td>
+	  <td><input type="text" size="10" id="modifySlotBandwidth"></td>
+	  <td><input type="text" size="5" id="modifySlotDuration"></td>
+	  <td><input type="text" size="20" id="modifySlotConfig"></td>
+	  <td><input type="text" size="5" id="modifySlotNumSlots"></td>
+	  <td><button id="modifySlotButton">Modify Slot</button></td>
+	</tr>
+	<tr><td><button id="deleteSlotsButton">Delete Slots</button></td></tr>
+      </table>
+    </div>
+    <div id="slotDisplay">
+      <table>
+	<thead>
+	  <tr><th>Slot #</th><th>Source</th><th>Scheduled Duration (hr)</th><th>Start time</th>
+	    <th>End time</th></tr>
+	</thead>
+	<tbody id="slotDisplayTable"></tbody>
+      </table>
+    </div>
+    <script src="modifier_scheduler.js"></script>
+  </body>
+</html>
