@@ -11,6 +11,7 @@ $CGI::DISABLE_UPLOADS = 0;
 
 my $q = CGI->new;
 my $root_dir = "/n/ste616/usr/schedules";
+my $process_machine = "mentok";
 
 print $q->header(
     -type => "application/json"
@@ -59,6 +60,29 @@ if ($reqtype eq "load") {
 	    $retjson->{'authenticated'} = 1;
 	    last;
 	}
+    }
+    print to_json($retjson)."\n";
+} elsif ($reqtype eq "listobservatories") {
+    my $retjson = { 'action' => 'listobservatories' };
+    my @observatories = &listObservatories();
+    $retjson->{'observatories'} = \@observatories;
+    print to_json($retjson)."\n";
+} elsif ($reqtype eq "updateObservatories") {
+    # Check we have a valid authentication token.
+    my @authtokens = &loadAuthFile();
+    my $isauthed = 0;
+    for (my $i = 0; $i <= $#authtokens; $i++) {
+	if ($q->param('auth') eq $authtokens[$i]) {
+	    $isauthed = 1;
+	    last;
+	}
+    }
+    my $retjson = { 'action' => "writeobservatories" };
+    if ($isauthed) {
+	&writeObservatories($q->param('observatories'));
+	$retjson->{'success'} = 1;
+    } else {
+	$retjson->{'success'} = 0;
     }
     print to_json($retjson)."\n";
 }
@@ -121,6 +145,29 @@ sub listSemesters($) {
     close(L);
 
     return @semesters;
+}
+
+sub writeObservatories($) {
+    my $obsarrjson = shift;
+    my $obsarr = from_json($obsarrjson);
+    my $jsonfile = $root_dir."/.observatories";
+    my $obsobj = { "observatories" => $obsarr };
+    open(J, ">".$jsonfile);
+    print J to_json($obsobj);
+    close(J);
+}
+
+sub listObservatories() {
+    #my $obs = shift;
+
+    # Return a list of the observatories we know about.
+    my @observatories;
+    my $jsonfile = $root_dir."/.observatories";
+    open(J, $jsonfile);
+    chomp(my $jcontent = <J>);
+    close(J);
+    my $jobj = from_json($jcontent);
+    return @{$jobj->{'observatories'}};
 }
 
 sub saveSchedule($$$) {
