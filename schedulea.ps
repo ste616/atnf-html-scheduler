@@ -9,7 +9,7 @@
 %(/n/ste616/usr/schedules/outputs/gonzo.ps) run % use internal gonzo
 
 %start of Part C - scheduleC.ps
-/version (schedule.ps v.4 Oct 1999) def
+/version (schedule.ps v.5 May 2023) def
 
 /RM {rmoveto} def
 /RL {rlineto} def
@@ -847,6 +847,9 @@
  x1 y1 M (Page ) show p1 show ( - Version ) show p2 show (  ) show p3 show
 } def
 /postpage{
+    /janlst exch def
+    /tzoffs exch def
+    /tzlabel exch def
 newpath
 x1 y3 M x1 y4 L
 x2 y3 M x2 y4 L
@@ -898,56 +901,44 @@ x1 y6 M
 x4 x1 sub 0 start s_date concat fh psH putcen
 
 % Now label time axes
-% AEST first
-x1 y5 M 0 12 (AEST) fh psL putleft
+% Local time first
+x1 y5 M 0 12 tzlabel fh psL putleft
 /s_hh 1 string def
+/d_hh 2 string def
 /hh 0 def
 newpath
 x2 y5 M
-5 {hh 10 s_hh cvrs
- 0 12 s_hh fh psL putcen
- 2 hr 0 RM
- /hh hh 2 add def
- } repeat
-/s_hh 2 string def
-8 {hh 10 s_hh cvrs
- 0 12 s_hh fh psL putcen
- 2 hr 0 RM
- /hh hh 2 add def
- } repeat
-
+13 { hh 10 lt {hh 10 s_hh cvrs
+	       0 12 s_hh fh psL putcen
+	       2 hr 0 RM}
+     {hh 10 d_hh cvrs
+      0 12 d_hh fh psL putcen
+      2 hr 0 RM} ifelse
+     /hh hh 2 add def
+     hh 24 eq {/hh 0 def} if
+   } repeat
 % followed by UT
 x1 y5 12 1.2 mul add M 0 12 (UT) fh psL putleft
-/s_hh 2 string def
-/hh 14 def
+/hh tzoffs def
 newpath
 x2 y5 12 1.2 mul add M
-5 {hh 10 s_hh cvrs
- 0 12 s_hh fh psL putcen
- 2 hr 0 RM
- /hh hh 2 add def
- } repeat
-/s_hh 1 string def
-/hh 0 def
-5 {hh 10 s_hh cvrs
- 0 12 s_hh fh psL putcen
- 2 hr 0 RM
- /hh hh 2 add def
- } repeat
-/s_hh 2 string def
-3 {hh 10 s_hh cvrs
- 0 12 s_hh fh psL putcen
- 2 hr 0 RM
- /hh hh 2 add def
- } repeat
+13 { hh 10 lt {hh 10 s_hh cvrs
+	       0 12 s_hh fh psL putcen
+	       2 hr 0 RM}
+     {hh 10 d_hh cvrs
+      0 12 d_hh fh psL putcen
+      2 hr 0 RM} ifelse
+     /hh hh 2 add def
+     hh 24 eq {/hh 0 def} if
+   } repeat
 
 % and finally LST
 x1 y3 12 1.2 mul sub M 0 12 (LST) fh psL putleft
 0.1 mm setlinewidth
 /s_hh 2 string def
 /l_doy {dd mon year doy} def
-/lst2 {6.66667 l_doy 0.06571 mul add} def
-/lst1 {6.66667 l_doy 14 sub 0.06571 mul add} def
+/lst2 {janlst l_doy 0.06571 mul add} def
+/lst1 {janlst l_doy 14 sub 0.06571 mul add} def
 /h0t 24 lst1 sub def
 /h0b 24 lst2 sub def
 

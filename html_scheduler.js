@@ -246,8 +246,8 @@ const convertSmallDates = function(smdates) {
 
 // Calculate the Julian day for a midnight AEST on a given Date d.
 var date2mjd = function(d) {
-  // We assume that we are at midnight AEST, which is 14 in UTC.
-  var utc = d.getUTCDate() + (14 / 24);
+  // We assume that we are at midnight in the local timezone.
+  var utc = d.getUTCDate() + (observatoriesObject[obs].timezoneMidnightUTC / 24);
   var mm = d.getUTCMonth() + 1;
   var m = mm;
   var y = d.getUTCFullYear();
@@ -1711,7 +1711,7 @@ const drawHourLabels = function(g) {
       } else {
 	  td = -1 * observatoriesObject[obs].timezoneDiffHours;
       }
-
+      observatoriesObject[obs].timezoneMidnightUTC = td;
     var utcLabel = new Konva.Text({
       x: (meas.marginLeft + meas.dayLabelWidth + j * 2 * meas.halfHourWidth),
 	y: meas.timeLabelHeight, text: "" + ((j + td) % 24), fontSize: 20

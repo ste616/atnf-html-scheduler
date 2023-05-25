@@ -377,6 +377,7 @@ sub fillObsStrings($) {
 	    $obsStrings{'full'} = $jref->{'observatories'}->[$i]->{'fullName'};
 	    $obsStrings{'timezoneLabel'} = $jref->{'observatories'}->[$i]->{'timezoneLabel'};
 	    $obsStrings{'timezoneHours'} = $jref->{'observatories'}->[$i]->{'timezoneDiffHours'};
+	    $obsStrings{'longitude'} = $jref->{'observatories'}->[$i]->{'longitude'};
 	    last;
 	}
     }
@@ -559,16 +560,21 @@ sub writePostscriptSchedule($) {
     open(U, "prepage.ps");
     my $preUrl = do { local $/; <U> };
     close(U);
-#    open(U, "postpage.ps");
-#    my $postUrl = do { local $/; <U> };
-    #    close(U);
     my $firstutc = 0;
+    my $janmjd;
     if ($obsStrings{'timezoneHours'} > 0) {
 	$firstutc = 24.0 - $obsStrings{'timezoneHours'};
+	$janmjd = cal2mjd(31, 12, $t->year(), ($firstutc / 24.0));
     } else {
 	$firstutc = -1.0 * $obsStrings{'timezoneHours'};
+	$janmjd = cal2mjd(1, 1, $t->year(), ($firstutc / 24.0));
     }
-    my $postUrl = sprintf ("(%s) %d postpage", $obsStrings{'timezoneLabel'}, $firstutc);
+    # We have to supply the LST at midnight in the specified
+    # timezone on Jan 1, so the PS can work out the LST lines.
+    # LST should be decimal hours.
+    my $janlst = mjd2lst($janmjd, ($obsStrings{'longitude'} / 360.0));
+    my $postUrl = sprintf ("(%s) %d %.5f postpage",
+			   $obsStrings{'timezoneLabel'}, $firstutc, ($janlst * 24.0));
 
     for (my $i = 0; $i < $numberOfPages; $i++) {
 	#print "page $i / $numberOfPages\n";
@@ -725,7 +731,7 @@ sub printps($$) {
 	    my $slotStart = DateTime->from_epoch(
 		epoch => $slot->{'scheduled_start'}
 		);
-	    $slotStart->add( hours => 10 );
+	    $slotStart->add( hours => $obsStrings{'timezoneHours'} );
 	    my $slotEnd = $slotStart->clone();
 	    $slotEnd->add( hours => $slot->{'scheduled_duration'} );
 	    if ((($slotStart > $time1) && ($slotStart < $time2))  ||
@@ -903,12 +909,12 @@ sub epoch2lst($) {
     my $epoch = shift;
     my $dt = DateTime->from_epoch(epoch => $epoch);
     my $mjd = $dt->mjd();
-    my $long = 0;
-    if ($obsStrings{'name'} eq "ATCA") {
-	$long = (149.5501388 / 360);
-    } elsif ($obsStrings{'name'} eq "Parkes") {
-	$long = (148.2635101 / 360);
-    }
+    my $long = ($obsStrings{'longitude'} / 360.0);
+    #if ($obsStrings{'name'} eq "ATCA") {
+    #	$long = (149.5501388 / 360);
+    #} elsif ($obsStrings{'name'} eq "Parkes") {
+    #	$long = (148.2635101 / 360);
+    #}
     my $lst = 24 * mjd2lst($mjd, $long);
     my $lst_h = floor($lst);
     my $lst_m = floor(($lst - $lst_h) * 60);
@@ -1315,10 +1321,10 @@ sub writeScheduleSummary($) {
 	    sprintf("%-9s %19s  -  %19s   %-5s %-91s",
 		    $proj->{'ident'},
 		    &epoch2timeString($slot->{'scheduled_start'} +
-				      (10 * 3600)),
+				      ($obsStrings{'timezoneHours'} * 3600)),
 		    &epoch2timeString($slot->{'scheduled_start'} +
 				      ($slot->{'scheduled_duration'} *
-				       3600) + (10 * 3600)),
+				       3600) + ($obsStrings{'timezoneHours'} * 3600)),
 		    $dstring, &getConfig($prog, $dt));
 	push @details_lines, $sline;
 	if ($proj->{'type'} eq "ASTRO") {
@@ -1398,12 +1404,13 @@ sub writeTextSchedules($) {
     printf H ("<table border><caption><font color=red><h2>%s Semester %d</h2>".
 	      "</font></caption>\n", $mnth, substr($prog->{'term'}->{'term'}, 0, 4));
     print H "<tr align=center><td><b>Date</b></td><td><b>Day</b></td>\n";
-    print H "<td><b>Local Time (AEST) / Proposal</b></td><td><b>LST</b></td><td><b>\n";
+    print H "<td><b>Local Time (".$obsStrings{'timezoneLabel'}.
+	") / Proposal</b></td><td><b>LST</b></td><td><b>\n";
     print H "Observers</b></td><td><b>Friend</b></td>\n";
     print H "<td><b>Receiver</b></td></tr>\n";
 
     my $ctime = &stringToDatetime($prog->{'term'}->{'start'})->subtract(
-	hours => 10 );
+	hours => $obsStrings{'timezoneHours'} );
     my $config = &getConfig($prog, $ctime);
     my @sphtml_lines;
     for (my $i = 0; $i <= $#sorted_slots; $i++) {
@@ -1460,8 +1467,10 @@ sub writeTextSchedules($) {
 			  &epoch2maint($slot->{'scheduled_start'} +
 				       ($slot->{'scheduled_duration'} * 3600)),
 			  $smtext, $config);
-		my @edate = &epoch2webSplit($slot->{'scheduled_start'} + (10 * 3600) +
-					    $slot->{'scheduled_duration'} * 3600);
+		my @edate =
+		    &epoch2webSplit($slot->{'scheduled_start'} +
+				    ($obsStrings{'timezoneHours'} * 3600) +
+				    $slot->{'scheduled_duration'} * 3600);
 		my $sptext = "Maintenance";
 		if ($slot->{'source'} =~ /^\!/) {
 		    $sptext = substr($slot->{'source'}, 1);
@@ -1498,7 +1507,7 @@ sub writeTextSchedules($) {
 		      ($slot->{'scheduled_duration'} * 3600)));
     }
     my $etime = &stringToDatetime($prog->{'term'}->{'end'})->subtract(
-	hours => 10 );
+	hours => $obsStrings{'timezoneHours'} );
     if ($ctime->epoch() < $etime->epoch()) {
 	# Directors time until the end.
 	printf O "%16s Directors time\n", &epoch2usage($ctime->epoch());
@@ -1586,13 +1595,14 @@ sub slotToDayEntries($$$$$$) {
 	       'friends' => [], 'receivers' => [] };
     
     # Start and end times.
-    my $st = DateTime->from_epoch(epoch => $stime + (10 * 3600));
-    my $et = DateTime->from_epoch(epoch => $etime + (10 * 3600));
+    my $st = DateTime->from_epoch(epoch => $stime + ($obsStrings{'timezoneHours'} * 3600));
+    my $et = DateTime->from_epoch(epoch => $etime + ($obsStrings{'timezoneHours'} * 3600));
     my $sjt = DateTime->from_epoch(epoch => $stime);
     my $ejt = DateTime->from_epoch(epoch => $etime);
     my $addt = 0;
     for (my $i = floor($st->mjd()), $addt = 0; $i <= floor($et->mjd()); $i++, $addt += 24) {
-	my $ct = DateTime->from_epoch(epoch => $stime + (($addt + 10) * 3600));
+	my $ct = DateTime->from_epoch(epoch => $stime +
+				      (($addt + $obsStrings{'timezoneHours'}) * 3600));
 	my $cep = $stime + ($addt * 3600);
 	my $ststring;
 	my $slstring;
@@ -1636,7 +1646,7 @@ sub writeHTMLSchedules($) {
     my $prog = shift;
 
     my @sorted_slots = &sortSlots($prog, 1, 1);
-    my $aestSummaryFile = sprintf("%s/%s-summaryAEST.html",
+    my $aestSummaryFile = sprintf("%s/%s-summary".$obsStrings{'timezoneLabel'}.".html",
 				  $obsStrings{'directory'},
 				  lc($obsStrings{'name'}));
     my $utcSummaryFile = sprintf("%s/%s-summaryUT.html",
@@ -1655,7 +1665,7 @@ sub writeHTMLSchedules($) {
     print U $prelines;
     my $tformat = "<%s>%s schedule summary for %s (%s)</%s>";
     printf A ($tformat, "title", $obsStrings{'name'}, 
-	      $prog->{'term'}->{'term'}, "AEST", "title");
+	      $prog->{'term'}->{'term'}, $obsStrings{'timezoneLabel'}, "title");
     printf U ($tformat, "title", $obsStrings{'name'}, 
 	      $prog->{'term'}->{'term'}, "UT", "title");
     $prelines = '<?php include( $_SERVER[DOCUMENT_ROOT] . "'.
@@ -1668,7 +1678,7 @@ sub writeHTMLSchedules($) {
     print A $prelines;
     print U $prelines;
     printf A ($tformat, "h1", $obsStrings{'name'}, 
-	      $prog->{'term'}->{'term'}, "AEST", "h1");
+	      $prog->{'term'}->{'term'}, $obsStrings{'timezoneLabel'}, "h1");
     printf U ($tformat, "h1", $obsStrings{'name'}, 
 	      $prog->{'term'}->{'term'}, "UT", "h1");
     $prelines = '</center><br clear="all"><br><br>&nbsp;<br>'.
@@ -1680,7 +1690,7 @@ sub writeHTMLSchedules($) {
     print U $prelines;
     $tformat = '<th valign="top" width="7%">%s Dates</th>'.
 	'<th valid="top" width="10%">%s Start time</th>';
-    printf A ($tformat, "AEST", "AEST");
+    printf A ($tformat, $obsStrings{'timezoneLabel'}, $obsStrings{'timezoneLabel'});
     printf U ($tformat, "UT", "UT");
     $prelines = '<th valign="top" width="5%">Duration (hrs)</th>'.
 	'<th nowrap valign="top" width="8%">LST Range</th>'.
@@ -1757,7 +1767,7 @@ sub writeHTMLSchedules($) {
 	if ($slot->{'scheduled_start'} > 0) {
 	    my @dateCompsUT = &epoch2webSplit($slot->{'scheduled_start'});
 	    my @dateCompsAEST = &epoch2webSplit($slot->{'scheduled_start'} +
-						(10 * 3600));
+						($obsStrings{'timezoneHours'} * 3600));
 	    $dateCellAEST .= $dateCompsAEST[0]."<br>";
 	    $timeCellAEST .= $dateCompsAEST[1]."<br>";
 	    $dateCellUT .= $dateCompsUT[0]."<br>";
@@ -1925,7 +1935,7 @@ sub writeJSONSchedule($) {
     my @json_maint;
     my %json_override;
     my $ctime = &stringToDatetime($prog->{'term'}->{'start'})->subtract(
-	hours => 10 );
+	hours => $obsStrings{'timezoneHours'} );
     my $config = &getConfig($prog, $ctime);
     for (my $i = 0; $i <= $#sorted_slots; $i++) {
 	my $proj = $sorted_slots[$i]->{'proj'};
@@ -1988,7 +1998,7 @@ sub writeJSONSchedule($) {
 		      ($slot->{'scheduled_duration'} * 3600)));
     }
     my $etime = &stringToDatetime($prog->{'term'}->{'end'})->subtract(
-	hours => 10 );
+	hours => $obsStrings{'timezoneHours'} );
     if ($ctime->epoch() < $etime->epoch()) {
 	# Directors time until the end.
 	push @json_maint, {
