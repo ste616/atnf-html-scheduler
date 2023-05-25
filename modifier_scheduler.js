@@ -85,6 +85,39 @@ const domRemoveClasses = function(e, removeClasses) {
   
 };
 
+// Convert degrees to radians.
+const deg2rad = function(d) {
+  return (d * Math.PI / 180);
+};
+
+// Convert radians to degrees.
+const rad2deg = function(r) {
+  return (r * 180 / Math.PI);
+};
+
+// Determine the LST limits for a source with RA,Dec.
+// Given a Declination dec in degrees, a latitude lat in degrees,
+// and an elevation el which is the limit, work out at which HA (in degrees)
+// it would rise and set.
+const haset_azel = function(dec, lat, el) {
+  var decRad = deg2rad(dec);
+  var latRad = deg2rad(lat);
+  var elRad = deg2rad(el);
+  var cos_haset = (Math.cos((Math.PI / 2) - elRad) -
+		   Math.sin(latRad) * Math.sin(decRad)) /
+      (Math.cos(decRad) * Math.cos(latRad));
+  if (cos_haset > 1) {
+    // The source never rises.
+    return 0;
+  }
+  if (cos_haset < -1) {
+    // The source never sets.
+    return 180;
+  }
+  // Return the HA in degrees.
+  return rad2deg(Math.acos(cos_haset));
+};
+
 // Zero pad a number to some level.
 const zeroPadNumber = function(n, l) {
   var ll = 10;
@@ -129,6 +162,57 @@ const cleanjson = function(d) {
 
   return d;
 };
+
+// The the sexagesimal string s and convert it to degrees,
+// noting if the string is actually in hours.
+const stringToDegrees = function(s, inHours) {
+  var sels = s.split(":");
+  var isNeg = false;
+  if (/^\-/.test(sels[0])) {
+    isNeg = true;
+  }
+  var d = 0, m = 0, s = 0;
+  
+  d = Math.abs(parseInt(sels[0]));
+  if (sels.length > 1) {
+    m = parseInt(sels[1]);
+  }
+  if (sels.length > 2) {
+    var s = parseFloat(sels[2]);
+  }
+  var n = d + m / 60.0 + s / 3600.0;
+  if (isNeg) {
+    n *= -1.0;
+  }
+
+  if (inHours) {
+    n *= 15.0;
+  }
+
+  return n;
+};
+
+const degreesToString = function(d, inHours) {
+    // We will only go to minutes in this function.
+    var deg = d;
+
+    if (deg < 0) {
+	deg = 360.0 + deg;
+    }
+    if (deg >= 360) {
+	deg -= 360.0;
+    }
+    
+    
+    if (inHours) {
+	deg = deg / 15.0;
+    }
+
+    var wdeg = Math.floor(deg);
+    var mdeg = Math.floor((deg - wdeg) * 60.0);
+    var s = zeroPadNumber(wdeg, 10) + ":" + zeroPadNumber(mdeg, 10);
+    return s;
+}
 
 // Get authenticated.
 const getAuthenticated = function(callback) {
@@ -967,13 +1051,31 @@ const slotAdder = function() {
 	    return;
 	}
 
+	var lstStart = document.getElementById("addSlotLSTStart").value;
+	var lstEnd = document.getElementById("addSlotLSTEnd").value;
+	if ((lstStart == "") || (lstEnd == "")) {
+	    // Calculate the LST limits for the user from the RA and Dec.
+	    var ra_degrees = stringToDegrees(ra, true);
+	    var dec_degrees = stringToDegrees(dec, false);
+	    console.log(ra_degrees + " " + dec_degrees);
+	    var haset = haset_azel(dec_degrees,
+				   observatoriesObject[obs].latitude,
+				   observatoriesObject[obs].elevationLimit);
+	    console.log(haset);
+	    var riseDeg = (ra_degrees - haset);
+	    var setDeg = (ra_degrees + haset);
+	    console.log(riseDeg + " " + setDeg);
+	    lstStart = degreesToString(riseDeg, true);
+	    lstEnd = degreesToString(setDeg, true);
+	}
+	
 	saveCurrentSchedule(scheduleLoaded);
 	for (var i = 0; i < numToAdd; i++) {
 	    var ob = {
 		"source": source, "array": config,
 		"scheduled": 0, "scheduled_duration": 0,
-		"scheduled_start": 0, "lst_start": "00:00",
-		"lst_end": "23:59", "requested_duration": duration,
+		"scheduled_start": 0, "lst_start": lstStart,
+		"lst_end": lstEnd, "requested_duration": duration,
 		"bands": bands,
 		"bandwidth": bandwidth,
 		"rating": parseFloat(document.getElementById("projectScore").value),

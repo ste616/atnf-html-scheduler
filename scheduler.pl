@@ -109,6 +109,8 @@ sub loadLatest($$) {
 	$pattern .= "-$term";
     }
     $pattern .= "*.json";
+    # Allow for escaping special characters.
+    $pattern =~ s/\s/\\ /g;
     # Load the latest JSON file we have.
     my @files = `ls -t $pattern | head -n 1`;
     chomp(my $jsonfile = $files[0]);

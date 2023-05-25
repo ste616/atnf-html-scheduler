@@ -1861,10 +1861,10 @@ const dateWithTimeZone = function(timeZone, year, month, day, hour, minute, seco
 const setupCanvas = function(data) {
 
   // Set up the schedule.
-  var re = /^(\d\d\d\d)(\D\D\D)$/g;
-  var rmatch = re.exec(data.program.term.term);
-  var semester = rmatch[2]
-    var year = parseInt(rmatch[1]);
+  //var re = /^(\d\d\d\d)(\D\D\D)$/g;
+  //var rmatch = re.exec(data.program.term.term);
+    //var semester = rmatch[2];
+    //var year = parseInt(rmatch[1]);
 
     var nre = /^(\d\d\d\d)\-(\d\d)\-(\d\d)$/g;
     var nrmatch_start = nre.exec(data.program.term.start)

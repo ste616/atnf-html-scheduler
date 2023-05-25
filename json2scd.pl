@@ -374,6 +374,8 @@ sub fillObsStrings($) {
 	    $obsStrings{'short'} = $jref->{'observatories'}->[$i]->{'shortName'};
 	    $obsStrings{'directory'} = lc($jref->{'observatories'}->[$i]->{'id'})."-".
 		$prog->{'term'}->{'term'};
+	    # Change spaces to _ for the directory name.
+	    $obsStrings{'directory'} =~ s/\s/_/g;
 	    $obsStrings{'full'} = $jref->{'observatories'}->[$i]->{'fullName'};
 	    $obsStrings{'timezoneLabel'} = $jref->{'observatories'}->[$i]->{'timezoneLabel'};
 	    $obsStrings{'timezoneHours'} = $jref->{'observatories'}->[$i]->{'timezoneDiffHours'};
@@ -413,6 +415,8 @@ sub outfilePrefix($) {
     my $outfile = sprintf("%s/%s_%sT%d", $obsStrings{'directory'},
 			  $obsStrings{'short'}, $prog->{'term'}->{'term'}, 
 			  $prog->{'term'}->{'version'});
+    # Get rid of spaces.
+    $outfile =~ s/\s/_/g;
 
     # Check if the directory is present.
     if (!-d $obsStrings{'directory'}) {
@@ -721,6 +725,7 @@ sub printps($$) {
     
     # Cycle through the slots.
     my $lastTime = $time1;
+    my $somesched = 0;
     for (my $i = 0; $i <= $#{$prog->{'project'}}; $i++) {
 	my $proj = $prog->{'project'}->[$i];
 	for (my $j = 0; $j <= $#{$proj->{'slot'}}; $j++) {
@@ -744,9 +749,14 @@ sub printps($$) {
 		    $day1, $day2, $rstring, $config);
 		if ($slotEnd > $lastTime) {
 		    $lastTime = $slotEnd;
+		    $somesched = 1;
 		}
 	    }
 	}
+    }
+    if ($somesched == 0) {
+	# nothing scheduled
+	$lastTime = $time2;
     }
     #print "3 day1 = $day1\n";
 
@@ -786,12 +796,14 @@ sub printps($$) {
 
     
     $day2 = 14;
+    #print "5a day1 = $day1\n";
     if ($day1 != $day2) {
+	#print "5b day1 = $day1 config = $config\n";
 	#print " getting config $config\n";
 	$rstring .= $day1." ".$day2." (".$config.") config\n";
 	$rstring .= &getConfigPS($config);
     }
-
+    #print "6 day1 = $day1 day2 = $day2\n";
     
     #print $rstring."\n";
     return $rstring;
@@ -958,9 +970,9 @@ sub getConfig($$) {
 	
 	for (my $j = 0; $j <= $#{$prog->{'project'}->[$i]->{'slot'}}; $j++) {
 	    my $slot = $prog->{'project'}->[$i]->{'slot'}->[$j];
-	    if ($slot->{'scheduled_start'} == 0) {
-		next;
-	    }
+	    #if ($slot->{'scheduled_start'} == 0) {
+		#next;
+	    #}
 	    #print " checking array ".$slot->{'array'}." starting at ";
 	    #print $slot->{'scheduled_start'}." (".$dt->epoch.")\n";
 	    if ($fcfg eq "") {
@@ -984,12 +996,24 @@ sub getConfig($$) {
 
 sub getConfigPS($) {
     my $config = shift;
-    chomp(my $resline = `grep -s $config Confign.txt`);
-    if ($resline ne "") {
-	my @rels = split(/\t/, $resline);
-	return "(".$rels[0].") (".$rels[1].") (".$rels[2].") array\n";
+    open(C, "Confign.txt");
+    my $rcfg = "% no such array\n";
+    
+    while (<C>) {
+	chomp(my $line = $_);
+	my @els = split(/\t/, $line);
+	if ($config eq $els[0]) {
+	    $rcfg = "(".$els[0].") (".$els[1].") (".$els[2].") array\n";
+	}
     }
-    return "% no such array\n";
+    close(C);
+    #chomp(my $resline = `grep -s $config Confign.txt`);
+    #if ($resline ne "") {
+#	my @rels = split(/\t/, $resline);
+#	return "(".$rels[0].") (".$rels[1].") (".$rels[2].") array\n";
+#    }
+    #return "% no such array\n";
+    return $rcfg;
 }
 
 sub bracketise_string($) {
