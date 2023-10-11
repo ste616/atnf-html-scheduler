@@ -970,9 +970,9 @@ sub getConfig($$) {
 	
 	for (my $j = 0; $j <= $#{$prog->{'project'}->[$i]->{'slot'}}; $j++) {
 	    my $slot = $prog->{'project'}->[$i]->{'slot'}->[$j];
-	    #if ($slot->{'scheduled_start'} == 0) {
-		#next;
-	    #}
+	    if (($slot->{'scheduled_start'} == 0) && ($slot->{'scheduled'} == 0)) {
+		next;
+	    }
 	    #print " checking array ".$slot->{'array'}." starting at ";
 	    #print $slot->{'scheduled_start'}." (".$dt->epoch.")\n";
 	    if ($fcfg eq "") {

@@ -604,17 +604,6 @@ sub getPI($) {
 	     &stripSpacing($piref->{'affiliation'}->{'country'}->{'name'}) );
 }
 
-# sub getPI($) {
-#     my $cover_ref = shift;
-# 
-#     # Get the name of the PI from the XML hash of the cover sheet,
-#     # and their email address.
-#     return ( &stripSpacing($cover_ref->{'principalInvestigator'}->{'lastName'}->{'content'}),
-# 	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'email'}->{'content'}),
-# 	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'affiliation'}->{'code'}->{'content'}),
-# 	     &stripSpacing($cover_ref->{'principalInvestigator'}->{'affiliation'}->{'country'}->{'name'}->{'content'}) );
-# }
-
 sub getCoIs($) {
     my $cover_ref = shift;
 
@@ -634,26 +623,6 @@ sub getCoIs($) {
     return (\@coIlist, \@coIaffiliation, \@coIcountry, \@coIemails);
 }
 
-# sub getCoIs($) {
-#     my $cover_ref = shift;
-# 
-#     my @coIlist;
-#     my @coIaffiliation;
-#     my @coIcountry;
-#     my @coIemails;
-#     my $clist = $cover_ref->{'coInvestigators'}->{'au.csiro.atnf.opal.domain.Investigator'};
-#     if (ref $clist eq "ARRAY") {
-# 	for (my $i = 0; $i <= $#{$clist}; $i++) {
-# 	    push @coIlist, $clist->[$i]->{'lastName'}->{'content'};
-# 	    push @coIaffiliation, $clist->[$i]->{'affiliation'}->{'code'}->{'content'};
-# 	    push @coIcountry, $clist->[$i]->{'affiliation'}->{'country'}->{'name'}->{'content'};
-# 	    push @coIemails, $clist->[$i]->{'email'}->{'content'};
-# 	}
-#     }
-# #    print Dumper($cover_ref->{'coInvestigators'});
-#     return (\@coIlist, \@coIaffiliation, \@coIcountry, \@coIemails);
-# }
-
 sub getTitle($) {
     my $cover_ref = shift;
 
@@ -667,20 +636,6 @@ sub getTitle($) {
 
     return &stripSpacing($title);
 }
-
-# sub getTitle($) {
-#     my $cover_ref = shift;
-#     
-#     # Get the title from the XML hash of the cover sheet.
-#     my $title = $cover_ref->{'title'}->{'content'};
-#     # Alter the title if it's a NAPA proposal.
-#     my $proptype = $cover_ref->{'type'}->{'content'};
-#     if ($proptype eq "NAPA" && $title !~ m{^NAPA}) {
-# 	$title = "NAPA: ".$title;
-#     }
-#     
-#     return &stripSpacing($title);
-# }
 
 sub zapper($) {
     my $val = shift;
@@ -946,247 +901,6 @@ sub getObs($$$) {
 
 }
 
-# sub getObs($$$) {
-#     my $obs = shift;
-#     my $obsref = shift;
-#     my $coverref = shift;
-# 
-#     # Need some information about the observatory.
-#     my %ellim = ( 'atca' => 12, 'parkes' => 30 );
-#     my %lat = ( 'atca' => -30.31288, 'parkes' => -32.99841 );
-#     
-#     # Go through the observation XML hash and get useful information.
-#     my %receiver_mappings = ( 'UWL' => [ "UWL" ],
-# 			      'MB' => [ "20cm multi-beam" ],
-# 			      '10/50' => [ "10/50cm concentric" ],
-# 			      'KU' => [ "12GHz methanol", "Ku-band" ],
-# 			      'MARS' => [ "3cm Mars" ],
-# 			      'K' => [ "13mm" ] );
-#     my @requested_times;
-#     my @repeats;
-#     my @arrays;
-#     my @bands;
-#     my @bandwidths;
-#     my @sources;
-#     my @radecs;
-#     my @lsts;
-# 
-#     my $obsarr;
-#     if ($obs eq "atca") {
-# 	$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.AtcaObservation'};
-#     } elsif ($obs eq "parkes") {
-# 	$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.ParkesContinuumObservation'};
-# 	if (!defined $obsarr) {
-# 	    $obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.ParkesSpectralObservation'};
-# 	    if (!defined $obsarr) {
-# 		$obsarr = $obsref->{'sources'}->{'au.csiro.atnf.opal.domain.LbaObservation'};
-# 	    }
-# 	}
-#     }	
-#     if (ref($obsarr) eq "HASH") {
-# 	# Turn it into an array.
-# 	my $h = $obsarr;
-# 	$obsarr = [ $h ];
-#     }
-#     for (my $i = 0; $i <= $#{$obsarr}; $i++) {
-# 	# Get the position of this source.
-# 	my ($ra, $dec) = ("", "");
-# 	if ($obsarr->[$i]->{'position'}) {
-# 	    my $p1 = $obsarr->[$i]->{'position'}->{'xAngle'}->{'itsValue'};
-# 	    my $x1 = $obsarr->[$i]->{'position'}->{'xAngle'}->{'precision'};
-# 	    my $p2 = $obsarr->[$i]->{'position'}->{'yAngle'}->{'itsValue'};
-# 	    my $x2 = $obsarr->[$i]->{'position'}->{'yAngle'}->{'precision'};
-# 	    my $coordsys = $obsarr->[$i]->{'position'}->{'system'};
-# 	    ($ra, $dec) = &translateCoord($p1, $p2, $x1, $x2, $coordsys);
-# 	} else {
-# 	    # When we can't find a position.
-# 	    $ra = "00:00:00";
-# 	    $dec = "-90:00:00";
-# 	}
-# 	# Get the LSTs as well.
-# 	my $lst_start = $obsarr->[$i]->{'lstStart'};
-# 	if ((ref $lst_start eq "HASH") || (!defined $lst_start)) {
-# 	    $lst_start = "00:00";
-# 	}
-# 	my $lst_end = $obsarr->[$i]->{'lstEnd'};
-# 	if (($lst_end eq "Never") || (!defined $lst_end)) {
-# 	    $lst_end = "23:59";
-# 	}
-# 	push @lsts, [ $lst_start, $lst_end ];
-# 	my $tdec = str2turn($dec, "D");
-# 	my $b;
-# 	if ($obs eq "atca") {
-# 	    $b = lc $obsarr->[$i]->{'band'};
-# 	    if ($b =~ /\s+$/) {
-# 		$b =~ s/\s+$//;
-# 	    }
-# 	} else {
-# 	    $b = "";
-# 	}
-# 	my ($xtra_reps, $reptime) = 
-# 	    &roundRequestedTimes($obsarr->[$i]->{'integrationTime'},
-# 				 $tdec, $b, $obs, \%ellim, \%lat);
-# 	push @radecs, &stripSpacing($ra.",".$dec);
-# 	push @requested_times, $reptime;
-# 	push @repeats, $obsarr->[$i]->{'repeats'} * $xtra_reps;
-# 	if ($obs eq "atca") {
-# 	    my $a = lc $obsarr->[$i]->{'arrayConfiguration'};
-# 	    if ($a =~ /km$/) {
-# 		$a =~ s/km$//;
-# 	    } elsif ($a =~ /m$/) {
-# 		$a =~ s/m$//;
-# 	    }
-# 	    push @arrays, &stripSpacing($a);
-# 	    my $b = lc $obsarr->[$i]->{'band'};
-# 	    if ($b =~ /7\/3mm/) {
-# 		$b =~ s/7\/3mm/7mm 3mm/g;
-# 	    }
-# 	    if ($b =~ /\s+$/) {
-# 		$b =~ s/\s+$//;
-# 	    }
-# 	    push @bands, &stripSpacing($b);
-# 	    if ((ref($obsarr->[$i]->{'bandwidths'}) ne "HASH") &&
-# 		($obsarr->[$i]->{'bandwidths'} ne "Select")) {
-# 		push @bandwidths, $obsarr->[$i]->{'bandwidths'};
-# 	    } else {
-# 		push @bandwidths, "ReplaceMe";
-# 	    }
-# 	    # Check for bad values.
-# 	    my $replacer = "";
-# 	    for (my $j = 0; $j <= $#bandwidths; $j++) {
-# 		if ($bandwidths[$j] eq "ReplaceMe") {
-# 		    if ($j < $#bandwidths && $bandwidths[$j + 1] ne "ReplaceMe") {
-# 			$bandwidths[$j] = $bandwidths[$j + 1];
-# 			$replacer = $bandwidths[$j + 1];
-# 		    } elsif ($j > 0 && $bandwidths[$j - 1] ne "ReplaceMe") {
-# 			$bandwidths[$j] = $bandwidths[$j - 1];
-# 			$replacer = $bandwidths[$j - 1];
-# 		    }
-# 		}
-# 	    }
-# 	    if ($replacer eq "") {
-# 		$replacer = "CFB 1M (no zooms)";
-# 	    }
-# 	    for (my $j = 0; $j <= $#bandwidths; $j++) {
-# 		if ($bandwidths[$j] eq "ReplaceMe") {
-# 		    $bandwidths[$j] = $replacer;
-# 		}
-# 	    }
-# 	} elsif ($obs eq "parkes") {
-# 	    #push @arrays, "any";
-# 	    my $fs = $obsarr->[$i]->{'frequencies'};
-# 	    if (ref($fs) eq "HASH") {
-# 		if (ref($fs->{'string'}) eq "ARRAY") {
-# 		    my @b;
-# 		    print Dumper $fs->{'string'};
-# 		    for (my $j = 0; $j <= $#{$fs->{'string'}}; $j++) {
-# 			push @b, &stripSpacing($fs->{'string'}->[$j]);
-# 		    }
-# 		    push @bands, join(" ", @b);
-# 		    print Dumper @bands;
-# 		} else {
-# 		    push @bands, $fs->{'string'};
-# 		}
-# 	    }
-# 	    my $insentry = $coverref->{'instrumentSetups'}->{'m'}->{'entry'};
-# 	    if (ref($insentry) eq "HASH") {
-# 		my $h = $insentry;
-# 		$insentry = [ $h ];
-# 	    }
-# 	    for (my $j = 0; $j <= $#{$insentry}; $j++) {
-# 		if (defined $insentry->[$j]->{'au.csiro.atnf.opal.domain.ParkesDetails'}) {
-# 		    $insentry = $insentry->[$j]->{'au.csiro.atnf.opal.domain.ParkesDetails'};
-# 		    last;
-# 		}
-# 	    }
-# 	    my $recvs = $insentry->{'receivers'}->{'org.apache.commons.collections.set.ListOrderedSet'}->{'default'}->{'setOrder'}->{'string'};
-# 	    if (!defined $recvs) {
-# 		$recvs = $insentry->{'receivers'}->{'string'};
-# 	    }
-# 	    #print "receivers:\n";
-# 	    #print Dumper($recvs);
-# 	    if (ref($recvs) ne "ARRAY") {
-# 		my $h = $recvs;
-# 		$recvs = [ $h ];
-# 	    }
-# 	    my @arrs;
-# 	    for (my $j = 0; $j <= $#{$recvs}; $j++) {
-# 		push @arrs, &stripSpacing($recvs->[$j]->{'content'});
-# 	    }
-# 	    # Rename the receivers if necessary.
-# 	    for (my $j = 0; $j <= $#arrs; $j++) {
-# 		foreach my $r (keys %receiver_mappings) {
-# 		    my $f = 0;
-# 		    for (my $k = 0; $k <= $#{$receiver_mappings{$r}}; $k++) {
-# 			if ($receiver_mappings{$r}->[$k] eq $arrs[$j]) {
-# 			    $arrs[$j] = $r;
-# 			    $f = 1;
-# 			    last;
-# 			}
-# 		    }
-# 		    if ($f == 1) {
-# 			last;
-# 		    }
-# 		}
-# 	    }
-# 	    my @uarrs = &uniq(@arrs);
-# 	    push @arrays, \@uarrs;
-# 	    my $backends = $insentry->{'backEndSystem'}->{'org.apache.commons.collections.set.ListOrderedSet'}->{'default'}->{'setOrder'}->{'string'};
-# 	    if (ref($backends) ne "ARRAY") {
-# 		my $h = $backends;
-# 		$backends = [ $h ];
-# 	    }
-# 	    my @bends;
-# 	    for (my $j = 0; $j <= $#{$backends}; $j++) {
-# 		push @bends, &stripSpacing($backends->[$j]->{'content'});
-# 	    }
-# 	    push @bandwidths, join("/", @bends);
-# 	}
-# 	push @sources, &stripSpacing($obsarr->[$i]->{'name'});
-# 
-#     }
-# 
-#     # Map the names correctly.
-#     for (my $j = 0; $j <= $#bandwidths; $j++) {
-# 	if ($bandwidths[$j] =~ /CFB 1M \(no zooms\)/) {
-# 	    $bandwidths[$j] = "CFB1M";
-# 	} elsif ($bandwidths[$j] =~ /CFB 1M-0.5k \(with zooms\)/) {
-# 	    $bandwidths[$j] = "CFB1M-0.5k";
-# 	} elsif ($bandwidths[$j] =~ /CFB 64M-32k/) {
-# 	    $bandwidths[$j] = "CFB64M-32k";
-# 	} elsif ($bandwidths[$j] =~ /CFB 1M \(pulsar binning\)/) {
-# 	    $bandwidths[$j] = "CFB1M-pulsar";
-# 	} elsif ($bandwidths[$j] =~ /CFB 1M\/64M/) {
-# 	    $bandwidths[$j] = "CFB1-64M";
-# 	}
-#     }
-# 	
-#     # Send back our summary information.
-#     my $times_string = &concatArray(\@requested_times, \@repeats, 4);
-#     my $arrays_string = &concatArray(\@arrays, \@repeats, 3);
-#     my $bands_string = &concatArray(\@bands, \@repeats, 3);
-#     my $bandwidths_string = &concatArray(\@bandwidths, \@repeats, 3);
-#     my $sources_string = &concatArray(\@sources, \@repeats, 3);
-#     my $pos_string = &concatArray(\@radecs, \@repeats, 3);
-#     return {
-# 	'requested_times' => \@requested_times,
-# 	'summary_requested_times' => $times_string,
-# 	'requested_arrays' => \@arrays,
-# 	'summary_requested_arrays' => $arrays_string,
-# 	'requested_bands' => \@bands,
-# 	'summary_requested_bands' => $bands_string,
-# 	'requested_bandwidths' => \@bandwidths,
-# 	'summary_requested_bandwidths' => $bandwidths_string,
-# 	'requested_sources' => \@sources,
-# 	'summary_requested_sources' => $sources_string,
-# 	'requested_positions' => \@radecs,
-# 	'summary_requested_positions' => $pos_string,
-# 	'nrepeats' => \@repeats,
-# 	'requested_lsts' => \@lsts
-#     };
-#     
-# }
-
 sub concatArray($$;$) {
     # The reference to the array of values.
     my $aref = shift;
@@ -1282,42 +996,6 @@ sub translateCoord($$$$$) {
 	# We have p1 = RA, p2 = Dec
 	$ra_string = $p1;
 	$dec_string = $p2;
-#	$p1 *= 24.0 / (2 * $pi);
-#	$p2 *= 180 / $pi;
-#	my $rah = floor($p1);
-#	$p1 -= $rah;
-#	$p1 *= 60.0;
-#	my $ram = floor($p1);
-#	$p1 -= $ram;
-#	$p1 *= 60.0;
-#	my $ras = $p1;
-#	my $raf = "%02d:%02d:%0";
-#	if ($x1 > 0) {
-#	    $raf .= (3 + $x1).".".$x1."f";
-#	} else {
-#	    $raf .= "2.0f";
-#	    $ras = floor($ras);
-#	}
-#	$ra_string = sprintf $raf, $rah, $ram, $ras;
-#
-#	my $decs = ($p2 < 0) ? -1 : 1;
-#	$p2 *= $decs;
-#	my $decd = floor($p2);
-#	$p2 -= $decd;
-#	$p2 *= 60.0;
-#	my $decm = floor($p2);
-#	$p2 -= $decm;
-#	$p2 *= 60.0;
-#	my $decsec = $p2;
-#	my $decf = "%+03d:%02d:%0";
-#	if ($x2 > 0) {
-#	    $decf .= (3 + $x2).".".$x2."f";
-#	} else {
-#	    $decf .= "2.0f";
-#	    $decsec = floor($decsec);
-#	}
-#	$decd *= $decs;
-#	$dec_string = sprintf $decf, $decd, $decm, $decsec;
     } elsif ($coordtype == 3) {
 	# We have p1 = Lon, p2 = Lat
 	#$p1 *= 180 / $pi;
@@ -1557,7 +1235,7 @@ sub jsonParse($$) {
     }
 
     return @outproj;
-    }
+}
 
 sub xmlParse($$) {
     my $semdir = shift;
@@ -1626,7 +1304,7 @@ sub allBands($) {
     if ($obs eq "atca") {
 	return ( '16cm', '4cm', '15mm', '7mm', '3mm' );
     } elsif ($obs eq "parkes") {
-	return ( 'uwl', '1050cm', 'multi', 'h-oh',
+	return ( 'uwl', 'cryopaf', '1050cm', 'multi', 'h-oh',
 		 'galileo', 'at-s', 'at-c', 'at-x',
 		 'methanol', 'mars', 'ku-band', '13mm' );
     }
@@ -1914,7 +1592,7 @@ sub printSummary($$) {
 	$b->{'7mm'}, $b->{'3mm'}, $s->{'total'};
     } elsif ($obs eq "parkes") {
 	printf "II %10s %10s\n", "Receiver", "64m";
-	my @array_order = ( "uwl", "multi", "1050cm", "meth", "mars",
+	my @array_order = ( "uwl", "cryopaf", "multi", "1050cm", "meth", "mars",
 			    "h-oh", "ku-band", "13mm" );
 	my @arrs = @{$s->{'arrays'}};
 	my $j = 0;

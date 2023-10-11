@@ -1,7 +1,8 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -wT
 
 use CGI qw (:standard);
-use CGI::Carp qw( fatalsToBrowser );
+#use CGI::Carp qw( fatalsToBrowser );
+use CGI::Carp;
 use JSON;
 use DateTime;
 use strict;
@@ -11,16 +12,50 @@ $CGI::DISABLE_UPLOADS = 0;
 
 my $q = CGI->new;
 my $root_dir = "/n/ste616/usr/schedules";
-my $process_machine = "mentok";
+$ENV{"PATH"} = "/bin:/usr/bin";
 
 print $q->header(
     -type => "application/json"
     );
 
-my $reqtype = $q->param('request');
+my $reqcheck = $q->param('request');
+# Check against allowed request types.
+my @allowed_requests = ( "load", "loadtime", "save", "listsemesters",
+			 "authenticate", "listobservatories", "updateObservatories" );
+my $reqtype = "";
+for (my $i = 0; $i <= $#allowed_requests; $i++) {
+    if ($reqcheck eq $allowed_requests[$i]) {
+	$reqtype = $allowed_requests[$i];
+	last;
+    }
+}
+if ($reqtype eq "") {
+    exit;
+}
+
+# We can't really sanitise the schedule string, since it can have all sorts
+# of things in there. But this string is never executed or acted upon, just
+# written to file.
 my $schedstring = $q->param('schedule');
-my $obs = $q->param('observatory');
-my $term = $q->param('term');
+
+# Get the list of observatories.
+my @observatories = &listObservatories();
+my $obscheck = $q->param('observatory');
+my $obs;
+if ($reqtype ne "updateObservatories") {
+    # Check if the observatory is one we know about.
+    for (my $i = 0; $i <= $#observatories; $i++) {
+	if ($obscheck eq $observatories[$i]->{'id'}) {
+	    $obs = $observatories[$i]->{'id'};
+	    last;
+	}
+    }
+} else {
+    # We sanitise the name of the new observatory.
+    $obs = &sanitise_input($obscheck);
+}
+
+my $term = &sanitise_input(scalar($q->param('term')));
 if (!defined $term) {
     $term = "";
 }
@@ -64,7 +99,6 @@ if ($reqtype eq "load") {
     print to_json($retjson)."\n";
 } elsif ($reqtype eq "listobservatories") {
     my $retjson = { 'action' => 'listobservatories' };
-    my @observatories = &listObservatories();
     $retjson->{'observatories'} = \@observatories;
     print to_json($retjson)."\n";
 } elsif ($reqtype eq "updateObservatories") {
@@ -166,8 +200,15 @@ sub listObservatories() {
     my @observatories;
     my $jsonfile = $root_dir."/.observatories";
     open(J, $jsonfile);
-    chomp(my $jcontent = <J>);
+    chomp(my $jcontentt = <J>);
     close(J);
+    my $json_regex = qr/[a-zA-Z0-9\:\+\-\_\,\.\s\"\{\}\[\]\*]+/;
+
+    my $jcontent = "";
+    if ($jcontentt =~ /($json_regex)/) {
+	$jcontent = $1;
+    }
+    
     my $jobj = from_json($jcontent);
     return @{$jobj->{'observatories'}};
 }
@@ -180,19 +221,19 @@ sub saveSchedule($$$) {
     # Check that what we have is actually a schedule.
     my $cjson = from_json($schedstring);
     #print Dumper $cjson;
-    if ((!defined $cjson->{'program'}->{'observatory'}->{'observatory'}) ||
-	(!defined $cjson->{'program'}->{'term'}->{'term'})) {
+    my $outobs = &sanitise_input($cjson->{'program'}->{'observatory'}->{'observatory'});
+    my $outterm = &sanitise_input($cjson->{'program'}->{'term'}->{'term'});
+    if (($outobs eq "") || ($outterm eq "")) {
 	# Bad schedule.
 	$errstring = "bad schedule\n";
 	return 1;
-    } elsif (($obs ne $cjson->{'program'}->{'observatory'}->{'observatory'}) ||
-	     ($term ne $cjson->{'program'}->{'term'}->{'term'})) {
-	if ($obs ne $cjson->{'program'}->{'observatory'}) {
+    } elsif (($obs ne $outobs) || ($term ne $outterm)) {
+	if ($obs ne $outobs) {
 	    $errstring = "unmatched observatory ".$obs." cf ".
-		$cjson->{'program'}->{'observatory'}->{'observatory'};
+		$outobs;
 	} else {
 	    $errstring = "unmatched semester ".$term." cf ".
-		$cjson->{'program'}->{'term'}->{'term'};
+		$outterm;
 	}
 	#$errstring = "unmatched schedule\n";
 	return 1;
@@ -202,8 +243,8 @@ sub saveSchedule($$$) {
     my $ndate = DateTime->now();
     my $outfile = sprintf("%s/schedule-%s-%s-%4d%02d%02d_%02d%02d%02d.json",
 			  $root_dir,
-			  $cjson->{'program'}->{'observatory'}->{'observatory'}, 
-			  $cjson->{'program'}->{'term'}->{'term'},
+			  $obs,
+			  $term,
 			  $ndate->year(), $ndate->month(), $ndate->day(), 
 			  $ndate->hour(),
 			  $ndate->minute(), $ndate->second());
@@ -212,4 +253,31 @@ sub saveSchedule($$$) {
     close(O);
 
     return 0;
+}
+
+sub sanitise_input {
+    my $u = shift;
+
+    if (!defined $u) {
+	return "";
+    }
+    
+    # We make sure bad characters don't get in here.
+    my $goodchars = qr/[a-zA-Z0-9\:\+\-\_\,\.\s]+/;
+    my $badchars = qr/[^a-zA-Z0-9\:\+\-\_\,\.\s]/;
+
+    $u =~ s/$badchars//g;
+
+    my $c = "";
+    if ($u =~ /($goodchars)/) {
+	$c = $1;
+    }
+
+    # Put in a length limit of 40 characters.
+    if (length($c) > 40) {
+	# This is bad and we kill it.
+	$c = "";
+    }
+    
+    return $c;
 }
