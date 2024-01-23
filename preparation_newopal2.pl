@@ -829,10 +829,16 @@ sub getObs($$$) {
 		}
 	    }
 	    my @arrs;
-	    my $recvs = $coverref->{'instrumentDetails'}->{'receivers'};
-	    for (my $j = 0; $j <= $#{$recvs}; $j++) {
-		push @arrs, &stripSpacing($recvs->[$j]);
-		print "receiver = $recvs->[$j]\n";
+	    my $instdetails = $coverref->{'instrumentDetails'};
+	    my $recvs;
+	    foreach my $kid (keys %{$instdetails}) {
+		if (defined $instdetails->{$kid}->{'instrumentId'}) {
+		    $recvs = $instdetails->{$kid}->{'receivers'};
+		    for (my $j = 0; $j <= $#{$recvs}; $j++) {
+			push @arrs, &stripSpacing($recvs->[$j]);
+			print "receiver = $recvs->[$j]\n";
+		    }
+		}
 	    }
 	    # Rename the receivers if necessary.
 	    for (my $j = 0; $j <= $#arrs; $j++) {
